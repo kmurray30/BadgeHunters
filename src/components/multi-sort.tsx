@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { CustomSelect } from "./custom-select";
 
 export interface SortField {
   value: string;
@@ -126,15 +127,13 @@ export function MultiSort({ availableFields, criteria, onChange }: MultiSortProp
                   {index === 0 && <span className="w-4" />}
 
                   {/* Field selector */}
-                  <select
+                  <CustomSelect
+                    options={swappableFields}
                     value={criterion.field}
-                    onChange={(event) => changeField(index, event.target.value)}
-                    className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-accent focus:outline-none"
-                  >
-                    {swappableFields.map((field) => (
-                      <option key={field.value} value={field.value}>{field.label}</option>
-                    ))}
-                  </select>
+                    onChange={(newField) => changeField(index, newField)}
+                    compact
+                    className="min-w-0 flex-1"
+                  />
 
                   {/* Direction toggle */}
                   <button

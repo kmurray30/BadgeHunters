@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { BackButton } from "@/components/back-button";
+import { CustomSelect } from "@/components/custom-select";
 import {
   toggleBadgeCompletion,
   updateBadgeDifficulty,
@@ -245,18 +246,17 @@ export function BadgeDetailClient({
           <span className="text-[10px] text-muted">({communityDifficultyVotes.length} vote{communityDifficultyVotes.length !== 1 ? "s" : ""})</span>
           <span className="text-[10px] text-muted">·</span>
           <span className="text-[10px] text-muted">Your rating:</span>
-          <select
+          <CustomSelect
             value={currentUserStatus.personalDifficulty ?? ""}
-            onChange={(event) => {
-              if (event.target.value) updateBadgeDifficulty(badge.id, event.target.value as Difficulty);
+            onChange={(newValue) => {
+              if (newValue) updateBadgeDifficulty(badge.id, newValue as Difficulty);
             }}
-            className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-accent focus:outline-none"
-          >
-            <option value="">Not rated</option>
-            {DIFFICULTY_OPTIONS.map((difficultyOption) => (
-              <option key={difficultyOption.value} value={difficultyOption.value}>{difficultyOption.label}</option>
-            ))}
-          </select>
+            options={[
+              { value: "", label: "Not rated" },
+              ...DIFFICULTY_OPTIONS.map((difficultyOption) => ({ value: difficultyOption.value, label: difficultyOption.label })),
+            ]}
+            compact
+          />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -265,18 +265,19 @@ export function BadgeDetailClient({
           <span className="text-[10px] text-muted">({playerCountVoteCount} vote{playerCountVoteCount !== 1 ? "s" : ""})</span>
           <span className="text-[10px] text-muted">·</span>
           <span className="text-[10px] text-muted">Your pick:</span>
-          <select
+          <CustomSelect
             value={currentUserStatus.idealPlayerCountBucket ?? ""}
-            onChange={(event) => {
-              const selectedBucket = event.target.value as PlayerCountBucket | "";
+            onChange={(newValue) => {
+              const selectedBucket = newValue as PlayerCountBucket | "";
               updateIdealPlayerCount(badge.id, selectedBucket || null);
             }}
-            className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-accent focus:outline-none"
-          >
-            <option value="">No preference</option>
-            <option value="lte_3">3 or fewer</option>
-            <option value="gte_5">5 or more</option>
-          </select>
+            options={[
+              { value: "", label: "No preference" },
+              { value: "lte_3", label: "3 or fewer" },
+              { value: "gte_5", label: "5 or more" },
+            ]}
+            compact
+          />
         </div>
       </div>
 

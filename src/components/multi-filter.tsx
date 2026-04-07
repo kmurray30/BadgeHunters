@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CustomSelect } from "./custom-select";
 
 export interface FilterDefinition {
   /** Unique key for this filter dimension */
@@ -102,22 +103,20 @@ export function MultiFilter({ definitions, activeFilters, onChange, searchValue,
 
         {expanded && (
           <>
-            {definitions.map((definition) => (
-              <select
-                key={definition.key}
-                value={getFilterValue(definition.key)}
-                onChange={(event) => setFilterValue(definition.key, event.target.value)}
-                className={`rounded-md border bg-background px-2.5 py-1.5 text-xs focus:border-accent focus:outline-none transition-colors ${
-                  getFilterValue(definition.key) !== (definition.inactiveValue ?? "all")
-                    ? "border-accent/50 text-accent"
-                    : "border-border text-foreground"
-                }`}
-              >
-                {definition.options.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            ))}
+            {definitions.map((definition) => {
+              const currentValue = getFilterValue(definition.key);
+              const isActive = currentValue !== (definition.inactiveValue ?? "all");
+              return (
+                <CustomSelect
+                  key={definition.key}
+                  options={definition.options}
+                  value={currentValue}
+                  onChange={(newValue) => setFilterValue(definition.key, newValue)}
+                  highlighted={isActive}
+                  compact
+                />
+              );
+            })}
             {activeFilters.length > 0 && (
               <button
                 type="button"

@@ -3,6 +3,7 @@
 import { createFeedbackPost, toggleFeedbackReaction, updateFeedbackStatus } from "@/app/actions/feedback";
 import type { FeedbackStatus, ReactionType } from "@prisma/client";
 import { useState } from "react";
+import { CustomSelect } from "@/components/custom-select";
 
 const REACTION_TYPES: { value: ReactionType; emoji: string }[] = [
   { value: "thumbs_up", emoji: "\u{1F44D}" },
@@ -111,15 +112,16 @@ export function FeedbackClient({ posts, currentUserId, isSuperuser }: Props) {
                 </div>
 
                 {isSuperuser && (
-                  <select
+                  <CustomSelect
                     value={post.status}
-                    onChange={(event) => updateFeedbackStatus(post.id, event.target.value as FeedbackStatus)}
-                    className="rounded border border-border bg-background px-2 py-0.5 text-[10px] text-muted focus:border-accent focus:outline-none"
-                  >
-                    <option value="open">Open</option>
-                    <option value="addressed">Addressed</option>
-                    <option value="archived">Archived</option>
-                  </select>
+                    onChange={(newValue) => updateFeedbackStatus(post.id, newValue as FeedbackStatus)}
+                    options={[
+                      { value: "open", label: "Open" },
+                      { value: "addressed", label: "Addressed" },
+                      { value: "archived", label: "Archived" },
+                    ]}
+                    compact
+                  />
                 )}
               </div>
 
