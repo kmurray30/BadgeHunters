@@ -44,16 +44,26 @@ const DIFFICULTY_OPTIONS: { value: Difficulty; label: string; color: string }[] 
   { value: "unknown", label: "???", color: "text-muted" },
 ];
 
-function getDifficultyDisplay(badge: BadgeData): { label: string; color: string } {
+type SortOption = "number" | "name" | "difficulty" | "completions" | "players";
+
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: "number", label: "Badge #" },
+  { value: "name", label: "Name" },
+  { value: "difficulty", label: "Difficulty" },
+  { value: "completions", label: "Completions" },
+  { value: "players", label: "Player count" },
+];
+
+function getDifficultyDisplay(badge: BadgeData): { label: string; color: string; sortKey: number } {
+  const numericMap: Record<string, number> = { easy: 1, medium: 2, hard: 3, impossible: 4 };
+
   const personalDiff = badge.currentUserDifficulty;
   if (personalDiff && personalDiff !== "unknown") {
-    const option = DIFFICULTY_OPTIONS.find((difficultyOption) => difficultyOption.value === personalDiff);
-    return option ?? { label: "???", color: "text-muted" };
+    const option = DIFFICULTY_OPTIONS.find((diffOption) => diffOption.value === personalDiff);
+    return { ...(option ?? { label: "???", color: "text-muted" }), sortKey: numericMap[personalDiff] ?? 99 };
   }
 
-  const numericMap: Record<string, number> = { easy: 1, medium: 2, hard: 3, impossible: 4 };
   const numericVotes: number[] = [];
-
   for (const vote of badge.communityDifficultyVotes) {
     if (vote && vote !== "unknown" && numericMap[vote] !== undefined) {
       numericVotes.push(numericMap[vote]);
@@ -68,12 +78,18 @@ function getDifficultyDisplay(badge: BadgeData): { label: string; color: string 
     const rounded = Math.max(1, Math.min(4, Math.round(mean)));
     const reverseMap: Record<number, string> = { 1: "easy", 2: "medium", 3: "hard", 4: "impossible" };
     const difficultyValue = reverseMap[rounded];
-    const option = DIFFICULTY_OPTIONS.find((difficultyOption) => difficultyOption.value === difficultyValue);
-    return option ?? { label: "???", color: "text-muted" };
+    const option = DIFFICULTY_OPTIONS.find((diffOption) => diffOption.value === difficultyValue);
+    return { ...(option ?? { label: "???", color: "text-muted" }), sortKey: rounded };
   }
 
-  const option = DIFFICULTY_OPTIONS.find((difficultyOption) => difficultyOption.value === badge.defaultDifficulty);
-  return option ?? { label: "???", color: "text-muted" };
+  const option = DIFFICULTY_OPTIONS.find((diffOption) => diffOption.value === badge.defaultDifficulty);
+  return { ...(option ?? { label: "???", color: "text-muted" }), sortKey: numericMap[badge.defaultDifficulty] ?? 99 };
+}
+
+function playerCountLabel(bucket: string): string {
+  if (bucket === "lte_3") return "≤3";
+  if (bucket === "gte_5") return "5+";
+  return "Any";
 }
 
 export function BadgeListClient({ badges, currentUserId, currentUserRole, allUsers }: Props) {
@@ -84,6 +100,8 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
   const [perVisitFilter, setPerVisitFilter] = useState<"all" | "per_visit" | "normal">("all");
   const [completedByFilter, setCompletedByFilter] = useState<string>("all");
   const [notCompletedByFilter, setNotCompletedByFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<SortOption>("number");
+  const [sortAsc, setSortAsc] = useState(true);
 
   const allRooms = useMemo(() => {
     const roomSet = new Set<string>();
@@ -100,63 +118,78 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
   const [roomFilter, setRoomFilter] = useState<string>("all");
   const [gameFilter, setGameFilter] = useState<string>("all");
 
-  const filteredBadges = useMemo(() => {
-    return badges.filter((badge) => {
-      // Text search
+  // Editing state for inline difficulty rating
+  const [editingDifficultyBadgeId, setEditingDifficultyBadgeId] = useState<string | null>(null);
+
+  const filteredAndSortedBadges = useMemo(() => {
+    const filtered = badges.filter((badge) => {
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
-        const matchesName = badge.name.toLowerCase().includes(query);
-        const matchesDescription = badge.description.toLowerCase().includes(query);
-        const matchesNumber = badge.badgeNumber.toString().includes(query);
-        if (!matchesName && !matchesDescription && !matchesNumber) return false;
+        if (
+          !badge.name.toLowerCase().includes(query) &&
+          !badge.description.toLowerCase().includes(query) &&
+          !badge.badgeNumber.toString().includes(query)
+        ) return false;
       }
-
-      // Completion filter
       if (completionFilter === "completed" && !badge.completedByCurrentUser) return false;
       if (completionFilter === "not_completed" && badge.completedByCurrentUser) return false;
-
-      // Difficulty filter
       if (difficultyFilter !== "all") {
         const displayed = getDifficultyDisplay(badge);
-        const difficultyOption = DIFFICULTY_OPTIONS.find((diffOpt) => diffOpt.value === difficultyFilter);
-        if (difficultyOption && displayed.label !== difficultyOption.label) return false;
+        const diffOption = DIFFICULTY_OPTIONS.find((difficultyOpt) => difficultyOpt.value === difficultyFilter);
+        if (diffOption && displayed.label !== diffOption.label) return false;
       }
-
-      // Player count bucket
       if (playerCountFilter !== "all" && badge.playerCountBucket !== playerCountFilter) return false;
-
-      // Per-visit filter
       if (perVisitFilter === "per_visit" && !badge.isPerVisit) return false;
       if (perVisitFilter === "normal" && badge.isPerVisit) return false;
-
-      // Room filter
       if (roomFilter !== "all" && !badge.rooms.includes(roomFilter)) return false;
-
-      // Game filter
       if (gameFilter !== "all" && !badge.games.includes(gameFilter)) return false;
-
-      // Completed-by user filter
-      if (completedByFilter !== "all") {
-        const userCompleted = badge.completedByUsers.some((completedUser) => completedUser.id === completedByFilter);
-        if (!userCompleted) return false;
-      }
-
-      // Not-completed-by user filter
-      if (notCompletedByFilter !== "all") {
-        const userCompleted = badge.completedByUsers.some((completedUser) => completedUser.id === notCompletedByFilter);
-        if (userCompleted) return false;
-      }
-
+      if (completedByFilter !== "all" && !badge.completedByUsers.some((completedUser) => completedUser.id === completedByFilter)) return false;
+      if (notCompletedByFilter !== "all" && badge.completedByUsers.some((completedUser) => completedUser.id === notCompletedByFilter)) return false;
       return true;
     });
-  }, [badges, searchQuery, completionFilter, difficultyFilter, playerCountFilter, perVisitFilter, roomFilter, gameFilter, completedByFilter, notCompletedByFilter]);
+
+    const playerCountSortKey: Record<string, number> = { lte_3: 1, none: 2, gte_5: 3 };
+
+    filtered.sort((badgeA, badgeB) => {
+      let comparison = 0;
+      switch (sortBy) {
+        case "number":
+          comparison = badgeA.badgeNumber - badgeB.badgeNumber;
+          break;
+        case "name":
+          comparison = badgeA.name.localeCompare(badgeB.name);
+          break;
+        case "difficulty":
+          comparison = getDifficultyDisplay(badgeA).sortKey - getDifficultyDisplay(badgeB).sortKey;
+          break;
+        case "completions":
+          comparison = badgeA.totalCompletions - badgeB.totalCompletions;
+          break;
+        case "players":
+          comparison = (playerCountSortKey[badgeA.playerCountBucket] ?? 2) - (playerCountSortKey[badgeB.playerCountBucket] ?? 2);
+          break;
+      }
+      return sortAsc ? comparison : -comparison;
+    });
+
+    return filtered;
+  }, [badges, searchQuery, completionFilter, difficultyFilter, playerCountFilter, perVisitFilter, roomFilter, gameFilter, completedByFilter, notCompletedByFilter, sortBy, sortAsc]);
 
   const completionCount = badges.filter((badge) => badge.completedByCurrentUser).length;
+
+  function handleSortToggle(option: SortOption) {
+    if (sortBy === option) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortBy(option);
+      setSortAsc(true);
+    }
+  }
 
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Badges</h1>
           <p className="text-sm text-muted">
@@ -168,238 +201,202 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
             type="text"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search badges by name, description, or number..."
+            placeholder="Search by name, description, or #..."
             className="w-full rounded-lg border border-border bg-card px-4 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
           />
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="mb-6 flex flex-wrap gap-2">
-        <select
-          value={completionFilter}
-          onChange={(event) => setCompletionFilter(event.target.value as typeof completionFilter)}
-          className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none"
-        >
-          <option value="all">All badges</option>
+      {/* Filters + Sort row */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <select value={completionFilter} onChange={(event) => setCompletionFilter(event.target.value as typeof completionFilter)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
+          <option value="all">All</option>
           <option value="not_completed">Not completed</option>
           <option value="completed">Completed</option>
         </select>
-
-        <select
-          value={difficultyFilter}
-          onChange={(event) => setDifficultyFilter(event.target.value)}
-          className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none"
-        >
+        <select value={difficultyFilter} onChange={(event) => setDifficultyFilter(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
           <option value="all">Any difficulty</option>
-          {DIFFICULTY_OPTIONS.map((difficultyOption) => (
-            <option key={difficultyOption.value} value={difficultyOption.value}>{difficultyOption.label}</option>
-          ))}
+          {DIFFICULTY_OPTIONS.map((diffOption) => (<option key={diffOption.value} value={diffOption.value}>{diffOption.label}</option>))}
         </select>
-
-        <select
-          value={playerCountFilter}
-          onChange={(event) => setPlayerCountFilter(event.target.value)}
-          className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none"
-        >
-          <option value="all">Any player count</option>
-          <option value="lte_3">3 or fewer</option>
-          <option value="gte_5">5 or more</option>
-          <option value="none">No preference</option>
+        <select value={playerCountFilter} onChange={(event) => setPlayerCountFilter(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
+          <option value="all">Any # players</option>
+          <option value="lte_3">≤3 players</option>
+          <option value="gte_5">5+ players</option>
+          <option value="none">No pref</option>
         </select>
-
-        <select
-          value={perVisitFilter}
-          onChange={(event) => setPerVisitFilter(event.target.value as typeof perVisitFilter)}
-          className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none"
-        >
+        <select value={perVisitFilter} onChange={(event) => setPerVisitFilter(event.target.value as typeof perVisitFilter)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
           <option value="all">All types</option>
-          <option value="per_visit">Per-visit only</option>
-          <option value="normal">Normal only</option>
+          <option value="per_visit">Per-visit</option>
+          <option value="normal">Normal</option>
         </select>
-
         {allRooms.length > 0 && (
-          <select
-            value={roomFilter}
-            onChange={(event) => setRoomFilter(event.target.value)}
-            className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none"
-          >
+          <select value={roomFilter} onChange={(event) => setRoomFilter(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
             <option value="all">Any room</option>
-            {allRooms.map((room) => (
-              <option key={room} value={room}>{room}</option>
-            ))}
+            {allRooms.map((room) => (<option key={room} value={room}>{room}</option>))}
           </select>
         )}
-
         {allGames.length > 0 && (
-          <select
-            value={gameFilter}
-            onChange={(event) => setGameFilter(event.target.value)}
-            className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none"
-          >
+          <select value={gameFilter} onChange={(event) => setGameFilter(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
             <option value="all">Any game</option>
-            {allGames.map((game) => (
-              <option key={game} value={game}>{game}</option>
-            ))}
+            {allGames.map((game) => (<option key={game} value={game}>{game}</option>))}
           </select>
         )}
-
         {allUsers.length > 0 && (
           <>
-            <select
-              value={completedByFilter}
-              onChange={(event) => setCompletedByFilter(event.target.value)}
-              className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none"
-            >
-              <option value="all">Completed by anyone</option>
-              {allUsers.map((appUser) => (
-                <option key={appUser.id} value={appUser.id}>{appUser.displayName}</option>
-              ))}
+            <select value={completedByFilter} onChange={(event) => setCompletedByFilter(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
+              <option value="all">Completed by</option>
+              {allUsers.map((appUser) => (<option key={appUser.id} value={appUser.id}>{appUser.displayName}</option>))}
             </select>
-            <select
-              value={notCompletedByFilter}
-              onChange={(event) => setNotCompletedByFilter(event.target.value)}
-              className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none"
-            >
-              <option value="all">Not completed by (any)</option>
-              {allUsers.map((appUser) => (
-                <option key={appUser.id} value={appUser.id}>Not done by: {appUser.displayName}</option>
-              ))}
+            <select value={notCompletedByFilter} onChange={(event) => setNotCompletedByFilter(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
+              <option value="all">Not done by</option>
+              {allUsers.map((appUser) => (<option key={appUser.id} value={appUser.id}>{appUser.displayName}</option>))}
             </select>
           </>
         )}
+
+        {/* Sort — right aligned */}
+        <div className="ml-auto flex items-center gap-1">
+          <span className="text-[10px] text-muted">Sort:</span>
+          <select
+            value={sortBy}
+            onChange={(event) => handleSortToggle(event.target.value as SortOption)}
+            className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none"
+          >
+            {SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => setSortAsc(!sortAsc)}
+            className="rounded-lg border border-border bg-card px-2 py-1.5 text-xs text-muted hover:text-foreground transition-colors"
+            title={sortAsc ? "Ascending" : "Descending"}
+          >
+            {sortAsc ? "↑" : "↓"}
+          </button>
+        </div>
       </div>
 
       {/* Results count */}
-      <p className="mb-4 text-xs text-muted">
-        Showing {filteredBadges.length} of {badges.length} badges
+      <p className="mb-2 text-[10px] text-muted">
+        {filteredAndSortedBadges.length} of {badges.length}
       </p>
 
-      {/* Badge grid */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {filteredBadges.map((badge) => {
+      {/* Table header */}
+      <div className="rounded-t-lg border border-border bg-card">
+        <div className="grid grid-cols-[auto_2.5fr_3fr_5rem_4rem_4rem_3rem] items-center gap-2 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
+          <span className="w-5"></span>
+          <span>Name</span>
+          <span>Description</span>
+          <span className="text-center">Difficulty</span>
+          <span className="text-center">Players</span>
+          <span className="text-center">Done</span>
+          <span></span>
+        </div>
+      </div>
+
+      {/* Badge rows */}
+      <div className="divide-y divide-border rounded-b-lg border-x border-b border-border">
+        {filteredAndSortedBadges.map((badge) => {
           const difficultyDisplay = getDifficultyDisplay(badge);
           return (
             <div
               key={badge.id}
-              className={`group relative rounded-xl border bg-card p-4 transition-colors hover:bg-card-hover ${
-                badge.completedByCurrentUser ? "border-success/30" : "border-border"
+              className={`group grid grid-cols-[auto_2.5fr_3fr_5rem_4rem_4rem_3rem] items-center gap-2 px-3 py-2 transition-colors hover:bg-card-hover ${
+                badge.completedByCurrentUser ? "bg-success/[0.03]" : ""
               }`}
             >
-              <div className="flex items-start justify-between gap-2">
-                <Link href={`/badges/${badge.id}`} className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="shrink-0 rounded bg-border px-1.5 py-0.5 text-[10px] font-mono text-muted">
-                      #{badge.badgeNumber}
-                    </span>
-                    <h3 className="truncate text-sm font-semibold text-foreground group-hover:text-accent transition-colors">
-                      {badge.name}
-                    </h3>
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-xs text-muted">
-                    {badge.description}
-                  </p>
-                </Link>
+              {/* Badge number */}
+              <span className="w-5 text-[10px] font-mono text-muted tabular-nums">
+                {badge.badgeNumber}
+              </span>
 
-                {/* Completion toggle */}
+              {/* Name + tags */}
+              <Link href={`/badges/${badge.id}`} className="flex items-center gap-1.5 min-w-0">
+                <span className="truncate text-sm font-medium text-foreground group-hover:text-accent transition-colors">
+                  {badge.name}
+                </span>
+                {badge.isPerVisit && (
+                  <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">
+                    visit
+                  </span>
+                )}
+                {badge.isMetaBadge && (
+                  <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">
+                    meta
+                  </span>
+                )}
+              </Link>
+
+              {/* Description */}
+              <span className="truncate text-xs text-muted">
+                {badge.description}
+              </span>
+
+              {/* Difficulty — click to rate */}
+              <div className="text-center">
+                {editingDifficultyBadgeId === badge.id ? (
+                  <select
+                    autoFocus
+                    value={badge.currentUserDifficulty ?? ""}
+                    onChange={(event) => {
+                      const selectedValue = event.target.value as Difficulty;
+                      if (selectedValue) updateBadgeDifficulty(badge.id, selectedValue);
+                      setEditingDifficultyBadgeId(null);
+                    }}
+                    onBlur={() => setEditingDifficultyBadgeId(null)}
+                    className="w-full rounded border border-border bg-background px-1 py-0.5 text-[10px] text-foreground focus:border-accent focus:outline-none"
+                  >
+                    <option value="">-</option>
+                    {DIFFICULTY_OPTIONS.filter((diffOption) => diffOption.value !== "unknown").map((diffOption) => (
+                      <option key={diffOption.value} value={diffOption.value}>{diffOption.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <button
+                    onClick={() => setEditingDifficultyBadgeId(badge.id)}
+                    className={`text-[11px] font-medium ${difficultyDisplay.color} hover:underline`}
+                    title="Click to rate"
+                  >
+                    {difficultyDisplay.label}
+                  </button>
+                )}
+              </div>
+
+              {/* Player count */}
+              <span className={`text-center text-[11px] ${
+                badge.playerCountBucket === "lte_3" ? "text-blue-400" :
+                badge.playerCountBucket === "gte_5" ? "text-orange-400" : "text-muted"
+              }`}>
+                {playerCountLabel(badge.playerCountBucket)}
+              </span>
+
+              {/* Completions count */}
+              <span className="text-center text-[11px] text-muted">
+                {badge.totalCompletions > 0 ? badge.totalCompletions : "-"}
+              </span>
+
+              {/* Completion toggle */}
+              <div className="flex justify-center">
                 <button
                   onClick={() => toggleBadgeCompletion(badge.id)}
-                  className={`shrink-0 rounded-lg border p-1.5 transition-colors ${
+                  className={`rounded p-0.5 transition-colors ${
                     badge.completedByCurrentUser
-                      ? "border-success/30 bg-success/10 text-success hover:bg-success/20"
-                      : "border-border text-muted hover:border-muted hover:text-foreground"
+                      ? "text-success hover:text-success/70"
+                      : "text-border hover:text-muted"
                   }`}
-                  title={badge.completedByCurrentUser ? "Mark as not completed" : "Mark as completed"}
+                  title={badge.completedByCurrentUser ? "Mark incomplete" : "Mark complete"}
                 >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="h-4 w-4" fill={badge.completedByCurrentUser ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                 </button>
-              </div>
-
-              {/* Tags row */}
-              <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                <span className={`text-[10px] font-medium ${difficultyDisplay.color}`}>
-                  {difficultyDisplay.label}
-                </span>
-
-                {badge.isPerVisit && (
-                  <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-accent">
-                    Per-visit
-                  </span>
-                )}
-
-                {badge.isMetaBadge && (
-                  <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-medium text-purple-400">
-                    Meta
-                  </span>
-                )}
-
-                {badge.playerCountBucket === "lte_3" && (
-                  <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
-                    ≤3 players
-                  </span>
-                )}
-                {badge.playerCountBucket === "gte_5" && (
-                  <span className="rounded bg-orange-500/20 px-1.5 py-0.5 text-[10px] font-medium text-orange-400">
-                    5+ players
-                  </span>
-                )}
-
-                {badge.totalCompletions > 0 && (
-                  <span className="ml-auto text-[10px] text-muted">
-                    {badge.totalCompletions} done
-                  </span>
-                )}
-              </div>
-
-              {/* Completed-by user pills */}
-              {badge.completedByUsers.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {badge.completedByUsers.slice(0, 5).map((completedUser) => (
-                    <span
-                      key={completedUser.id}
-                      className={`rounded-full px-2 py-0.5 text-[10px] ${
-                        completedUser.id === currentUserId
-                          ? "bg-success/20 text-success"
-                          : "bg-border text-muted"
-                      }`}
-                    >
-                      {completedUser.displayName}
-                    </span>
-                  ))}
-                  {badge.completedByUsers.length > 5 && (
-                    <span className="rounded-full bg-border px-2 py-0.5 text-[10px] text-muted">
-                      +{badge.completedByUsers.length - 5}
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {/* Quick difficulty selector */}
-              <div className="mt-2">
-                <select
-                  value={badge.currentUserDifficulty ?? ""}
-                  onChange={(event) => {
-                    const selectedValue = event.target.value as Difficulty;
-                    if (selectedValue) {
-                      updateBadgeDifficulty(badge.id, selectedValue);
-                    }
-                  }}
-                  className="w-full rounded border border-border bg-background px-2 py-1 text-[10px] text-muted focus:border-accent focus:outline-none"
-                >
-                  <option value="">Rate difficulty...</option>
-                  {DIFFICULTY_OPTIONS.filter((diffOption) => diffOption.value !== "unknown").map((diffOption) => (
-                    <option key={diffOption.value} value={diffOption.value}>{diffOption.label}</option>
-                  ))}
-                </select>
               </div>
             </div>
           );
         })}
       </div>
 
-      {filteredBadges.length === 0 && (
+      {filteredAndSortedBadges.length === 0 && (
         <div className="py-12 text-center text-muted">
           <p className="text-lg font-medium">No badges match your filters</p>
           <p className="mt-1 text-sm">Try adjusting your search or filter criteria.</p>

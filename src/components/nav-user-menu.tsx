@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 interface NavUserMenuProps {
   userName: string;
@@ -13,6 +14,7 @@ interface NavUserMenuProps {
 export function NavUserMenu({ userName, userImage, isTestUser, role }: NavUserMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -23,6 +25,12 @@ export function NavUserMenu({ userName, userImage, isTestUser, role }: NavUserMe
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  async function handleSignOut() {
+    await fetch("/api/auth/signout", { method: "POST", redirect: "manual" });
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <div className="relative" ref={menuRef}>
@@ -59,6 +67,13 @@ export function NavUserMenu({ userName, userImage, isTestUser, role }: NavUserMe
           >
             Profile
           </Link>
+          <Link
+            href="/players"
+            className="block px-4 py-2 text-sm text-foreground hover:bg-card-hover"
+            onClick={() => setIsOpen(false)}
+          >
+            Players
+          </Link>
           {role === "superuser" && (
             <Link
               href="/admin"
@@ -69,14 +84,12 @@ export function NavUserMenu({ userName, userImage, isTestUser, role }: NavUserMe
             </Link>
           )}
           <hr className="my-1 border-border" />
-          <form action="/api/auth/signout" method="POST">
-            <button
-              type="submit"
-              className="block w-full px-4 py-2 text-left text-sm text-danger hover:bg-card-hover"
-            >
-              Sign Out
-            </button>
-          </form>
+          <button
+            onClick={handleSignOut}
+            className="block w-full px-4 py-2 text-left text-sm text-danger hover:bg-card-hover"
+          >
+            Sign Out
+          </button>
         </div>
       )}
     </div>

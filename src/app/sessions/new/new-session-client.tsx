@@ -10,9 +10,15 @@ interface AvailableUser {
   displayName: string;
 }
 
-export function NewSessionClient({ availableUsers }: { availableUsers: AvailableUser[] }) {
+interface Props {
+  availableUsers: AvailableUser[];
+  currentUserDisplayName: string;
+}
+
+export function NewSessionClient({ availableUsers, currentUserDisplayName }: Props) {
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
-  const [ghostNames, setGhostNames] = useState<string[]>([""]);
+  const [ghostNames, setGhostNames] = useState<string[]>([]);
+  const [ghostInput, setGhostInput] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const router = useRouter();
 
@@ -24,36 +30,28 @@ export function NewSessionClient({ availableUsers }: { availableUsers: Available
     );
   }
 
-  function addGhostSlot() {
-    setGhostNames((previous) => [...previous, ""]);
+  function addGhostPlayer() {
+    const trimmed = ghostInput.trim();
+    if (!trimmed) return;
+    setGhostNames((previous) => [...previous, trimmed]);
+    setGhostInput("");
   }
 
-  function updateGhostName(index: number, name: string) {
-    setGhostNames((previous) => {
-      const updated = [...previous];
-      updated[index] = name;
-      return updated;
-    });
-  }
-
-  function removeGhostSlot(index: number) {
+  function removeGhostPlayer(index: number) {
     setGhostNames((previous) => previous.filter((_, ghostIndex) => ghostIndex !== index));
   }
 
   async function handleCreate() {
     setIsCreating(true);
     try {
-      const sessionId = await createSession(
-        selectedMembers,
-        ghostNames.filter((name) => name.trim())
-      );
+      const sessionId = await createSession(selectedMembers, ghostNames);
       router.push(`/sessions/${sessionId}`);
     } catch {
       setIsCreating(false);
     }
   }
 
-  const totalPartySize = 1 + selectedMembers.length + ghostNames.filter((name) => name.trim()).length;
+  const totalPartySize = 1 + selectedMembers.length + ghostNames.length;
 
   return (
     <div className="space-y-6">
@@ -67,9 +65,19 @@ export function NewSessionClient({ availableUsers }: { availableUsers: Available
       {/* Member selection */}
       <div className="rounded-xl border border-border bg-card p-6">
         <h2 className="text-sm font-semibold text-foreground">Party Members</h2>
-        <p className="mt-1 text-xs text-muted">You are automatically included. Select who else is coming.</p>
 
         <div className="mt-3 space-y-2">
+          {/* Current user — always included, shown as disabled */}
+          <div
+            className="flex w-full items-center justify-between rounded-lg border border-accent/20 bg-accent/5 px-3 py-2 text-sm opacity-60 cursor-default"
+          >
+            <span className="text-accent">{currentUserDisplayName}</span>
+            <svg className="h-4 w-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+
+          {/* Other selectable users */}
           {availableUsers.map((appUser) => (
             <button
               key={appUser.id}
@@ -94,37 +102,45 @@ export function NewSessionClient({ availableUsers }: { availableUsers: Available
         </div>
       </div>
 
-      {/* Ghost members */}
+      {/* Other players (non badge hunters) */}
       <div className="rounded-xl border border-border bg-card p-6">
-        <h2 className="text-sm font-semibold text-foreground">Ghost Players</h2>
+        <h2 className="text-sm font-semibold text-foreground">Other Players</h2>
         <p className="mt-1 text-xs text-muted">
-          People who are physically there but don&apos;t have accounts. They count toward party size only.
+          People who are physically there but don&apos;t have Badge Hunters accounts. They count toward party size only.
         </p>
 
         <div className="mt-3 space-y-2">
+          {/* Already-added ghost players */}
           {ghostNames.map((ghostName, ghostIndex) => (
-            <div key={ghostIndex} className="flex gap-2">
-              <input
-                type="text"
-                value={ghostName}
-                onChange={(event) => updateGhostName(ghostIndex, event.target.value)}
-                placeholder={`Ghost player ${ghostIndex + 1}...`}
-                className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
-              />
+            <div key={ghostIndex} className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+              <span className="text-sm text-foreground">{ghostName}</span>
               <button
-                onClick={() => removeGhostSlot(ghostIndex)}
-                className="rounded-lg border border-border px-3 py-2 text-sm text-muted hover:text-danger transition-colors"
+                onClick={() => removeGhostPlayer(ghostIndex)}
+                className="text-xs text-muted hover:text-danger transition-colors"
               >
                 Remove
               </button>
             </div>
           ))}
-          <button
-            onClick={addGhostSlot}
-            className="text-xs text-accent hover:text-accent-hover transition-colors"
-          >
-            + Add ghost player
-          </button>
+
+          {/* Input to add a new ghost player */}
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={ghostInput}
+              onChange={(event) => setGhostInput(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && addGhostPlayer()}
+              placeholder="Player name..."
+              className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+            />
+            <button
+              onClick={addGhostPlayer}
+              disabled={!ghostInput.trim()}
+              className="rounded-lg bg-accent/20 px-4 py-2 text-sm font-medium text-accent hover:bg-accent/30 transition-colors disabled:opacity-40"
+            >
+              Add
+            </button>
+          </div>
         </div>
       </div>
 
@@ -136,7 +152,7 @@ export function NewSessionClient({ availableUsers }: { availableUsers: Available
               Total party size: {totalPartySize}
             </p>
             <p className="text-xs text-muted">
-              {1 + selectedMembers.length} real + {ghostNames.filter((name) => name.trim()).length} ghosts
+              {1 + selectedMembers.length} badge hunters + {ghostNames.length} other players
             </p>
           </div>
           <button

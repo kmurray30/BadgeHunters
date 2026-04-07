@@ -9,6 +9,9 @@ interface TestUser {
   activatePlayerName: string | null;
   realName: string | null;
   role: string;
+  currentScore: number;
+  rankColor: string | null;
+  badgesCompleted: number;
   createdAt: string;
 }
 
@@ -21,6 +24,9 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
   const [newTestUserName, setNewTestUserName] = useState("");
   const [testUserError, setTestUserError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [activateSearchResults, setActivateSearchResults] = useState<string[]>([]);
+  const [activateSearchDebug, setActivateSearchDebug] = useState<string[]>([]);
+  const [isSearchingActivate, setIsSearchingActivate] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -68,9 +74,35 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
     setTestUsers([]);
   }
 
-  async function handleCreateTestUser() {
+  async function searchActivate(query: string) {
+    if (query.trim().length < 2) {
+      setActivateSearchResults([]);
+      setActivateSearchDebug([]);
+      return;
+    }
+    setIsSearchingActivate(true);
+    setActivateSearchDebug([]);
+    try {
+      const response = await fetch(`/api/admin/search-activate?q=${encodeURIComponent(query.trim())}`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log("[search-activate] Full response:", data);
+        setActivateSearchResults(data.results || []);
+        setActivateSearchDebug(data.debug || []);
+      }
+    } catch (error) {
+      console.error("[search-activate] Client error:", error);
+      setActivateSearchResults([]);
+      setActivateSearchDebug(["Client-side fetch error"]);
+    } finally {
+      setIsSearchingActivate(false);
+    }
+  }
+
+  async function handleCreateTestUser(nameOverride?: string) {
     setTestUserError("");
-    if (!newTestUserName.trim()) {
+    const nameToUse = nameOverride ?? newTestUserName;
+    if (!nameToUse.trim()) {
       setTestUserError("Name is required");
       return;
     }
@@ -80,11 +112,12 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
       const response = await fetch("/api/admin/test-users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName: newTestUserName.trim() }),
+        body: JSON.stringify({ displayName: nameToUse.trim() }),
       });
 
       if (response.ok) {
         setNewTestUserName("");
+        setActivateSearchResults([]);
         fetchTestUsers();
       } else {
         const data = await response.json();
@@ -92,6 +125,27 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
       }
     } catch {
       setTestUserError("Failed to create test user");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleDeleteTestUser(userId: string) {
+    setIsLoading(true);
+    try {
+      const response = await fetch("/api/admin/test-users", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      if (response.ok) {
+        setTestUsers((previous) => previous.filter((user) => user.id !== userId));
+      } else {
+        const data = await response.json();
+        setTestUserError(data.error || "Failed to delete");
+      }
+    } catch {
+      setTestUserError("Failed to delete test user");
     } finally {
       setIsLoading(false);
     }
@@ -187,17 +241,51 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
                     value={newTestUserName}
                     onChange={(event) => setNewTestUserName(event.target.value)}
                     onKeyDown={(event) => event.key === "Enter" && handleCreateTestUser()}
-                    placeholder="Display name..."
+                    placeholder="Activate player name..."
                     className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
                   />
                   <button
-                    onClick={handleCreateTestUser}
+                    onClick={() => searchActivate(newTestUserName)}
+                    disabled={isLoading || isSearchingActivate || newTestUserName.trim().length < 2}
+                    className="rounded-lg border border-border px-3 py-2 text-sm text-muted hover:text-foreground transition-colors disabled:opacity-50"
+                    title="Search Activate for this name"
+                  >
+                    {isSearchingActivate ? "..." : "Search"}
+                  </button>
+                  <button
+                    onClick={() => handleCreateTestUser()}
                     disabled={isLoading}
                     className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
                   >
                     Create
                   </button>
                 </div>
+                {/* Activate search results */}
+                {activateSearchResults.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-[10px] text-muted">Found on Activate — click to create:</p>
+                    {activateSearchResults.map((resultName) => (
+                      <button
+                        key={resultName}
+                        onClick={() => handleCreateTestUser(resultName)}
+                        disabled={isLoading}
+                        className="flex w-full items-center justify-between rounded-lg border border-accent/30 bg-accent/5 px-3 py-1.5 text-sm text-accent hover:bg-accent/10 transition-colors disabled:opacity-50"
+                      >
+                        <span>{resultName}</span>
+                        <span className="text-[10px]">+ Create</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {/* Debug log from Activate search */}
+                {activateSearchDebug.length > 0 && (
+                  <details className="text-[10px] text-muted">
+                    <summary className="cursor-pointer hover:text-foreground">Search debug log ({activateSearchDebug.length} lines)</summary>
+                    <pre className="mt-1 max-h-32 overflow-y-auto rounded bg-background p-2 text-[9px] leading-relaxed">
+                      {activateSearchDebug.join("\n")}
+                    </pre>
+                  </details>
+                )}
                 {testUserError && (
                   <p className="text-xs text-danger">{testUserError}</p>
                 )}
@@ -209,21 +297,50 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
                   <label className="text-xs font-medium text-muted">
                     Log in as Test User
                   </label>
-                  <div className="max-h-48 space-y-1 overflow-y-auto">
+                  <div className="max-h-64 space-y-1 overflow-y-auto">
                     {testUsers.map((testUser) => (
-                      <button
+                      <div
                         key={testUser.id}
-                        onClick={() => handleTestLogin(testUser.id)}
-                        disabled={isLoading}
-                        className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-sm hover:bg-card-hover transition-colors disabled:opacity-50"
+                        className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-card-hover transition-colors"
                       >
-                        <span className="text-foreground">
-                          {testUser.activatePlayerName || testUser.realName}
-                        </span>
-                        <span className="rounded bg-warning/20 px-1.5 py-0.5 text-[10px] font-bold text-warning">
-                          TEST
-                        </span>
-                      </button>
+                        <button
+                          onClick={() => handleTestLogin(testUser.id)}
+                          disabled={isLoading}
+                          className="flex flex-1 items-center justify-between min-w-0 disabled:opacity-50"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="truncate text-foreground">
+                              {testUser.activatePlayerName || testUser.realName}
+                            </span>
+                            {testUser.rankColor && (
+                              <span className="shrink-0 text-[10px] text-muted">
+                                {testUser.rankColor}
+                              </span>
+                            )}
+                            {testUser.badgesCompleted > 0 && (
+                              <span className="shrink-0 text-[10px] text-muted">
+                                {testUser.badgesCompleted} badges
+                              </span>
+                            )}
+                          </div>
+                          <span className="shrink-0 rounded bg-warning/20 px-1.5 py-0.5 text-[10px] font-bold text-warning">
+                            TEST
+                          </span>
+                        </button>
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleDeleteTestUser(testUser.id);
+                          }}
+                          disabled={isLoading}
+                          className="shrink-0 rounded p-1.5 text-danger/60 hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
+                          title="Delete test user"
+                        >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>

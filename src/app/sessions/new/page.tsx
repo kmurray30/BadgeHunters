@@ -26,9 +26,17 @@ export default async function NewSessionPage() {
         : appUser.activatePlayerName ?? appUser.realName ?? "Unknown",
   }));
 
+  const currentUserDisplayName =
+    user.displayNameMode === "real_name"
+      ? user.realName ?? user.activatePlayerName ?? "You"
+      : user.activatePlayerName ?? user.realName ?? "You";
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <NewSessionClient availableUsers={serializedUsers} />
+      <NewSessionClient
+        availableUsers={serializedUsers}
+        currentUserDisplayName={currentUserDisplayName}
+      />
     </div>
   );
 }

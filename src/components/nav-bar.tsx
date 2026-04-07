@@ -33,6 +33,12 @@ export async function NavBar() {
                 Sessions
               </Link>
               <Link
+                href="/players"
+                className="text-sm text-muted hover:text-foreground transition-colors"
+              >
+                Players
+              </Link>
+              <Link
                 href="/feedback"
                 className="text-sm text-muted hover:text-foreground transition-colors"
               >

@@ -97,7 +97,7 @@ export default async function SessionsPage() {
                       Active
                     </span>
                     <p className="mt-1 text-xs text-muted">
-                      {session.members.length} players + {session.ghostMembers.length} ghosts
+                      {session.members.length} hunters + {session.ghostMembers.length} others
                     </p>
                   </div>
                 </div>
@@ -114,7 +114,7 @@ export default async function SessionsPage() {
                   ))}
                   {session.ghostMembers.map((ghost) => (
                     <span key={ghost.id} className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] text-warning">
-                      {ghost.displayName} (ghost)
+                      {ghost.displayName}
                     </span>
                   ))}
                 </div>
