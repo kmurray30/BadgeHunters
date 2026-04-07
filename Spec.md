@@ -15,8 +15,8 @@ Core goals:
 5. Generate **user-specific badge suggestions** based on the current party.
 6. Let users mark their own badge completion and difficulty opinions.
 7. Preserve a session history.
-8. Support admin/superuser maintenance tools and test/dev mode.
-9. Include a lightweight feedback feature visible only to admins and superusers.
+8. Support superuser maintenance tools and an admin mode for test/dev workflows.
+9. Include a lightweight feedback feature visible only to superusers.
 
 This spec is for **v1** only.
 
@@ -27,11 +27,11 @@ This spec is for **v1** only.
 ## In scope for v1
 
 * Google OAuth login for normal users (including superusers)
-* Separate **password-only admin login** for a dedicated admin user (not OAuth; not the same account as the superuser)
+* **Admin mode** — a password-gated mode (not an account) that enables text-only test account creation/login, bypassing OAuth
 * Activate username/account linking during signup
 * Score scraping from `https://playactivate.com/scores`
 * Daily retryable score sync, isolated so app functionality does not depend on it
-* Manual score editing by admins and superusers
+* Manual score editing by superusers
 * Badge database seeded from uploaded badge tracker
 * Badge browsing with filters
 * Badge detail page
@@ -44,9 +44,8 @@ This spec is for **v1** only.
 * Shared group session plan
 * Session history
 * Post-session completion prompts
-* Feedback submission page plus admin/superuser feedback dashboard
-* Admin mode and test users
-* Dev/test cheats such as fake users, time override, score override, etc.
+* Feedback submission page plus superuser feedback dashboard
+* Admin mode with isolated test users and dev/test cheats (fake users, time override, score override, etc.)
 
 ## Explicitly out of scope for v1
 
@@ -72,7 +71,7 @@ This spec is for **v1** only.
 * **Language:** TypeScript
 * **Database:** PostgreSQL
 * **ORM:** Prisma
-* **Auth:** Auth.js / NextAuth with Google provider plus a credentials (or equivalent) path for password-only admin login
+* **Auth:** Auth.js / NextAuth with Google provider; admin mode uses a separate password gate (not an account)
 * **Hosting:** Vercel
 * **Database hosting:** Supabase Postgres
 * **Cron/background work:** Vercel Cron for daily score sync
@@ -82,9 +81,9 @@ This stack is acceptable and not overkill for this project. It is slightly more 
 
 ---
 
-## 4. Roles and permissions
+## 4. Roles, permissions, and admin mode
 
-There are three roles.
+There are two roles — **user** and **superuser** — plus a separate **admin mode** that is not a role or an account.
 
 ## user
 
@@ -103,42 +102,48 @@ Can:
 
 Cannot:
 
-* edit other users’ badge status
-* edit other users’ scores
-* access admin tools
+* edit other users' badge status
+* edit other users' scores
 * access feedback dashboard
 
 ## superuser
 
 Can do everything a normal user can, plus:
 
-* edit any user’s badge status
-* edit any user’s score
+* edit any user's badge status
+* edit any user's score
+* manage other users' roles (promote/demote superusers)
 * access feedback dashboard
 * view all submitted feedback
-
-Cannot:
-
-* manage admin-only settings unless explicitly allowed
-* use admin-only cheat/dev tools unless explicitly granted
-
-## admin
-
-Can do everything a superuser can, plus:
-
-* manage superusers
-* create/manage test users, test-user login, and dev/test cheats (requires **password-admin** session; see §5)
-* override time/date for testing
-* override scores for testing
+* edit badge catalog fields (rooms, games, etc.)
 * control score sync behavior manually
-* edit protected site settings
-* impersonate/force-login test users if implemented
-* manage pinned system/test fixtures if implemented later
+* inspect scrape failures
 
 Seed:
 
 * `kyle.murray100` (Google OAuth) should be seeded or first-login elevated to **superuser**
-* **Admin** is a **separate user** from any Google account: a dedicated row with `role = admin`, logged in only via the **password admin** flow below (not `kyle.murray100@gmail.com` and not OAuth)
+
+## admin mode
+
+Admin mode is **not** a role and **not** an account. It is a **mode** the app can enter, gated by an environment-provided password. Its purpose is to enable test/dev workflows without fighting OAuth.
+
+When admin mode is active:
+
+* you can **create** accounts using text-only input (Activate player name only) — no OAuth required
+* you can **log in** to any of these test accounts using text-only input
+* all test accounts are automatically **superusers**
+* test accounts and real accounts are **fully isolated**: real users never see test users or their data, and test users never see real users or their data
+
+Admin mode also unlocks dev/test cheats:
+
+* override time/date for session expiry testing
+* override scores for testing
+* manipulate session states
+* trigger score sync manually
+* create sample sessions quickly
+* inspect scrape failures
+
+Admin mode can be used in both local development and production.
 
 ---
 
@@ -146,32 +151,30 @@ Seed:
 
 ## Login methods
 
-Three flows exist; they are distinct:
+Two flows exist, plus admin mode:
 
 1. **Google OAuth** for real users (`auth_type = google`). Used for normal users and for **superuser** accounts (e.g. `kyle.murray100`).
-2. **Password admin login** for the **dedicated admin user** only (`auth_type = admin_password` or equivalent). Single password from environment (stored as a hash; never in source control). No Google account is linked to this user. This is **not** “elevate my Gmail to admin”; it is its own identity and session.
-3. **Test user login / create** for fake/test users (`auth_type = test`), available only after an **admin** session is established (see below).
+2. **Test user login / create** for test users (`auth_type = test`), available only when **admin mode** is active (see below).
 
-## Password admin (bare minimum security)
+## Admin mode activation (bare minimum security)
 
 This app is a small private tool, not a high-assurance system. Required baseline:
 
-* Password provided via **environment variable**; compare using a **password hash** (e.g. bcrypt), not plaintext in the DB or repo.
+* Admin mode password provided via **environment variable**; compare using a **password hash** (e.g. bcrypt), not plaintext in the DB or repo.
 * **HTTPS** in production (e.g. Vercel default).
+* Entering the correct password puts the app into admin mode for that browser session. It does **not** create or log in as a user account.
 
 **Rate limiting** and similar controls are **optional**; implement only if low cost. Do not over-build.
 
 ### users.auth_type
 
-Extend the user model so admin-password users are explicit:
+* `auth_type` (`google` | `test`)
 
-* `auth_type` (`google` | `test` | `admin_password`)
-
-The admin user row has `auth_type = admin_password`, `role = admin`, and does not use Google OAuth.
+There is no admin user row. Admin mode is a session-level flag, not a user identity.
 
 ## Google login flow
 
-1. User clicks “Sign in with Google”.
+1. User clicks "Sign in with Google".
 2. After Google auth succeeds, the app asks for:
 
    * real name
@@ -179,7 +182,7 @@ The admin user row has `auth_type = admin_password`, `role = admin`, and does no
 3. The app checks `https://playactivate.com/scores` using the Google email first.
 4. If an account is found, show:
 
-   * “Are you `<playername>`?”
+   * "Are you `<playername>`?"
 5. If user confirms, link that Activate player.
 6. If not found, or user says no:
 
@@ -192,23 +195,36 @@ Important:
 
 * The score lookup is an **enrichment step**, not a hard dependency for the app to function.
 * If validation is flaky or scrape fails temporarily, do not corrupt data.
-* If signup validation fails in a weird way, it is acceptable to let an admin/superuser fix the account later.
+* If signup validation fails in a weird way, it is acceptable to let a superuser fix the account later.
 
-## Test user flow
+## Test user flow (admin mode only)
 
-After logging in as **admin** (password flow) or from admin tooling as specified in implementation:
+When admin mode is active:
 
-* Admin can create/log in as a **test user** using only **Activate player name** (per existing test-user rules).
+* You can create a **test user** by entering a **display name** (any text — it does not need to match a real Activate account and is not validated against the score page).
+* You can log in as any existing test user by selecting or entering their name.
+* All test accounts are created with `role = superuser` and `auth_type = test`.
+* Test accounts are flagged as `is_test_user = true`.
+* The display name is stored as `activate_player_name` for consistency, but it is purely cosmetic for test users.
 
 Rules:
 
-* Test login is separate from OAuth and separate from the password-admin identity
+* Test login is separate from OAuth
 * Test users must be clearly marked in DB and UI
 * Test users can exist in prod and local
 * Test users should not participate in real score sync unless explicitly enabled
 * Test users should be visually labeled as test accounts
 
-(Exact navigation—whether test-user actions live on an admin page vs. nested under the same “Admin” entry point—can follow whatever keeps the UI simplest; the requirement is **admin-gated**, not public.)
+## Data isolation
+
+Test accounts and real accounts live in **completely separate worlds**:
+
+* When logged in as a real user (Google OAuth), you only see other real users, their sessions, their badge data, their comments, etc. Test users are invisible.
+* When logged in as a test user (via admin mode), you only see other test users, their sessions, their badge data, their comments, etc. Real users are invisible.
+* This isolation applies to all user-facing queries: sessions, session members, badge completion tags, feedback, comments, profile lists, etc.
+* The badge catalog itself is shared (badges are not user-specific), but all per-user data on top of badges (completion, difficulty ratings, comments) is isolated.
+
+This keeps test data from polluting the real experience and vice versa.
 
 ---
 
@@ -236,7 +252,7 @@ It must not block:
 
 Once per day:
 
-* attempt to scrape each eligible real user’s Activate score
+* attempt to scrape each eligible real user's Activate score
 * validate returned data
 * only update the score if the result looks sane
 
@@ -246,7 +262,7 @@ If scrape fails or returns weird/untrusted data:
 * keep last known good score
 * do not overwrite with bad data
 
-## “Weird number” validation
+## "Weird number" validation
 
 Define a validator with checks such as:
 
@@ -263,7 +279,7 @@ If validation fails:
 
 ## Manual score editing
 
-Superusers and admins can manually edit user scores.
+Superusers can manually edit user scores.
 
 This is for maintenance/fixing, not to disable sync.
 
@@ -282,6 +298,28 @@ Minimum fields to track:
 * last_good_score_at
 
 Optionally store raw snapshots/history for debugging.
+
+## Rank color mapping
+
+Rank color is derived from a player's cumulative score. Each 100k band corresponds to one color.
+
+**Mapping (verify against actual Activate system — these are best-guess values):**
+
+| Score range | Rank color |
+|---|---|
+| 0 – 99,999 | White |
+| 100,000 – 199,999 | Blue |
+| 200,000 – 299,999 | Green |
+| 300,000 – 399,999 | Orange |
+| 400,000 – 499,999 | Red |
+| 500,000+ | Purple |
+
+Implementation notes:
+
+* Store this mapping as app-level config, not in the database. A simple lookup function is enough.
+* `rank_color` on the `users` table is derived from `current_score` using this mapping. Update it whenever `current_score` changes.
+* The "CHASING RAINBOWS" badge (badge #18) requires 5 players with 5 distinct rank colors, which means the party needs players spanning at least 5 of these bands.
+* If the real Activate system has more or fewer colors, adjust the table. The important thing is that the mapping exists as a concrete, configurable definition.
 
 ---
 
@@ -302,14 +340,14 @@ If Prisma/Postgres enum-array friction becomes annoying, use string arrays const
 
 ### users
 
-Represents all users: OAuth users, test users, and the **password-admin** user (`auth_type = admin_password`).
+Represents all users: OAuth users and test users.
 
 Fields:
 
 * id
 * email (nullable for test users)
-* auth_type (`google` | `test` | `admin_password`)
-* role (`user` | `superuser` | `admin`)
+* auth_type (`google` | `test`)
+* role (`user` | `superuser`)
 * real_name
 * display_name_mode (`player_name` | `real_name`)
 * activate_player_name
@@ -328,7 +366,7 @@ Notes:
 
 * session player / profile player / badge status player always tie back to this table
 * display mode controls whether UI shows player name or real name for that user
-* the password-admin user typically has no `activate_player_name` / score sync; treat as staff-only
+* `is_test_user` is the key flag for data isolation — all queries that return user-visible data must filter by this flag to enforce separation between test and real worlds
 
 ### badges
 
@@ -357,7 +395,7 @@ Notes:
 
 * canonical completion is **not** stored here
 * `default_difficulty = unknown` corresponds to UI `???`
-* if `rooms` or `games` are missing or empty after import, **admins and superusers** may fill them in later via maintenance tooling (normal users do not edit badge catalog fields)
+* if `rooms` or `games` are missing or empty after import, **superusers** may fill them in later via maintenance tooling (normal users do not edit badge catalog fields)
 
 ### badge_user_status
 
@@ -379,7 +417,7 @@ Fields:
 Rules:
 
 * users can edit only their own row
-* superusers/admins can edit anyone’s row
+* superusers can edit anyone's row
 * one unique row per `(user_id, badge_id)`
 
 ### badge_comments
@@ -401,7 +439,7 @@ Fields:
 Rules:
 
 * users can edit only their own comments
-* admins/superusers may edit/delete/moderate if needed
+* superusers may edit/delete/moderate if needed
 * pinned comments always render at top
 
 ### badge_comment_reactions
@@ -442,7 +480,7 @@ These badges still live in `badges`; rules live here.
 
 ### sessions
 
-Represents a single day’s outing / planning session.
+Represents a single day's outing / planning session.
 
 Fields:
 
@@ -557,7 +595,7 @@ Fields:
 Visibility:
 
 * any logged-in user may submit feedback
-* only superusers/admins may view feedback dashboard
+* only superusers may view feedback dashboard
 
 ---
 
@@ -609,18 +647,30 @@ Interpretation:
 
 * `user`
 * `superuser`
-* `admin`
 
 ### auth_type enum
 
 * `google`
 * `test`
-* `admin_password` — dedicated password-only admin user (no OAuth)
+
+### reaction_type enum
+
+Predefined set of emoji reactions. Keep it small — this is a tiny friend group app, not Slack.
+
+* `thumbs_up`
+* `heart`
+* `laugh`
+* `fire`
+* `question`
+
+Used by both `badge_comment_reactions` and `feedback_reactions`. Free-form emoji is explicitly **not** supported in v1 to keep the UI simple. If the group wants more options later, add them to the enum.
 
 ### display_name_mode enum
 
 * `player_name`
 * `real_name`
+
+Default for new users: `player_name`.
 
 ---
 
@@ -631,12 +681,14 @@ Interpretation:
 Features:
 
 * **Sign in with Google** — real users and superusers (OAuth).
-* **Admin** — password-only; signs in the **dedicated admin user** (separate from any Google account). Not OAuth.
-* Clear separation between OAuth, password admin, and (post-auth) test-user tooling.
+* **Enter Admin Mode** — password-only; activates admin mode for the current browser session. Does **not** log in as a user. Once active, shows a test-user creation/login interface.
+* Clear separation between OAuth login and admin mode.
 
-Admin session (password):
+Admin mode (when active):
 
-* Unlocks admin-only pages: test-user create/login, dev cheats, role tooling, etc., per §4 and §17.
+* Shows a test-user panel: create a new test account by entering a name, or select an existing test user to log in as.
+* All test accounts created here are superusers.
+* The admin mode indicator should be visible in the UI while active.
 
 ## 9.2 Onboarding / account linking page
 
@@ -646,7 +698,7 @@ Flow:
 
 * collect real name
 * try Activate lookup by Google email
-* if found, ask “Are you `<playername>`?”
+* if found, ask "Are you `<playername>`?"
 * if user says no or not found, ask for Activate player name
 * validate against Activate scores page
 * create user
@@ -676,15 +728,15 @@ Filters:
 * by per-visit vs normal
 * by players who have not completed
 * by players who have completed
-* by “only badges I haven’t completed”
-* by “only badges selected session users haven’t completed” if session context exists
+* by "only badges I haven't completed"
+* by "only badges selected session users haven't completed" if session context exists
 * search by name/description
 
 Role-based edit behavior:
 
 * normal users can edit their own badge status/difficulty
-* superusers/admins can edit any user’s badge status and scores
-* badge row dropdown may expose admin/superuser tools if needed
+* superusers can edit any user's badge status and scores
+* badge row dropdown may expose superuser tools if needed
 
 ## 9.4 Badge detail page
 
@@ -724,7 +776,7 @@ Shows:
 * completed badges
 * recent activity
 * score sync info (optional)
-* admin/superuser edit controls if authorized
+* superuser edit controls if authorized
 
 Also useful:
 
@@ -746,6 +798,15 @@ Session header should show:
 * all real users in party
 * all ghost players in party
 * headcount total
+
+### Session visibility and membership rules
+
+* Any user can **see** all sessions (past and present) — sessions are not private. This is a small friend group; hiding sessions adds complexity for no benefit.
+* Any session member can **add** other users to the session after creation (not just the creator).
+* Users **cannot** add themselves to a session they are not already in — another member must add them.
+* Users **can** leave a session they are in (remove themselves). If the creator leaves, the session continues normally.
+* There is **no limit** on the number of active sessions per day. If two people create separate sessions for the same day, both exist independently. Users can be members of multiple sessions.
+* The UI should make it obvious if a user is in multiple active sessions (e.g. show a list), but this is not an error condition — it just means the group split up.
 
 ## 9.7 Session page
 
@@ -820,7 +881,7 @@ User-facing behavior:
 
 Visibility:
 
-* only superusers and admins can view feedback posts
+* only superusers can view feedback posts
 
 Features:
 
@@ -831,23 +892,22 @@ Features:
 
 This replaces the broader social page.
 
-## 9.10 Admin tools page
+## 9.10 Admin mode tools
 
-Admin-only.
+Available only when admin mode is active.
 
-May include:
+Features:
 
-* create test user
-* log in as test user / impersonate
+* create test user (text-only — enter a name, get a superuser test account)
+* log in as existing test user
 * time override
 * score override
 * trigger/resume score sync
-* edit roles
-* add/remove superusers
+* create sample sessions quickly
 * inspect scrape failures
 * edge-case helpers for sessions and badges
 
-Must be clearly marked as admin/test tooling.
+Must be clearly marked as admin/test tooling. Should show an obvious indicator that admin mode is active.
 
 ---
 
@@ -855,7 +915,7 @@ Must be clearly marked as admin/test tooling.
 
 ## Displayed difficulty precedence
 
-For the currently logged-in user, a badge’s displayed difficulty should be:
+For the currently logged-in user, a badge's displayed difficulty should be:
 
 1. **Your difficulty**, if you have rated it
 2. Else **community average**, if at least one user vote exists
@@ -863,6 +923,16 @@ For the currently logged-in user, a badge’s displayed difficulty should be:
    * include the default difficulty as one vote if the default difficulty is not `unknown`
 3. Else **default difficulty**
 4. If default is `unknown` and there are no user votes, display `???`
+
+## Averaging and rounding
+
+When computing community average difficulty:
+
+* Map each non-unknown vote to its numeric value: `easy = 1`, `medium = 2`, `hard = 3`, `impossible = 4`.
+* Include the badge's `default_difficulty` as one additional vote if it is not `unknown`.
+* Compute the arithmetic mean.
+* Round to the **nearest integer** (standard rounding: 0.5 rounds up). Map back to the label: 1 = easy, 2 = medium, 3 = hard, 4 = impossible.
+* Example: 3 users vote `easy` (1) and the default is `hard` (3). Mean = (1+1+1+3)/4 = 1.5, rounds to 2 = `medium`.
 
 ## Sorting difficulty
 
@@ -896,7 +966,7 @@ Ghost players:
 * do not count for completion history
 * do not appear in completion tags
 
-## “Your badges” base filter
+## "Your badges" base filter
 
 Show only badges that:
 
@@ -923,7 +993,7 @@ The UI should support toggles to relax the recommendation set, such as:
 
 * best shared candidates
 * broader shared candidates
-* all badges you haven’t done
+* all badges you haven't done
 
 ## Player count bucket boost rules
 
@@ -945,12 +1015,12 @@ If bucket is `none`:
 
 Per-visit badges should be separated visually and rendered in their own section above normal badges.
 
-Recommended layout inside “Your badges”:
+Recommended layout inside "Your badges":
 
 * per-visit recommended badges
 * normal recommended badges
 
-## Suggested ranking order for “Your badges”
+## Suggested ranking order for "Your badges"
 
 Within each section, sort roughly by:
 
@@ -966,18 +1036,18 @@ This does not need to be mathematically perfect. It should be deterministic and 
 
 ## 12. Session selection behavior
 
-Users select badges from their own “Your badges” page.
+Users select badges from their own "Your badges" page.
 
-Those selections appear in the shared “Group badges” page.
+Those selections appear in the shared "Group badges" page.
 
 Rules:
 
 * users can select or unselect badges independently
 * same badge can be selected by multiple users
 * group page aggregates selectors
-* no duplication between “yours” and “others” sections for the same viewer
-* viewer sees their selected badges in “yours”
-* badges only selected by other users appear in “others”
+* no duplication between "yours" and "others" sections for the same viewer
+* viewer sees their selected badges in "yours"
+* badges only selected by other users appear in "others"
 
 This is selection-driven, not recommendation-driven.
 
@@ -1001,7 +1071,7 @@ Session statuses:
 4. The user who completed it is prompted to review their own badge completions
 5. Other session users, on next visit to the session, see:
 
-   * “`<player>` has completed the session. Complete session and update badges?”
+   * "`<player>` has completed the session. Complete session and update badges?"
 6. They can:
 
    * review now
@@ -1042,30 +1112,55 @@ When marking completed, prompt for optional metadata:
 
 Users can edit these fields later at any time.
 
-Superusers/admins can edit anyone’s status.
+Superusers can edit anyone's status.
 
 ---
 
 ## 15. Meta badges
 
-Meta badges are stored as normal rows in `badges`, but dynamic eligibility is determined by `badge_meta_rules`.
+Meta badges are stored as normal rows in `badges` with `is_meta_badge = true`. Their dynamic eligibility is determined by `badge_meta_rules`.
 
-Examples:
+The session page should evaluate meta rules against the current session context and surface any currently eligible meta badges.
 
-* last day of month
-* time of day
-* party of 5 with all different rank colors
+### Supported rule types for v1
 
-The session creation/page flow should evaluate meta rules and surface any currently eligible meta badges.
+Only the following `rule_type` values need to be implemented in v1. Each has a defined `rule_payload_json` shape.
 
-### Example meta rule: 5 unique rank colors
+**`day_of_month`** — eligible on specific days of the month.
 
-Interpretation:
+```json
+{ "days": [28, 29, 30, 31], "match": "last_day_only" }
+```
 
-* rank color changes each 100k score band
-* a valid 5-player group requires five distinct 100k ranges across the participating real users
+* `match: "last_day_only"` means: eligible only on the actual last day of the current month (handles Feb, 30-day months, etc.).
+* `match: "any"` means: eligible if today is any of the listed days.
 
-Ghost players do not count unless explicitly changed later.
+**`time_window`** — eligible during a time-of-day range (America/Los_Angeles).
+
+```json
+{ "start": "21:00", "end": "23:59" }
+```
+
+* Both times are inclusive. If `end < start`, it wraps past midnight.
+
+**`unique_rank_colors`** — eligible when session real users have N distinct rank colors.
+
+```json
+{ "min_distinct_colors": 5 }
+```
+
+* Evaluated against the `rank_color` of real session members only. Ghost players are excluded.
+* Requires at least `min_distinct_colors` distinct values among session members.
+
+### Adding new rule types later
+
+New rule types can be added by defining a new `rule_type` string and a corresponding `rule_payload_json` schema. The evaluator should skip unknown rule types gracefully (log a warning, do not crash). This keeps the system extensible without requiring a migration.
+
+### Evaluation behavior
+
+* Meta rules are evaluated **per-session** on the session page, not globally.
+* If a meta badge has multiple rules, **all** must pass (AND logic).
+* Eligible meta badges should be surfaced prominently on the session page — they represent time-sensitive or context-sensitive opportunities.
 
 ---
 
@@ -1085,60 +1180,104 @@ For v1, the simplest interpretation is:
 
 ---
 
-## 17. Admin and dev/test mode
+## 17. Admin mode and dev/test workflows
 
 ## Goals
 
 Make it easy to test edge cases locally and in prod without fighting OAuth or real-world constraints.
 
-The **admin** role (from **password admin login**, §5) is the account that unlocks impersonation, test-user tooling, and dev cheats. The **OAuth superuser** (e.g. `kyle.murray100`) is a **different** user: superuser powers (feedback, editing others’ badge status/scores, etc.) do **not** replace password-admin for tools that §4 reserves for **admin** only. Do not conflate the two logins.
+Admin mode is a **password-gated mode**, not an account or a role. It is completely separate from the superuser role. A superuser like `kyle.murray100` has elevated in-app powers (editing others' data, viewing feedback, etc.), but admin mode is the gate for test-user tooling and dev cheats. They are independent concepts.
 
-## Admin-only dev features
+## How admin mode works
 
-* create fake/test users
-* log in as fake/test users
-* test signup with only Activate player name
-* manually set or override scores
-* manipulate time/date for session expiry testing
+1. On the login page, there is an "Enter Admin Mode" option.
+2. The user enters the admin mode password (sourced from an environment variable, compared via hash).
+3. If correct, the browser session is flagged as being in admin mode.
+4. Admin mode presents a test-user panel: create new test accounts or log in as existing ones.
+5. Once logged in as a test user, the app behaves normally — but only test-world data is visible.
+
+## Admin mode features
+
+* create test accounts (text-only, no OAuth)
+* log in as any test account
+* all test accounts are superusers
+* override time/date for session expiry testing
+* override scores for testing
 * manipulate session states
-* impersonate or act as users if implemented
 * create sample sessions quickly
 * trigger score sync manually
 * inspect scrape failures
 
+## Data isolation rules
+
+* test users (`is_test_user = true`) and real users (`is_test_user = false`) exist in fully separate data worlds
+* all user-facing queries must respect this boundary: sessions, session members, badge completions, badge comments, difficulty ratings, feedback, profile lists, etc.
+* the badge catalog (the badges themselves) is shared — badges are not user-specific
+* per-user data layered on top of badges (completion, difficulty, comments) is isolated
+* this prevents test data from appearing in the real experience and vice versa
+
+### Implementation strategy
+
+Isolation is derived from the **current user's `is_test_user` flag**, not from per-entity flags on every table.
+
+* The current user's `is_test_user` value determines which "world" they see.
+* All queries that return user-related data (sessions, comments, badge statuses, feedback, profile lists, etc.) must join through to `users` and filter to only include users where `is_test_user` matches the current user's value.
+* For **sessions**: a session belongs to the test world if its `created_by_user_id` points to a test user. Filter sessions by checking `created_by_user_id -> users.is_test_user`. Session members should already be from the same world since only same-world users are visible when adding members.
+* For **badge_user_status**, **badge_comments**, **feedback_posts**: filter by `author_user_id -> users.is_test_user` or `user_id -> users.is_test_user`.
+* A helper function (e.g. `getIsolationFilter(currentUser)`) should be used consistently across all data-access code to avoid missing a filter. A single missed filter is a data leak between worlds.
+* Do **not** add redundant `is_test` columns to every table — derive it from the user FK. This keeps the schema simple and avoids sync bugs.
+
 ## Safety rules
 
-* all admin/test features must be hidden behind admin-only access
-* test users must be clearly labeled
-* test data should be distinguishable in DB and UI
+* admin mode features must be hidden behind the admin mode password gate
+* test users must be clearly labeled in DB and UI
+* test data should be distinguishable at a glance
 * test users should not get real score sync by default
+* the admin mode indicator should be visible whenever admin mode is active
 
 ---
 
 ## 18. Importing the existing badge tracker
 
-The uploaded badge tracker should seed the `badges` table.
+The uploaded badge tracker (`badges.csv`) should seed the `badges` table.
 
-Expected imported concepts include:
+### What the CSV actually contains
 
-* badge number
-* name
-* description
-* room(s)
-* game(s)
-* player count info
-* tags
-* default difficulty
-* duration
-* completion column if present only as import context, not canonical truth
+The current CSV has **three columns only**:
 
-Important:
+| Column | Maps to |
+|---|---|
+| `Number` | `badge_number` |
+| `Name` | `name` |
+| `Description` | `description` |
 
-* the CSV’s user-specific completion column is **not** the long-term system of record
-* canonical per-user completion lives in `badge_user_status`
-* badges may be imported with **missing or incomplete `rooms` and/or `games`**; those fields can be added or corrected later by **admins and superusers** only
+That's it. The CSV does **not** contain rooms, games, player count info, tags, difficulty, duration, per-visit status, or meta-badge flags.
 
-Admin tooling should allow adding/updating badges later as needed.
+### Import defaults for missing fields
+
+All fields not present in the CSV should be set to sensible empty/unknown defaults on import:
+
+* `rooms` = `[]`
+* `games` = `[]`
+* `player_count_bucket` = `none`
+* `tags` = `[]`
+* `default_difficulty` = `unknown`
+* `duration_label` = `null`
+* `is_per_visit` = `false`
+* `is_meta_badge` = `false`
+* `active` = `true`
+
+### Backfilling after import
+
+Superusers can fill in the missing fields (rooms, games, tags, difficulty, player count bucket, per-visit, meta-badge) later via in-app maintenance tooling. This is expected — the CSV is intentionally sparse.
+
+Some badges can be partially inferred from their descriptions (e.g. badge #18 "CHASING RAINBOWS" clearly involves 5 players and is a meta badge; badge #34 "EARLY BIRD" involves a time window). But automated inference is **not required** — manual superuser backfill is acceptable for v1.
+
+### Other import notes
+
+* If a future CSV version adds more columns, the importer should handle them gracefully (import what exists, default the rest).
+* The CSV does not contain per-user completion data. Canonical per-user completion lives in `badge_user_status`, not in the badge import.
+* Re-importing the CSV should be idempotent — update existing badges by `badge_number`, do not create duplicates.
 
 ---
 
@@ -1149,29 +1288,29 @@ Exact implementation style can be server actions or route handlers, but these ar
 ## Auth/user operations
 
 * sign in with Google
-* sign in with **password admin** (dedicated admin user)
+* activate admin mode (password check, sets session flag)
 * complete onboarding/link Activate profile
-* create test user / log in as test user (admin-only)
+* create test user / log in as test user (admin mode only)
 * update display name mode
-* update user role (admin only)
-* edit user score (superuser/admin)
+* update user role (superuser only)
+* edit user score (superuser)
 * run initial score sync
 * run daily score sync
-* view score sync failures (admin)
+* view score sync failures (superuser)
 
 ## Badge operations
 
 * list badges with filters
 * fetch badge detail
 * update own badge status
-* superuser/admin update any user badge status
+* superuser update any user badge status
 * update own difficulty
 * update own ideal player count bucket
 * create badge comment
 * edit own badge comment
 * react to comment
-* pin/unpin comment (superuser/admin or at least elevated roles)
-* create/update badge catalog fields (including `rooms` and `games`) and badge metadata/rules (superuser/admin)
+* pin/unpin comment (superuser or at least elevated roles)
+* create/update badge catalog fields (including `rooms` and `games`) and badge metadata/rules (superuser)
 
 ## Session operations
 
@@ -1191,8 +1330,8 @@ Exact implementation style can be server actions or route handlers, but these ar
 * create feedback post
 * edit own feedback post
 * react to feedback post
-* list feedback posts (superuser/admin only)
-* update feedback status (superuser/admin)
+* list feedback posts (superuser only)
+* update feedback status (superuser)
 
 ---
 
@@ -1211,7 +1350,7 @@ Recommended pattern:
 
 ## Time zone handling
 
-Use the site’s canonical timezone for session expiry:
+Use the site's canonical timezone for session expiry:
 
 * **America/Los_Angeles**
 
@@ -1235,7 +1374,7 @@ Prioritize:
 
 * fast badge filtering
 * clean session planning
-* obvious distinction between “your recommendations” and “shared group plan”
+* obvious distinction between "your recommendations" and "shared group plan"
 * minimal friction to mark badges complete
 * strong visibility into who has selected or completed something
 * low-risk maintenance tools for score and badge cleanup
@@ -1255,8 +1394,10 @@ Do not overcomplicate:
 ## Phase 1: foundation
 
 * set up Next.js/Auth.js/Prisma/Postgres
-* Google login + password-admin login (dedicated admin user, env-hashed password)
-* user model (`auth_type` includes `admin_password`)
+* Google login
+* admin mode (env-hashed password, session flag, test-user panel)
+* user model (`auth_type`: `google` | `test`; `role`: `user` | `superuser`)
+* data isolation between test and real users
 * badge import
 * basic badge list page
 * badge detail page
@@ -1275,10 +1416,10 @@ Do not overcomplicate:
 
 * badge comments + reactions + pinning
 * feedback submission + dashboard
-* role management
-* superuser/admin edit powers
+* role management (superuser)
+* superuser edit powers
 * score scraping + daily sync
-* admin/dev mode and test users
+* admin mode dev cheats (time override, score override, etc.)
 
 ---
 
@@ -1308,7 +1449,9 @@ The most important product ideas are:
 * **ghost players only affect headcount**
 * **group planning is separate from individual recommendation logic**
 * **score scraping is helpful but non-critical**
-* **superusers/admins can repair core data**
+* **superusers can repair core data**
+* **admin mode enables isolated test workflows without an admin account**
+* **test and real data are fully isolated from each other**
 * **feedback exists, but a full social page does not**
 
 That should be the guiding philosophy of the implementation.
