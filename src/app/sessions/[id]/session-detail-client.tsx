@@ -2,14 +2,14 @@
 
 import { toggleBadgeCompletion } from "@/app/actions/badges";
 import {
-    acknowledgeSession,
-    addGhostMember,
-    addSessionMember,
-    completeSession,
-    joinSession,
-    removeGhostMember,
-    removeSessionMember,
-    toggleBadgeSelection,
+  acknowledgeSession,
+  addGhostMember,
+  addSessionMember,
+  completeSession,
+  joinSession,
+  removeGhostMember,
+  removeSessionMember,
+  toggleBadgeSelection,
 } from "@/app/actions/sessions";
 import { BackButton } from "@/components/back-button";
 import { MultiFilter, type ActiveFilter, type FilterDefinition } from "@/components/multi-filter";
@@ -480,7 +480,7 @@ export function SessionDetailClient({
               disabled={isPending}
               className="mt-2 rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
             >
-              {isPending ? "Updating..." : "Mark Reviewed"}
+              {isPending ? "Updating..." : "I have checked off all my completed badges"}
             </button>
           </div>
         )}
@@ -521,7 +521,7 @@ export function SessionDetailClient({
               </button>
               <div className="text-right">
                 <p className="text-xl font-bold text-foreground">Group Goals</p>
-                <p className="mt-1 text-sm text-highlight-hover">Everyone&apos;s picks combined. Use the button to add yours!</p>
+                <p className="mt-1 text-sm text-highlight-hover">Everyone&apos;s picks combined. Select badges to add yours!</p>
               </div>
             </>
           )}
