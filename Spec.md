@@ -26,7 +26,8 @@ This spec is for **v1** only.
 
 ## In scope for v1
 
-* Google OAuth login only
+* Google OAuth login for normal users (including superusers)
+* Separate **password-only admin login** for a dedicated admin user (not OAuth; not the same account as the superuser)
 * Activate username/account linking during signup
 * Score scraping from `https://playactivate.com/scores`
 * Daily retryable score sync, isolated so app functionality does not depend on it
@@ -51,7 +52,7 @@ This spec is for **v1** only.
 
 * Public social feed
 * Multiple friend groups / organizations / clubs
-* Multiple auth providers
+* Additional OAuth/social providers beyond Google (no Apple/GitHub/etc.)
 * Notifications beyond simple in-app prompts/banners
 * Any attempt to support scale beyond a tiny friend group
 * Location-specific badge systems
@@ -71,7 +72,7 @@ This spec is for **v1** only.
 * **Language:** TypeScript
 * **Database:** PostgreSQL
 * **ORM:** Prisma
-* **Auth:** Auth.js / NextAuth with Google provider
+* **Auth:** Auth.js / NextAuth with Google provider plus a credentials (or equivalent) path for password-only admin login
 * **Hosting:** Vercel
 * **Database hosting:** Supabase Postgres
 * **Cron/background work:** Vercel Cron for daily score sync
@@ -126,9 +127,7 @@ Cannot:
 Can do everything a superuser can, plus:
 
 * manage superusers
-* access admin login path
-* create/manage test users
-* use dev/test cheats
+* create/manage test users, test-user login, and dev/test cheats (requires **password-admin** session; see §5)
 * override time/date for testing
 * override scores for testing
 * control score sync behavior manually
@@ -138,8 +137,8 @@ Can do everything a superuser can, plus:
 
 Seed:
 
-* `kyle.murray100` should be seeded as a **superuser**
-* at least one actual Google-authenticated account should be seeded or elevated to **admin**
+* `kyle.murray100` (Google OAuth) should be seeded or first-login elevated to **superuser**
+* **Admin** is a **separate user** from any Google account: a dedicated row with `role = admin`, logged in only via the **password admin** flow below (not `kyle.murray100@gmail.com` and not OAuth)
 
 ---
 
@@ -147,12 +146,28 @@ Seed:
 
 ## Login methods
 
-Two auth modes exist:
+Three flows exist; they are distinct:
 
-1. **Google OAuth login** for real users
-2. **Admin-only test login path** for fake/test users
+1. **Google OAuth** for real users (`auth_type = google`). Used for normal users and for **superuser** accounts (e.g. `kyle.murray100`).
+2. **Password admin login** for the **dedicated admin user** only (`auth_type = admin_password` or equivalent). Single password from environment (stored as a hash; never in source control). No Google account is linked to this user. This is **not** “elevate my Gmail to admin”; it is its own identity and session.
+3. **Test user login / create** for fake/test users (`auth_type = test`), available only after an **admin** session is established (see below).
 
-These are distinct.
+## Password admin (bare minimum security)
+
+This app is a small private tool, not a high-assurance system. Required baseline:
+
+* Password provided via **environment variable**; compare using a **password hash** (e.g. bcrypt), not plaintext in the DB or repo.
+* **HTTPS** in production (e.g. Vercel default).
+
+**Rate limiting** and similar controls are **optional**; implement only if low cost. Do not over-build.
+
+### users.auth_type
+
+Extend the user model so admin-password users are explicit:
+
+* `auth_type` (`google` | `test` | `admin_password`)
+
+The admin user row has `auth_type = admin_password`, `role = admin`, and does not use Google OAuth.
 
 ## Google login flow
 
@@ -179,21 +194,21 @@ Important:
 * If validation is flaky or scrape fails temporarily, do not corrupt data.
 * If signup validation fails in a weird way, it is acceptable to let an admin/superuser fix the account later.
 
-## Test login flow
+## Test user flow
 
-Visible only behind an **Admin Login** option on the login page.
+After logging in as **admin** (password flow) or from admin tooling as specified in implementation:
 
-Admin can create/log in as a **test user** using only:
-
-* Activate player name
+* Admin can create/log in as a **test user** using only **Activate player name** (per existing test-user rules).
 
 Rules:
 
-* Test login is separate from OAuth
+* Test login is separate from OAuth and separate from the password-admin identity
 * Test users must be clearly marked in DB and UI
 * Test users can exist in prod and local
 * Test users should not participate in real score sync unless explicitly enabled
 * Test users should be visually labeled as test accounts
+
+(Exact navigation—whether test-user actions live on an admin page vs. nested under the same “Admin” entry point—can follow whatever keeps the UI simplest; the requirement is **admin-gated**, not public.)
 
 ---
 
@@ -287,13 +302,13 @@ If Prisma/Postgres enum-array friction becomes annoying, use string arrays const
 
 ### users
 
-Represents all users, both real and test.
+Represents all users: OAuth users, test users, and the **password-admin** user (`auth_type = admin_password`).
 
 Fields:
 
 * id
 * email (nullable for test users)
-* auth_type (`google` | `test`)
+* auth_type (`google` | `test` | `admin_password`)
 * role (`user` | `superuser` | `admin`)
 * real_name
 * display_name_mode (`player_name` | `real_name`)
@@ -313,6 +328,7 @@ Notes:
 
 * session player / profile player / badge status player always tie back to this table
 * display mode controls whether UI shows player name or real name for that user
+* the password-admin user typically has no `activate_player_name` / score sync; treat as staff-only
 
 ### badges
 
@@ -341,6 +357,7 @@ Notes:
 
 * canonical completion is **not** stored here
 * `default_difficulty = unknown` corresponds to UI `???`
+* if `rooms` or `games` are missing or empty after import, **admins and superusers** may fill them in later via maintenance tooling (normal users do not edit badge catalog fields)
 
 ### badge_user_status
 
@@ -598,6 +615,7 @@ Interpretation:
 
 * `google`
 * `test`
+* `admin_password` — dedicated password-only admin user (no OAuth)
 
 ### display_name_mode enum
 
@@ -612,14 +630,13 @@ Interpretation:
 
 Features:
 
-* Sign in with Google
-* Admin Login option
-* clear separation between real login and admin/test path
+* **Sign in with Google** — real users and superusers (OAuth).
+* **Admin** — password-only; signs in the **dedicated admin user** (separate from any Google account). Not OAuth.
+* Clear separation between OAuth, password admin, and (post-auth) test-user tooling.
 
-Admin path:
+Admin session (password):
 
-* admin authentication gate
-* access to test-user login/create flow
+* Unlocks admin-only pages: test-user create/login, dev cheats, role tooling, etc., per §4 and §17.
 
 ## 9.2 Onboarding / account linking page
 
@@ -1074,6 +1091,8 @@ For v1, the simplest interpretation is:
 
 Make it easy to test edge cases locally and in prod without fighting OAuth or real-world constraints.
 
+The **admin** role (from **password admin login**, §5) is the account that unlocks impersonation, test-user tooling, and dev cheats. The **OAuth superuser** (e.g. `kyle.murray100`) is a **different** user: superuser powers (feedback, editing others’ badge status/scores, etc.) do **not** replace password-admin for tools that §4 reserves for **admin** only. Do not conflate the two logins.
+
 ## Admin-only dev features
 
 * create fake/test users
@@ -1117,6 +1136,7 @@ Important:
 
 * the CSV’s user-specific completion column is **not** the long-term system of record
 * canonical per-user completion lives in `badge_user_status`
+* badges may be imported with **missing or incomplete `rooms` and/or `games`**; those fields can be added or corrected later by **admins and superusers** only
 
 Admin tooling should allow adding/updating badges later as needed.
 
@@ -1129,9 +1149,9 @@ Exact implementation style can be server actions or route handlers, but these ar
 ## Auth/user operations
 
 * sign in with Google
+* sign in with **password admin** (dedicated admin user)
 * complete onboarding/link Activate profile
-* create test user
-* admin test login
+* create test user / log in as test user (admin-only)
 * update display name mode
 * update user role (admin only)
 * edit user score (superuser/admin)
@@ -1151,7 +1171,7 @@ Exact implementation style can be server actions or route handlers, but these ar
 * edit own badge comment
 * react to comment
 * pin/unpin comment (superuser/admin or at least elevated roles)
-* create/update badge metadata/rules (admin)
+* create/update badge catalog fields (including `rooms` and `games`) and badge metadata/rules (superuser/admin)
 
 ## Session operations
 
@@ -1235,8 +1255,8 @@ Do not overcomplicate:
 ## Phase 1: foundation
 
 * set up Next.js/Auth.js/Prisma/Postgres
-* Google login
-* user model
+* Google login + password-admin login (dedicated admin user, env-hashed password)
+* user model (`auth_type` includes `admin_password`)
 * badge import
 * basic badge list page
 * badge detail page
