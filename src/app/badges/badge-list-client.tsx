@@ -3,6 +3,8 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { toggleBadgeCompletion } from "@/app/actions/badges";
+import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
+import { MultiFilter, type FilterDefinition, type ActiveFilter } from "@/components/multi-filter";
 
 interface BadgeUser {
   id: string;
@@ -47,9 +49,7 @@ const DIFFICULTY_OPTIONS: { value: string; label: string; color: string }[] = [
 
 const BADGE_GRID_COLUMNS = "auto minmax(0,2.5fr) minmax(0,3fr) 5rem 4rem 3.5rem";
 
-type SortOption = "number" | "name" | "difficulty" | "completions" | "players";
-
-const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+const SORT_FIELDS: SortField[] = [
   { value: "number", label: "Badge #" },
   { value: "name", label: "Name" },
   { value: "difficulty", label: "Difficulty" },
@@ -143,14 +143,10 @@ function getPlayerCountDisplay(badge: BadgeData): { bucket: string; label: strin
 
 export function BadgeListClient({ badges, currentUserId, currentUserRole, allUsers }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [completionFilter, setCompletionFilter] = useState<"all" | "completed" | "not_completed">("all");
-  const [difficultyFilter, setDifficultyFilter] = useState<string>("all");
-  const [playerCountFilter, setPlayerCountFilter] = useState<string>("all");
-  const [perVisitFilter, setPerVisitFilter] = useState<"all" | "per_visit" | "normal">("all");
-  const [completedByFilter, setCompletedByFilter] = useState<string>("all");
-  const [notCompletedByFilter, setNotCompletedByFilter] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<SortOption>("number");
-  const [sortAsc, setSortAsc] = useState(true);
+  const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
+  const [sortCriteria, setSortCriteria] = useState<SortCriterion[]>([
+    { field: "number", ascending: true },
+  ]);
 
   const allRooms = useMemo(() => {
     const roomSet = new Set<string>();
@@ -164,10 +160,81 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
     return Array.from(gameSet).sort();
   }, [badges]);
 
-  const [roomFilter, setRoomFilter] = useState<string>("all");
-  const [gameFilter, setGameFilter] = useState<string>("all");
+  const filterDefinitions = useMemo<FilterDefinition[]>(() => {
+    const defs: FilterDefinition[] = [
+      { key: "completion", label: "Completion", options: [
+        { value: "all", label: "All" },
+        { value: "not_completed", label: "Not completed" },
+        { value: "completed", label: "Completed" },
+      ]},
+      { key: "difficulty", label: "Difficulty", options: [
+        { value: "all", label: "Any difficulty" },
+        ...DIFFICULTY_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
+      ]},
+      { key: "players", label: "Players", options: [
+        { value: "all", label: "Any # players" },
+        { value: "lte_3", label: "≤3 players" },
+        { value: "gte_5", label: "5+ players" },
+        { value: "none", label: "No pref" },
+      ]},
+      { key: "type", label: "Type", options: [
+        { value: "all", label: "All types" },
+        { value: "per_visit", label: "Per-visit" },
+        { value: "normal", label: "Normal" },
+      ]},
+    ];
+    if (allRooms.length > 0) {
+      defs.push({ key: "room", label: "Room", options: [
+        { value: "all", label: "Any room" },
+        ...allRooms.map((room) => ({ value: room, label: room })),
+      ]});
+    }
+    if (allGames.length > 0) {
+      defs.push({ key: "game", label: "Game", options: [
+        { value: "all", label: "Any game" },
+        ...allGames.map((game) => ({ value: game, label: game })),
+      ]});
+    }
+    if (allUsers.length > 0) {
+      defs.push(
+        { key: "completedBy", label: "Completed by", options: [
+          { value: "all", label: "Anyone" },
+          ...allUsers.map((appUser) => ({ value: appUser.id, label: appUser.displayName })),
+        ]},
+        { key: "notDoneBy", label: "Not done by", options: [
+          { value: "all", label: "Anyone" },
+          ...allUsers.map((appUser) => ({ value: appUser.id, label: appUser.displayName })),
+        ]},
+      );
+    }
+    return defs;
+  }, [allRooms, allGames, allUsers]);
+
+  function getFilterVal(key: string): string {
+    return activeFilters.find((filter) => filter.key === key)?.value ?? "all";
+  }
+
+  function compareBadges(badgeA: BadgeData, badgeB: BadgeData, field: string): number {
+    switch (field) {
+      case "number": return badgeA.badgeNumber - badgeB.badgeNumber;
+      case "name": return badgeA.name.localeCompare(badgeB.name);
+      case "difficulty": return getDifficultyDisplay(badgeA).sortKey - getDifficultyDisplay(badgeB).sortKey;
+      case "completions": return badgeA.totalCompletions - badgeB.totalCompletions;
+      case "players": return getPlayerCountDisplay(badgeA).sortKey - getPlayerCountDisplay(badgeB).sortKey;
+      default: return 0;
+    }
+  }
 
   const filteredAndSortedBadges = useMemo(() => {
+    const completionVal = getFilterVal("completion");
+    const difficultyVal = getFilterVal("difficulty");
+    const playersVal = getFilterVal("players");
+    const typeVal = getFilterVal("type");
+    const roomVal = getFilterVal("room");
+    const gameVal = getFilterVal("game");
+    const completedByVal = getFilterVal("completedBy");
+    const notDoneByVal = getFilterVal("notDoneBy");
+
     const filtered = badges.filter((badge) => {
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
@@ -177,58 +244,35 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
           !badge.badgeNumber.toString().includes(query)
         ) return false;
       }
-      if (completionFilter === "completed" && !badge.completedByCurrentUser) return false;
-      if (completionFilter === "not_completed" && badge.completedByCurrentUser) return false;
-      if (difficultyFilter !== "all") {
+      if (completionVal === "completed" && !badge.completedByCurrentUser) return false;
+      if (completionVal === "not_completed" && badge.completedByCurrentUser) return false;
+      if (difficultyVal !== "all") {
         const displayed = getDifficultyDisplay(badge);
-        const diffOption = DIFFICULTY_OPTIONS.find((difficultyOpt) => difficultyOpt.value === difficultyFilter);
+        const diffOption = DIFFICULTY_OPTIONS.find((difficultyOpt) => difficultyOpt.value === difficultyVal);
         if (diffOption && displayed.label !== diffOption.label) return false;
       }
-      if (playerCountFilter !== "all" && getPlayerCountDisplay(badge).bucket !== playerCountFilter) return false;
-      if (perVisitFilter === "per_visit" && !badge.isPerVisit) return false;
-      if (perVisitFilter === "normal" && badge.isPerVisit) return false;
-      if (roomFilter !== "all" && !badge.rooms.includes(roomFilter)) return false;
-      if (gameFilter !== "all" && !badge.games.includes(gameFilter)) return false;
-      if (completedByFilter !== "all" && !badge.completedByUsers.some((completedUser) => completedUser.id === completedByFilter)) return false;
-      if (notCompletedByFilter !== "all" && badge.completedByUsers.some((completedUser) => completedUser.id === notCompletedByFilter)) return false;
+      if (playersVal !== "all" && getPlayerCountDisplay(badge).bucket !== playersVal) return false;
+      if (typeVal === "per_visit" && !badge.isPerVisit) return false;
+      if (typeVal === "normal" && badge.isPerVisit) return false;
+      if (roomVal !== "all" && !badge.rooms.includes(roomVal)) return false;
+      if (gameVal !== "all" && !badge.games.includes(gameVal)) return false;
+      if (completedByVal !== "all" && !badge.completedByUsers.some((completedUser) => completedUser.id === completedByVal)) return false;
+      if (notDoneByVal !== "all" && badge.completedByUsers.some((completedUser) => completedUser.id === notDoneByVal)) return false;
       return true;
     });
 
     filtered.sort((badgeA, badgeB) => {
-      let comparison = 0;
-      switch (sortBy) {
-        case "number":
-          comparison = badgeA.badgeNumber - badgeB.badgeNumber;
-          break;
-        case "name":
-          comparison = badgeA.name.localeCompare(badgeB.name);
-          break;
-        case "difficulty":
-          comparison = getDifficultyDisplay(badgeA).sortKey - getDifficultyDisplay(badgeB).sortKey;
-          break;
-        case "completions":
-          comparison = badgeA.totalCompletions - badgeB.totalCompletions;
-          break;
-        case "players":
-          comparison = getPlayerCountDisplay(badgeA).sortKey - getPlayerCountDisplay(badgeB).sortKey;
-          break;
+      for (const criterion of sortCriteria) {
+        const comparison = compareBadges(badgeA, badgeB, criterion.field);
+        if (comparison !== 0) return criterion.ascending ? comparison : -comparison;
       }
-      return sortAsc ? comparison : -comparison;
+      return 0;
     });
 
     return filtered;
-  }, [badges, searchQuery, completionFilter, difficultyFilter, playerCountFilter, perVisitFilter, roomFilter, gameFilter, completedByFilter, notCompletedByFilter, sortBy, sortAsc]);
+  }, [badges, searchQuery, activeFilters, sortCriteria]);
 
   const completionCount = badges.filter((badge) => badge.completedByCurrentUser).length;
-
-  function handleSortToggle(option: SortOption) {
-    if (sortBy === option) {
-      setSortAsc(!sortAsc);
-    } else {
-      setSortBy(option);
-      setSortAsc(true);
-    }
-  }
 
   return (
     <div>
@@ -240,83 +284,20 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
             {completionCount} / {badges.length} completed
           </p>
         </div>
-        <div className="w-full sm:w-80">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search by name, description, or #..."
-            className="w-full rounded-lg border border-border bg-card px-4 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
-          />
-        </div>
       </div>
 
-      {/* Filters + Sort row */}
+      {/* Filter + Sort bar */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <select value={completionFilter} onChange={(event) => setCompletionFilter(event.target.value as typeof completionFilter)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
-          <option value="all">All</option>
-          <option value="not_completed">Not completed</option>
-          <option value="completed">Completed</option>
-        </select>
-        <select value={difficultyFilter} onChange={(event) => setDifficultyFilter(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
-          <option value="all">Any difficulty</option>
-          {DIFFICULTY_OPTIONS.map((diffOption) => (<option key={diffOption.value} value={diffOption.value}>{diffOption.label}</option>))}
-        </select>
-        <select value={playerCountFilter} onChange={(event) => setPlayerCountFilter(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
-          <option value="all">Any # players</option>
-          <option value="lte_3">≤3 players</option>
-          <option value="gte_5">5+ players</option>
-          <option value="none">No pref</option>
-        </select>
-        <select value={perVisitFilter} onChange={(event) => setPerVisitFilter(event.target.value as typeof perVisitFilter)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
-          <option value="all">All types</option>
-          <option value="per_visit">Per-visit</option>
-          <option value="normal">Normal</option>
-        </select>
-        {allRooms.length > 0 && (
-          <select value={roomFilter} onChange={(event) => setRoomFilter(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
-            <option value="all">Any room</option>
-            {allRooms.map((room) => (<option key={room} value={room}>{room}</option>))}
-          </select>
-        )}
-        {allGames.length > 0 && (
-          <select value={gameFilter} onChange={(event) => setGameFilter(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
-            <option value="all">Any game</option>
-            {allGames.map((game) => (<option key={game} value={game}>{game}</option>))}
-          </select>
-        )}
-        {allUsers.length > 0 && (
-          <>
-            <select value={completedByFilter} onChange={(event) => setCompletedByFilter(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
-              <option value="all">Completed by</option>
-              {allUsers.map((appUser) => (<option key={appUser.id} value={appUser.id}>{appUser.displayName}</option>))}
-            </select>
-            <select value={notCompletedByFilter} onChange={(event) => setNotCompletedByFilter(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
-              <option value="all">Not done by</option>
-              {allUsers.map((appUser) => (<option key={appUser.id} value={appUser.id}>{appUser.displayName}</option>))}
-            </select>
-          </>
-        )}
-
-        {/* Sort — right aligned */}
-        <div className="ml-auto flex items-center gap-1">
-          <span className="text-[10px] text-muted">Sort:</span>
-          <select
-            value={sortBy}
-            onChange={(event) => handleSortToggle(event.target.value as SortOption)}
-            className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none"
-          >
-            {SORT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => setSortAsc(!sortAsc)}
-            className="rounded-lg border border-border bg-card px-2 py-1.5 text-xs text-muted hover:text-foreground transition-colors"
-            title={sortAsc ? "Ascending" : "Descending"}
-          >
-            {sortAsc ? "↑" : "↓"}
-          </button>
+        <MultiFilter
+          definitions={filterDefinitions}
+          activeFilters={activeFilters}
+          onChange={setActiveFilters}
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search by name, description, or #..."
+        />
+        <div className="ml-auto">
+          <MultiSort availableFields={SORT_FIELDS} criteria={sortCriteria} onChange={setSortCriteria} />
         </div>
       </div>
 

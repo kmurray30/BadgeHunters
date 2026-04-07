@@ -15,6 +15,8 @@ import {
 } from "@/app/actions/sessions";
 import { toggleBadgeCompletion } from "@/app/actions/badges";
 import { BackButton } from "@/components/back-button";
+import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
+import { MultiFilter, type FilterDefinition, type ActiveFilter } from "@/components/multi-filter";
 
 const SESSION_GRID_COLUMNS = "auto minmax(0,2.5fr) minmax(0,3fr) 5rem 4rem 4rem 3rem";
 
@@ -87,10 +89,36 @@ interface Props {
 }
 
 type TabMode = "your_badges" | "group_badges";
-type RecommendationFilter = "best" | "broader" | "all";
-type YourBadgesSortOption = "relevance" | "number" | "name" | "difficulty";
 
 const DIFFICULTY_MAP: Record<string, number> = { easy: 1, medium: 2, hard: 3, impossible: 4 };
+
+const SESSION_SORT_FIELDS: SortField[] = [
+  { value: "need", label: "Need (others)" },
+  { value: "difficulty", label: "Difficulty" },
+  { value: "number", label: "Badge #" },
+  { value: "name", label: "Name" },
+  { value: "players", label: "Player count" },
+];
+
+const SESSION_FILTER_DEFS: FilterDefinition[] = [
+  { key: "difficulty", label: "Difficulty", options: [
+    { value: "all", label: "Any difficulty" },
+    { value: "easy", label: "Easy" },
+    { value: "medium", label: "Medium" },
+    { value: "hard", label: "Hard" },
+    { value: "impossible", label: "Impossible" },
+  ]},
+  { key: "players", label: "Players", options: [
+    { value: "all", label: "Any # players" },
+    { value: "lte_3", label: "≤3 players" },
+    { value: "gte_5", label: "5+ players" },
+  ]},
+  { key: "type", label: "Type", options: [
+    { value: "all", label: "All types" },
+    { value: "per_visit", label: "Per-visit" },
+    { value: "normal", label: "Normal" },
+  ]},
+];
 const DIFFICULTY_LABELS: Record<string, { label: string; color: string }> = {
   easy: { label: "Easy", color: "text-green-400" },
   medium: { label: "Medium", color: "text-yellow-400" },
@@ -158,19 +186,19 @@ export function SessionDetailClient({
   const showYourBadges = initialIsMember && !personallyDone && session.status === "active";
 
   const [activeTab, setActiveTab] = useState<TabMode>(showYourBadges ? "your_badges" : "group_badges");
-  const [recommendationFilter, setRecommendationFilter] = useState<RecommendationFilter>("best");
   const [showJoinPrompt, setShowJoinPrompt] = useState(!initialIsMember);
   const [viewOnlyMode, setViewOnlyMode] = useState(!initialIsMember);
   const [showAddMember, setShowAddMember] = useState(false);
   const [ghostNameInput, setGhostNameInput] = useState("");
   const [editingParty, setEditingParty] = useState(false);
 
-  const [yourBadgesSort, setYourBadgesSort] = useState<YourBadgesSortOption>("relevance");
-  const [yourBadgesSortAsc, setYourBadgesSortAsc] = useState(true);
   const [yourBadgesSearch, setYourBadgesSearch] = useState("");
-  const [yourBadgesDifficulty, setYourBadgesDifficulty] = useState<string>("all");
-  const [yourBadgesPlayerCount, setYourBadgesPlayerCount] = useState<string>("all");
-  const [yourBadgesType, setYourBadgesType] = useState<"all" | "per_visit" | "normal">("all");
+  const [yourBadgesFilters, setYourBadgesFilters] = useState<ActiveFilter[]>([]);
+  const [yourBadgesSortCriteria, setYourBadgesSortCriteria] = useState<SortCriterion[]>([
+    { field: "need", ascending: false },
+    { field: "difficulty", ascending: true },
+    { field: "number", ascending: true },
+  ]);
 
   const displayPartySize = session.members.length + session.ghostMembers.length;
   const otherRealMemberIds = session.members
@@ -220,76 +248,52 @@ export function SessionDetailClient({
     });
   }
 
-  const recommendedBadges = useMemo(() => {
+  const yourBadgesList = useMemo(() => {
     if (viewOnlyMode) return [];
-    const viewerUncompletedBadges = allBadges.filter(
-      (badge) => !badge.memberCompletions.includes(currentUserId)
-    );
 
-    return viewerUncompletedBadges.map((badge) => {
-      const otherUncompletedCount = otherRealMemberIds.filter(
-        (memberId) => !badge.memberCompletions.includes(memberId)
-      ).length;
+    let list = allBadges
+      .filter((badge) => !badge.memberCompletions.includes(currentUserId))
+      .map((badge) => {
+        const otherUncompletedCount = otherRealMemberIds.filter(
+          (memberId) => !badge.memberCompletions.includes(memberId)
+        ).length;
+        const difficultySortKey = DIFFICULTY_MAP[badge.defaultDifficulty] ?? 99;
+        return { ...badge, otherUncompletedCount, difficultySortKey };
+      });
 
-      let sharedScore = 0;
-      if (displayPartySize <= 5) {
-        if (otherUncompletedCount === otherRealMemberIds.length) sharedScore = 3;
-        else if (otherUncompletedCount > 0) sharedScore = 1;
-      } else {
-        if (otherUncompletedCount >= 4) sharedScore = 3;
-        else if (otherUncompletedCount >= 1) sharedScore = 1;
-      }
-
-      let bucketBoost = 0;
-      const resolvedBucket = resolvePlayerCount(badge).bucket;
-      if (resolvedBucket === "gte_5" && displayPartySize >= 5) bucketBoost = 1;
-      else if (resolvedBucket === "lte_3" && displayPartySize <= 3) bucketBoost = 1;
-      else if (resolvedBucket === "gte_5" && displayPartySize < 5) bucketBoost = -1;
-
-      const difficultySortKey = DIFFICULTY_MAP[badge.defaultDifficulty] ?? 99;
-
-      return {
-        ...badge,
-        otherUncompletedCount,
-        sharedScore,
-        bucketBoost,
-        difficultySortKey,
-        sortScore: sharedScore * 100 + otherUncompletedCount * 10 + bucketBoost * 5 - difficultySortKey,
-      };
-    }).sort((badgeA, badgeB) => badgeB.sortScore - badgeA.sortScore);
-  }, [allBadges, currentUserId, otherRealMemberIds, displayPartySize, viewOnlyMode]);
-
-  const filteredRecommendations = useMemo(() => {
-    let list = recommendedBadges;
-    switch (recommendationFilter) {
-      case "best": list = list.filter((badge) => badge.sharedScore >= 3); break;
-      case "broader": list = list.filter((badge) => badge.sharedScore >= 1); break;
-    }
     if (yourBadgesSearch) {
       const query = yourBadgesSearch.toLowerCase();
       list = list.filter((badge) =>
         badge.name.toLowerCase().includes(query) || badge.description.toLowerCase().includes(query) || badge.badgeNumber.toString().includes(query)
       );
     }
-    if (yourBadgesDifficulty !== "all") list = list.filter((badge) => badge.defaultDifficulty === yourBadgesDifficulty);
-    if (yourBadgesPlayerCount !== "all") list = list.filter((badge) => resolvePlayerCount(badge).bucket === yourBadgesPlayerCount);
-    if (yourBadgesType === "per_visit") list = list.filter((badge) => badge.isPerVisit);
-    else if (yourBadgesType === "normal") list = list.filter((badge) => !badge.isPerVisit);
-    if (yourBadgesSort !== "relevance") {
-      const sorted = [...list];
-      sorted.sort((badgeA, badgeB) => {
+
+    const difficultyVal = yourBadgesFilters.find((filter) => filter.key === "difficulty")?.value ?? "all";
+    const playersVal = yourBadgesFilters.find((filter) => filter.key === "players")?.value ?? "all";
+    const typeVal = yourBadgesFilters.find((filter) => filter.key === "type")?.value ?? "all";
+
+    if (difficultyVal !== "all") list = list.filter((badge) => badge.defaultDifficulty === difficultyVal);
+    if (playersVal !== "all") list = list.filter((badge) => resolvePlayerCount(badge).bucket === playersVal);
+    if (typeVal === "per_visit") list = list.filter((badge) => badge.isPerVisit);
+    else if (typeVal === "normal") list = list.filter((badge) => !badge.isPerVisit);
+
+    list.sort((badgeA, badgeB) => {
+      for (const criterion of yourBadgesSortCriteria) {
         let comparison = 0;
-        switch (yourBadgesSort) {
+        switch (criterion.field) {
+          case "need": comparison = badgeA.otherUncompletedCount - badgeB.otherUncompletedCount; break;
+          case "difficulty": comparison = badgeA.difficultySortKey - badgeB.difficultySortKey; break;
           case "number": comparison = badgeA.badgeNumber - badgeB.badgeNumber; break;
           case "name": comparison = badgeA.name.localeCompare(badgeB.name); break;
-          case "difficulty": comparison = badgeA.difficultySortKey - badgeB.difficultySortKey; break;
+          case "players": comparison = (resolvePlayerCount(badgeA) as { bucket: string }).bucket.localeCompare(resolvePlayerCount(badgeB).bucket); break;
         }
-        return yourBadgesSortAsc ? comparison : -comparison;
-      });
-      return sorted;
-    }
+        if (comparison !== 0) return criterion.ascending ? comparison : -comparison;
+      }
+      return 0;
+    });
+
     return list;
-  }, [recommendedBadges, recommendationFilter, yourBadgesSearch, yourBadgesDifficulty, yourBadgesPlayerCount, yourBadgesType, yourBadgesSort, yourBadgesSortAsc]);
+  }, [allBadges, currentUserId, otherRealMemberIds, viewOnlyMode, yourBadgesSearch, yourBadgesFilters, yourBadgesSortCriteria]);
 
   const userSelectedBadgeIds = new Set(
     session.selections.filter((selection) => selection.selectedBy.id === currentUserId).map((selection) => selection.badgeId)
@@ -315,11 +319,6 @@ export function SessionDetailClient({
   const groupNormal = groupBadges.filter((entry) => !entry.selection.isPerVisit);
 
   const memberCount = session.members.length;
-
-  function handleYourBadgesSortToggle(option: YourBadgesSortOption) {
-    if (yourBadgesSort === option) setYourBadgesSortAsc(!yourBadgesSortAsc);
-    else { setYourBadgesSort(option); setYourBadgesSortAsc(true); }
-  }
 
   return (
     <div className="space-y-6">
@@ -512,43 +511,21 @@ export function SessionDetailClient({
       {/* ── Your Badges tab ── */}
       {activeTab === "your_badges" && showYourBadges && (
         <div className="space-y-4">
-          <div className="flex gap-2">
-            {(["best", "broader", "all"] as const).map((filterOption) => (
-              <button key={filterOption} onClick={() => setRecommendationFilter(filterOption)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  recommendationFilter === filterOption ? "bg-accent text-white" : "bg-card border border-border text-muted hover:text-foreground"
-                }`}>
-                {filterOption === "best" && "Best shared candidates"}
-                {filterOption === "broader" && "Broader candidates"}
-                {filterOption === "all" && "All uncompleted"}
-              </button>
-            ))}
-          </div>
-
           <div className="flex flex-wrap items-center gap-2">
-            <input type="text" value={yourBadgesSearch} onChange={(event) => setYourBadgesSearch(event.target.value)} placeholder="Search badges..." className="w-48 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none" />
-            <select value={yourBadgesDifficulty} onChange={(event) => setYourBadgesDifficulty(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
-              <option value="all">Any difficulty</option>
-              <option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option><option value="impossible">Impossible</option>
-            </select>
-            <select value={yourBadgesPlayerCount} onChange={(event) => setYourBadgesPlayerCount(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
-              <option value="all">Any # players</option><option value="lte_3">≤3 players</option><option value="gte_5">5+ players</option>
-            </select>
-            <select value={yourBadgesType} onChange={(event) => setYourBadgesType(event.target.value as typeof yourBadgesType)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
-              <option value="all">All types</option><option value="per_visit">Per-visit</option><option value="normal">Normal</option>
-            </select>
-            <div className="ml-auto flex items-center gap-1">
-              <span className="text-[10px] text-muted">Sort:</span>
-              <select value={yourBadgesSort} onChange={(event) => handleYourBadgesSortToggle(event.target.value as YourBadgesSortOption)} className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-foreground focus:border-accent focus:outline-none">
-                <option value="relevance">Relevance</option><option value="number">Badge #</option><option value="name">Name</option><option value="difficulty">Difficulty</option>
-              </select>
-              <button onClick={() => setYourBadgesSortAsc(!yourBadgesSortAsc)} className="rounded-lg border border-border bg-card px-2 py-1.5 text-xs text-muted hover:text-foreground transition-colors">
-                {yourBadgesSortAsc ? "↑" : "↓"}
-              </button>
+            <MultiFilter
+              definitions={SESSION_FILTER_DEFS}
+              activeFilters={yourBadgesFilters}
+              onChange={setYourBadgesFilters}
+              searchValue={yourBadgesSearch}
+              onSearchChange={setYourBadgesSearch}
+              searchPlaceholder="Search badges..."
+            />
+            <div className="ml-auto">
+              <MultiSort availableFields={SESSION_SORT_FIELDS} criteria={yourBadgesSortCriteria} onChange={setYourBadgesSortCriteria} />
             </div>
           </div>
 
-          <p className="text-[10px] text-muted">{filteredRecommendations.length} badges</p>
+          <p className="text-[10px] text-muted">{yourBadgesList.length} badges</p>
 
           {/* Table header */}
           <div className="rounded-t-lg border border-border bg-card">
@@ -563,7 +540,7 @@ export function SessionDetailClient({
             </div>
           </div>
           <div className="divide-y divide-border rounded-b-lg border-x border-b border-border">
-            {filteredRecommendations.map((badge) => {
+            {yourBadgesList.map((badge) => {
               const isSelected = userSelectedBadgeIds.has(badge.id);
               const isCompleted = badge.memberCompletions.includes(currentUserId);
               const diffInfo = DIFFICULTY_LABELS[badge.defaultDifficulty] ?? DIFFICULTY_LABELS.unknown;
@@ -618,7 +595,7 @@ export function SessionDetailClient({
             })}
           </div>
 
-          {filteredRecommendations.length === 0 && (
+          {yourBadgesList.length === 0 && (
             <div className="py-8 text-center text-muted">
               <p className="text-sm">No badges match your filters.</p>
             </div>
