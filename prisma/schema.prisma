@@ -1,0 +1,328 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────────
+
+enum AuthType {
+  google
+  test
+}
+
+enum Role {
+  user
+  superuser
+}
+
+enum DisplayNameMode {
+  player_name
+  real_name
+}
+
+enum Difficulty {
+  unknown
+  easy
+  medium
+  hard
+  impossible
+}
+
+enum PlayerCountBucket {
+  none
+  lte_3
+  gte_5
+}
+
+enum SessionStatus {
+  active
+  completed_pending_ack
+  closed
+}
+
+enum ScoreSource {
+  scrape
+  manual
+  test_override
+}
+
+enum ReactionType {
+  thumbs_up
+  heart
+  laugh
+  fire
+  question
+}
+
+enum FeedbackStatus {
+  open
+  addressed
+  archived
+}
+
+// ─── Tables ─────────────────────────────────────────────────────────────────
+
+model User {
+  id                  String          @id @default(cuid())
+  email               String?         @unique
+  authType            AuthType        @map("auth_type")
+  role                Role            @default(user)
+  realName            String?         @map("real_name")
+  displayNameMode     DisplayNameMode @default(player_name) @map("display_name_mode")
+  activatePlayerName  String?         @map("activate_player_name")
+  googleAccountName   String?         @map("google_account_name")
+  image               String?
+  currentScore        Int             @default(0) @map("current_score")
+  rankColor           String?         @map("rank_color")
+  isTestUser          Boolean         @default(false) @map("is_test_user")
+  isActive            Boolean         @default(true) @map("is_active")
+  lastScoreSource     ScoreSource?    @map("last_score_source")
+  lastSyncedAt        DateTime?       @map("last_synced_at")
+  lastGoodScoreAt     DateTime?       @map("last_good_score_at")
+  lastLoginAt         DateTime?       @map("last_login_at")
+  onboardingComplete  Boolean         @default(false) @map("onboarding_complete")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  // Auth.js account link
+  accounts            Account[]
+
+  // Relations
+  badgeStatuses       BadgeUserStatus[]
+  badgeComments       BadgeComment[]
+  commentReactions    BadgeCommentReaction[]
+  createdSessions     Session[]              @relation("SessionCreator")
+  completedSessions   Session[]              @relation("SessionCompleter")
+  sessionMemberships  SessionMember[]
+  sessionSelections   SessionBadgeSelection[]
+  sessionAcks         SessionUserAcknowledgement[]
+  feedbackPosts       FeedbackPost[]
+  feedbackReactions   FeedbackReaction[]
+
+  @@map("users")
+}
+
+// Auth.js requires these tables for OAuth
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Badge {
+  id                 String            @id @default(cuid())
+  badgeNumber        Int               @unique @map("badge_number")
+  name               String
+  description        String            @db.Text
+  rooms              String[]          @default([])
+  games              String[]          @default([])
+  playerCountBucket  PlayerCountBucket @default(none) @map("player_count_bucket")
+  tags               String[]          @default([])
+  defaultDifficulty  Difficulty        @default(unknown) @map("default_difficulty")
+  durationLabel      String?           @map("duration_label")
+  isPerVisit         Boolean           @default(false) @map("is_per_visit")
+  isMetaBadge        Boolean           @default(false) @map("is_meta_badge")
+  active             Boolean           @default(true)
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  userStatuses       BadgeUserStatus[]
+  comments           BadgeComment[]
+  metaRules          BadgeMetaRule[]
+  sessionSelections  SessionBadgeSelection[]
+
+  @@map("badges")
+}
+
+model BadgeUserStatus {
+  id                      String            @id @default(cuid())
+  userId                  String            @map("user_id")
+  badgeId                 String            @map("badge_id")
+  isCompleted             Boolean           @default(false) @map("is_completed")
+  completedAt             DateTime?         @map("completed_at")
+  personalDifficulty      Difficulty?       @map("personal_difficulty")
+  idealPlayerCountBucket  PlayerCountBucket? @map("ideal_player_count_bucket")
+  personalNotesSummary    String?           @map("personal_notes_summary") @db.Text
+  createdAt               DateTime          @default(now()) @map("created_at")
+  updatedAt               DateTime          @updatedAt @map("updated_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+  @@map("badge_user_status")
+}
+
+model BadgeComment {
+  id            String    @id @default(cuid())
+  badgeId       String    @map("badge_id")
+  authorUserId  String    @map("author_user_id")
+  body          String    @db.Text
+  isPinned      Boolean   @default(false) @map("is_pinned")
+  editedAt      DateTime? @map("edited_at")
+  deletedAt     DateTime? @map("deleted_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  badge     Badge                  @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  author    User                   @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
+  reactions BadgeCommentReaction[]
+
+  @@map("badge_comments")
+}
+
+model BadgeCommentReaction {
+  id           String       @id @default(cuid())
+  commentId    String       @map("comment_id")
+  userId       String       @map("user_id")
+  reactionType ReactionType @map("reaction_type")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  comment BadgeComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId, reactionType])
+  @@map("badge_comment_reactions")
+}
+
+model BadgeMetaRule {
+  id              String   @id @default(cuid())
+  badgeId         String   @map("badge_id")
+  ruleType        String   @map("rule_type")
+  rulePayloadJson Json     @map("rule_payload_json")
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@map("badge_meta_rules")
+}
+
+model Session {
+  id                String        @id @default(cuid())
+  createdByUserId   String        @map("created_by_user_id")
+  title             String?
+  status            SessionStatus @default(active)
+  sessionDateLocal  DateTime      @map("session_date_local") @db.Date
+  expiresAt         DateTime      @map("expires_at")
+  completedAt       DateTime?     @map("completed_at")
+  completedByUserId String?       @map("completed_by_user_id")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  createdBy      User                         @relation("SessionCreator", fields: [createdByUserId], references: [id])
+  completedBy    User?                        @relation("SessionCompleter", fields: [completedByUserId], references: [id])
+  members        SessionMember[]
+  ghostMembers   SessionGhostMember[]
+  selections     SessionBadgeSelection[]
+  acknowledgements SessionUserAcknowledgement[]
+
+  @@map("sessions")
+}
+
+model SessionMember {
+  id           String   @id @default(cuid())
+  sessionId    String   @map("session_id")
+  userId       String   @map("user_id")
+  addedByUserId String  @map("added_by_user_id")
+  joinedAt     DateTime @default(now()) @map("joined_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, userId])
+  @@map("session_members")
+}
+
+model SessionGhostMember {
+  id          String   @id @default(cuid())
+  sessionId   String   @map("session_id")
+  displayName String   @map("display_name")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("session_ghost_members")
+}
+
+model SessionBadgeSelection {
+  id               String   @id @default(cuid())
+  sessionId        String   @map("session_id")
+  badgeId          String   @map("badge_id")
+  selectedByUserId String   @map("selected_by_user_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  session    Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  badge      Badge   @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  selectedBy User    @relation(fields: [selectedByUserId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, badgeId, selectedByUserId])
+  @@map("session_badge_selections")
+}
+
+model SessionUserAcknowledgement {
+  id           String    @id @default(cuid())
+  sessionId    String    @map("session_id")
+  userId       String    @map("user_id")
+  acknowledgedAt DateTime? @map("acknowledged_at")
+  dismissedAt  DateTime? @map("dismissed_at")
+  needsReview  Boolean   @default(true) @map("needs_review")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, userId])
+  @@map("session_user_acknowledgements")
+}
+
+model FeedbackPost {
+  id            String         @id @default(cuid())
+  authorUserId  String         @map("author_user_id")
+  body          String         @db.Text
+  status        FeedbackStatus @default(open)
+  editedAt      DateTime?      @map("edited_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  author    User               @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
+  reactions FeedbackReaction[]
+
+  @@map("feedback_posts")
+}
+
+model FeedbackReaction {
+  id             String       @id @default(cuid())
+  feedbackPostId String       @map("feedback_post_id")
+  userId         String       @map("user_id")
+  reactionType   ReactionType @map("reaction_type")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  feedbackPost FeedbackPost @relation(fields: [feedbackPostId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([feedbackPostId, userId, reactionType])
+  @@map("feedback_reactions")
+}
