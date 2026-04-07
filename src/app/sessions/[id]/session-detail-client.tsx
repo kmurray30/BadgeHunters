@@ -9,8 +9,13 @@ import {
   acknowledgeSession,
   addSessionMember,
   joinSession,
+  addGhostMember,
+  removeSessionMember,
+  removeGhostMember,
 } from "@/app/actions/sessions";
 import { toggleBadgeCompletion } from "@/app/actions/badges";
+
+const SESSION_GRID_COLUMNS = "auto minmax(0,2.5fr) minmax(0,3fr) 5rem 4rem 4rem 3rem";
 
 interface SessionMember {
   id: string;
@@ -119,6 +124,8 @@ export function SessionDetailClient({
   const [showJoinPrompt, setShowJoinPrompt] = useState(!initialIsMember);
   const [viewOnlyMode, setViewOnlyMode] = useState(!initialIsMember);
   const [showAddMember, setShowAddMember] = useState(false);
+  const [ghostNameInput, setGhostNameInput] = useState("");
+  const [editingParty, setEditingParty] = useState(false);
 
   const [yourBadgesSort, setYourBadgesSort] = useState<YourBadgesSortOption>("relevance");
   const [yourBadgesSortAsc, setYourBadgesSortAsc] = useState(true);
@@ -155,6 +162,23 @@ export function SessionDetailClient({
     handleAction(async () => {
       await addSessionMember(session.id, userId);
       setShowAddMember(false);
+    });
+  }
+
+  function handleRemoveMember(userId: string) {
+    handleAction(() => removeSessionMember(session.id, userId));
+  }
+
+  function handleRemoveGhost(ghostId: string) {
+    handleAction(() => removeGhostMember(ghostId));
+  }
+
+  function handleAddGhost() {
+    const name = ghostNameInput.trim();
+    if (!name) return;
+    handleAction(async () => {
+      await addGhostMember(session.id, name);
+      setGhostNameInput("");
     });
   }
 
@@ -282,17 +306,25 @@ export function SessionDetailClient({
         </div>
       )}
 
+      {/* Back button outside the card */}
+      <Link href="/sessions" className="inline-flex items-center gap-1 text-xs text-muted hover:text-foreground transition-colors">
+        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+        Sessions
+      </Link>
+
       {/* Session header */}
       <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-start justify-between">
           <div>
-            <Link href="/sessions" className="text-xs text-muted hover:text-foreground">&larr; Sessions</Link>
-            <h1 className="mt-1 text-xl font-bold text-foreground">
+            <h1 className="text-xl font-bold text-foreground">
               {session.title ?? new Date(session.sessionDateLocal).toLocaleDateString("en-US", {
                 weekday: "long", month: "long", day: "numeric", year: "numeric",
               })}
+              {" "}
+              <span className="text-sm font-normal text-muted">(Created by {session.createdBy.displayName})</span>
             </h1>
-            <p className="text-xs text-muted">Created by {session.createdBy.displayName}</p>
           </div>
           <div className="flex items-center gap-2">
             {viewOnlyMode && !showJoinPrompt && (
@@ -306,61 +338,99 @@ export function SessionDetailClient({
             }`}>
               {session.status === "active" ? "Active" : personallyDone ? "Closed" : session.status === "completed_pending_ack" ? "Review Pending" : "Closed"}
             </span>
+            {session.status === "active" && !viewOnlyMode && (
+              <button
+                onClick={() => handleAction(() => completeSession(session.id))}
+                disabled={isPending}
+                className="rounded-full bg-warning/20 px-3 py-1 text-xs font-medium text-warning hover:bg-warning/30 transition-colors disabled:opacity-50"
+              >
+                Complete
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Party members */}
+        {/* Party members — linked to profiles */}
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {session.members.map((member) => (
-            <span key={member.id} className={`rounded-full px-3 py-1 text-xs font-medium ${
-              member.id === currentUserId ? "bg-accent/20 text-accent" : "bg-border text-foreground"
-            }`}>
+            <Link
+              key={member.id}
+              href={`/players/${member.id}`}
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium hover:opacity-80 transition-opacity ${
+                member.id === currentUserId ? "bg-accent/20 text-accent" : "bg-border text-foreground"
+              }`}
+            >
               {member.displayName}
-              {member.rankColor && <span className="ml-1 text-[10px] text-muted">({member.rankColor})</span>}
-            </span>
+              {member.rankColor && <span className="text-[10px] text-muted">({member.rankColor})</span>}
+              {editingParty && member.id !== currentUserId && (
+                <button onClick={(event) => { event.preventDefault(); handleRemoveMember(member.id); }} disabled={isPending} className="ml-0.5 text-danger/60 hover:text-danger" title="Remove">×</button>
+              )}
+            </Link>
           ))}
           {session.ghostMembers.map((ghost) => (
-            <span key={ghost.id} className="rounded-full bg-warning/10 px-3 py-1 text-xs font-medium text-warning">{ghost.displayName}</span>
+            <span key={ghost.id} className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-3 py-1 text-xs font-medium text-warning">
+              {ghost.displayName}
+              {editingParty && (
+                <button onClick={() => handleRemoveGhost(ghost.id)} disabled={isPending} className="ml-0.5 text-danger/60 hover:text-danger" title="Remove">×</button>
+              )}
+            </span>
           ))}
           <span className="text-xs text-muted">= {displayPartySize} total</span>
 
-          {/* Add member button — only for session members */}
-          {!viewOnlyMode && session.status === "active" && availableUsersForAdd.length > 0 && (
-            <button
-              onClick={() => setShowAddMember(!showAddMember)}
-              className="rounded-full border border-border px-2.5 py-1 text-[10px] text-muted hover:text-foreground transition-colors"
-            >
-              + Add
-            </button>
+          {!viewOnlyMode && session.status === "active" && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setShowAddMember(!showAddMember)}
+                className="rounded-full border border-border px-3 py-1 text-xs text-muted hover:text-foreground transition-colors"
+              >
+                + Add
+              </button>
+              <button
+                onClick={() => setEditingParty(!editingParty)}
+                className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                  editingParty ? "border-danger/30 text-danger" : "border-border text-muted hover:text-foreground"
+                }`}
+              >
+                {editingParty ? "Done" : "Edit"}
+              </button>
+            </div>
           )}
         </div>
 
-        {/* Add member dropdown */}
-        {showAddMember && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {availableUsersForAdd.map((appUser) => (
+        {/* Add member / ghost panel */}
+        {showAddMember && !viewOnlyMode && session.status === "active" && (
+          <div className="mt-2 space-y-2">
+            {availableUsersForAdd.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {availableUsersForAdd.map((appUser) => (
+                  <button
+                    key={appUser.id}
+                    onClick={() => handleAddMember(appUser.id)}
+                    disabled={isPending}
+                    className="rounded-full border border-accent/30 bg-accent/5 px-3 py-1 text-xs text-accent hover:bg-accent/10 transition-colors disabled:opacity-50"
+                  >
+                    + {appUser.displayName}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={ghostNameInput}
+                onChange={(event) => setGhostNameInput(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Enter") handleAddGhost(); }}
+                placeholder="Add non-member player..."
+                className="w-48 rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+              />
               <button
-                key={appUser.id}
-                onClick={() => handleAddMember(appUser.id)}
-                disabled={isPending}
-                className="rounded-full border border-accent/30 bg-accent/5 px-3 py-1 text-xs text-accent hover:bg-accent/10 transition-colors disabled:opacity-50"
+                onClick={handleAddGhost}
+                disabled={isPending || !ghostNameInput.trim()}
+                className="rounded-lg bg-warning/20 px-3 py-1.5 text-xs font-medium text-warning hover:bg-warning/30 transition-colors disabled:opacity-50"
               >
-                + {appUser.displayName}
+                Add
               </button>
-            ))}
-          </div>
-        )}
-
-        {/* Session actions */}
-        {session.status === "active" && !viewOnlyMode && (
-          <div className="mt-4">
-            <button
-              onClick={() => handleAction(() => completeSession(session.id))}
-              disabled={isPending}
-              className="rounded-lg bg-warning/20 px-4 py-2 text-xs font-medium text-warning hover:bg-warning/30 transition-colors disabled:opacity-50"
-            >
-              Complete Session
-            </button>
+            </div>
           </div>
         )}
 
@@ -446,7 +516,7 @@ export function SessionDetailClient({
 
           {/* Table header */}
           <div className="rounded-t-lg border border-border bg-card">
-            <div className="grid grid-cols-[auto_2.5fr_3fr_5rem_4rem_4rem_3rem] items-center gap-2 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
+            <div className="grid items-center gap-2 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted" style={{ gridTemplateColumns: SESSION_GRID_COLUMNS }}>
               <span className="w-5"></span>
               <span>Name</span>
               <span>Description</span>
@@ -466,9 +536,10 @@ export function SessionDetailClient({
                 <div key={badge.id}>
                   <div
                     onClick={() => toggleBadgeSelection(session.id, badge.id)}
-                    className={`group grid cursor-pointer grid-cols-[auto_2.5fr_3fr_5rem_4rem_4rem_3rem] items-center gap-2 px-3 py-2 transition-colors hover:bg-card-hover ${
+                    className={`group grid cursor-pointer select-none items-center gap-2 px-3 py-2 transition-colors hover:bg-card-hover ${
                       isSelected ? "bg-accent/10 border-l-2 border-l-accent" : "border-l-2 border-l-transparent"
                     }`}
+                    style={{ gridTemplateColumns: SESSION_GRID_COLUMNS }}
                   >
                     <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{badge.badgeNumber}</span>
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -477,10 +548,10 @@ export function SessionDetailClient({
                       {badge.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>}
                       {badge.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
                     </div>
-                    <span className="truncate text-xs text-muted">{badge.description}</span>
-                    <span className={`text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>
-                    <span className={`text-center text-[11px] ${badge.playerCountBucket === "lte_3" ? "text-blue-400" : badge.playerCountBucket === "gte_5" ? "text-orange-400" : "text-muted"}`}>{playerCountLabel(badge.playerCountBucket)}</span>
-                    <span className="text-center text-[11px] text-success">{badge.otherUncompletedCount}/{memberCount - 1}</span>
+                    <span className="min-w-0 truncate text-xs text-muted">{badge.description}</span>
+                    <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>
+                    <span className={`min-w-0 text-center text-[11px] ${badge.playerCountBucket === "lte_3" ? "text-blue-400" : badge.playerCountBucket === "gte_5" ? "text-orange-400" : "text-muted"}`}>{playerCountLabel(badge.playerCountBucket)}</span>
+                    <span className="min-w-0 text-center text-[11px] text-success">{badge.otherUncompletedCount}/{memberCount - 1}</span>
                     {/* Completion toggle — separate from session selection */}
                     <div className="flex justify-center" onClick={(event) => event.stopPropagation()}>
                       <button
@@ -560,7 +631,7 @@ function GroupBadgesTable({
   return (
     <>
       <div className="rounded-t-lg border border-border bg-card">
-        <div className="grid grid-cols-[auto_2.5fr_3fr_5rem_4rem_4rem_3rem] items-center gap-2 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
+        <div className="grid items-center gap-2 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted" style={{ gridTemplateColumns: SESSION_GRID_COLUMNS }}>
           <span className="w-5"></span>
           <span>Name</span>
           <span>Description</span>
@@ -583,17 +654,17 @@ function GroupBadgesTable({
 
           return (
             <div key={entry.selection.badgeId}>
-              <Link href={`/badges/${entry.selection.badgeId}`} className="group grid grid-cols-[auto_2.5fr_3fr_5rem_4rem_4rem_3rem] items-center gap-2 px-3 py-2 transition-colors hover:bg-card-hover">
+              <Link href={`/badges/${entry.selection.badgeId}`} className="group grid items-center gap-2 px-3 py-2 transition-colors hover:bg-card-hover" style={{ gridTemplateColumns: SESSION_GRID_COLUMNS }}>
                 <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{entry.selection.badgeNumber}</span>
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="truncate text-sm font-medium text-foreground group-hover:text-accent transition-colors">{entry.selection.badgeName}</span>
                   {entry.selection.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>}
                   {fullBadge?.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
                 </div>
-                <span className="truncate text-xs text-muted">{entry.selection.badgeDescription}</span>
-                <span className={`text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>
-                <span className={`text-center text-[11px] ${bucket === "lte_3" ? "text-blue-400" : bucket === "gte_5" ? "text-orange-400" : "text-muted"}`}>{playerCountLabel(bucket)}</span>
-                <span className="text-center text-[11px] text-success" title={selectorNames}>{selectorCount}</span>
+                <span className="min-w-0 truncate text-xs text-muted">{entry.selection.badgeDescription}</span>
+                <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>
+                <span className={`min-w-0 text-center text-[11px] ${bucket === "lte_3" ? "text-blue-400" : bucket === "gte_5" ? "text-orange-400" : "text-muted"}`}>{playerCountLabel(bucket)}</span>
+                <span className="min-w-0 text-center text-[11px] text-success" title={selectorNames}>{selectorCount}</span>
                 <div className="flex justify-center" onClick={(event) => event.preventDefault()}>
                   <button
                     onClick={() => toggleBadgeCompletion(entry.selection.badgeId)}

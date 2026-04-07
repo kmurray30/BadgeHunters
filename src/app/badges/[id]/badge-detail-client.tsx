@@ -125,6 +125,7 @@ export function BadgeDetailClient({
   const [newComment, setNewComment] = useState("");
   const [notesValue, setNotesValue] = useState(currentUserStatus.personalNotesSummary ?? "");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
 
   const communityAverageLabel = computeCommunityAverage(communityDifficultyVotes, badge.defaultDifficulty);
 
@@ -132,6 +133,7 @@ export function BadgeDetailClient({
     setIsSavingNotes(true);
     await updatePersonalNotes(badge.id, notesValue || null);
     setIsSavingNotes(false);
+    setIsEditingNotes(false);
   }
 
   async function handleSubmitComment() {
@@ -142,21 +144,15 @@ export function BadgeDetailClient({
 
   return (
     <div className="space-y-6">
-      {/* Back link */}
       <Link href="/badges" className="text-sm text-muted hover:text-foreground transition-colors">
         &larr; Back to badges
       </Link>
 
-      {/* Badge header */}
+      {/* Badge header — no badge number */}
       <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-start justify-between">
           <div>
-            <div className="flex items-center gap-3">
-              <span className="rounded bg-border px-2 py-1 text-xs font-mono text-muted">
-                #{badge.badgeNumber}
-              </span>
-              <h1 className="text-xl font-bold text-foreground">{badge.name}</h1>
-            </div>
+            <h1 className="text-xl font-bold text-foreground">{badge.name}</h1>
             <p className="mt-3 text-sm text-muted leading-relaxed">{badge.description}</p>
           </div>
 
@@ -172,53 +168,48 @@ export function BadgeDetailClient({
           </button>
         </div>
 
-        {/* Badge metadata */}
+        {/* Badge metadata pills */}
         <div className="mt-4 flex flex-wrap gap-2">
           {badge.isPerVisit && (
-            <span className="rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent">
-              Per-visit
-            </span>
+            <span className="rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent">Per-visit</span>
           )}
           {badge.isMetaBadge && (
-            <span className="rounded-full bg-purple-500/20 px-3 py-1 text-xs font-medium text-purple-400">
-              Meta badge
-            </span>
+            <span className="rounded-full bg-purple-500/20 px-3 py-1 text-xs font-medium text-purple-400">Meta badge</span>
           )}
           {badge.playerCountBucket === "lte_3" && (
-            <span className="rounded-full bg-blue-500/20 px-3 py-1 text-xs font-medium text-blue-400">
-              Best with ≤3 players
-            </span>
+            <span className="rounded-full bg-blue-500/20 px-3 py-1 text-xs font-medium text-blue-400">Best with ≤3 players</span>
           )}
           {badge.playerCountBucket === "gte_5" && (
-            <span className="rounded-full bg-orange-500/20 px-3 py-1 text-xs font-medium text-orange-400">
-              Best with 5+ players
-            </span>
+            <span className="rounded-full bg-orange-500/20 px-3 py-1 text-xs font-medium text-orange-400">Best with 5+ players</span>
           )}
           {badge.rooms.map((room) => (
-            <span key={room} className="rounded-full bg-border px-3 py-1 text-xs text-muted">
-              {room}
-            </span>
+            <span key={room} className="rounded-full bg-border px-3 py-1 text-xs text-muted">{room}</span>
           ))}
           {badge.games.map((game) => (
-            <span key={game} className="rounded-full bg-border px-3 py-1 text-xs text-muted">
-              {game}
-            </span>
-          ))}
-          {badge.tags.map((tag) => (
-            <span key={tag} className="rounded-full bg-border px-3 py-1 text-xs text-muted">
-              {tag}
-            </span>
+            <span key={game} className="rounded-full bg-border px-3 py-1 text-xs text-muted">{game}</span>
           ))}
         </div>
 
-        {/* Meta rules display */}
+        {/* Tags — labeled */}
+        {badge.tags.length > 0 && (
+          <div className="mt-3">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Tags</span>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {badge.tags.map((tag) => (
+                <span key={tag} className="rounded-full bg-border px-2.5 py-0.5 text-[11px] text-muted">{tag}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Meta rules */}
         {metaRules.length > 0 && (
           <div className="mt-4 rounded-lg border border-purple-500/20 bg-purple-500/5 p-3">
             <p className="text-xs font-semibold text-purple-400">Meta badge rules:</p>
             {metaRules.map((rule) => (
               <p key={rule.id} className="mt-1 text-xs text-muted">
                 {rule.ruleType === "day_of_month" && "Day-of-month requirement"}
-                {rule.ruleType === "time_window" && `Time window: ${(rule.rulePayloadJson as { start?: string }).start} - ${(rule.rulePayloadJson as { end?: string }).end}`}
+                {rule.ruleType === "time_window" && `Time window: ${(rule.rulePayloadJson as { start?: string }).start} – ${(rule.rulePayloadJson as { end?: string }).end}`}
                 {rule.ruleType === "unique_rank_colors" && `Requires ${(rule.rulePayloadJson as { min_distinct_colors?: number }).min_distinct_colors} distinct rank colors`}
               </p>
             ))}
@@ -226,49 +217,36 @@ export function BadgeDetailClient({
         )}
       </div>
 
-      {/* Difficulty section */}
-      <div className="rounded-xl border border-border bg-card p-6">
-        <h2 className="text-sm font-semibold text-foreground">Difficulty</h2>
-        <div className="mt-3 grid grid-cols-3 gap-4 text-sm">
-          <div>
-            <p className="text-xs text-muted">Default</p>
-            <p className="font-medium text-foreground">
-              {badge.defaultDifficulty === "unknown" ? "???" : badge.defaultDifficulty.charAt(0).toUpperCase() + badge.defaultDifficulty.slice(1)}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted">Community</p>
-            <p className="font-medium text-foreground">{communityAverageLabel}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted">Your rating</p>
-            <select
-              value={currentUserStatus.personalDifficulty ?? ""}
-              onChange={(event) => {
-                if (event.target.value) {
-                  updateBadgeDifficulty(badge.id, event.target.value as Difficulty);
-                }
-              }}
-              className="mt-0.5 w-full rounded border border-border bg-background px-2 py-1 text-sm text-foreground focus:border-accent focus:outline-none"
-            >
-              <option value="">Not rated</option>
-              {DIFFICULTY_OPTIONS.map((difficultyOption) => (
-                <option key={difficultyOption.value} value={difficultyOption.value}>{difficultyOption.label}</option>
-              ))}
-            </select>
-          </div>
+      {/* Difficulty + player count — one line each */}
+      <div className="rounded-xl border border-border bg-card p-6 space-y-3">
+        <div className="flex items-center gap-4">
+          <span className="text-xs text-muted w-20 shrink-0">Difficulty</span>
+          <span className="text-sm text-foreground">{communityAverageLabel}</span>
+          <span className="text-[10px] text-muted">({communityDifficultyVotes.length} vote{communityDifficultyVotes.length !== 1 ? "s" : ""})</span>
+          <span className="text-[10px] text-muted ml-auto">Your rating:</span>
+          <select
+            value={currentUserStatus.personalDifficulty ?? ""}
+            onChange={(event) => {
+              if (event.target.value) updateBadgeDifficulty(badge.id, event.target.value as Difficulty);
+            }}
+            className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-accent focus:outline-none"
+          >
+            <option value="">Not rated</option>
+            {DIFFICULTY_OPTIONS.map((difficultyOption) => (
+              <option key={difficultyOption.value} value={difficultyOption.value}>{difficultyOption.label}</option>
+            ))}
+          </select>
         </div>
 
-        {/* Ideal player count */}
-        <div className="mt-4">
-          <p className="text-xs text-muted">Your ideal player count</p>
+        <div className="flex items-center gap-4">
+          <span className="text-xs text-muted w-20 shrink-0">Ideal player count?</span>
           <select
             value={currentUserStatus.idealPlayerCountBucket ?? ""}
             onChange={(event) => {
               const selectedBucket = event.target.value as PlayerCountBucket | "";
               updateIdealPlayerCount(badge.id, selectedBucket || null);
             }}
-            className="mt-1 w-full rounded border border-border bg-background px-2 py-1 text-sm text-foreground focus:border-accent focus:outline-none"
+            className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-accent focus:outline-none"
           >
             <option value="">No preference</option>
             <option value="lte_3">3 or fewer</option>
@@ -293,9 +271,7 @@ export function BadgeDetailClient({
                   {completedUser.displayName}
                 </span>
                 {completedUser.personalDifficulty && completedUser.personalDifficulty !== "unknown" && (
-                  <span className="text-xs text-muted">
-                    Rated: {completedUser.personalDifficulty}
-                  </span>
+                  <span className="text-xs text-muted">Rated: {completedUser.personalDifficulty}</span>
                 )}
               </div>
             ))}
@@ -303,23 +279,41 @@ export function BadgeDetailClient({
         )}
       </div>
 
-      {/* Personal notes */}
+      {/* Personal notes — edit/save toggle */}
       <div className="rounded-xl border border-border bg-card p-6">
-        <h2 className="text-sm font-semibold text-foreground">Your Notes</h2>
-        <textarea
-          value={notesValue}
-          onChange={(event) => setNotesValue(event.target.value)}
-          placeholder="Add personal notes about this badge..."
-          className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
-          rows={3}
-        />
-        <button
-          onClick={handleSaveNotes}
-          disabled={isSavingNotes}
-          className="mt-2 rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
-        >
-          {isSavingNotes ? "Saving..." : "Save Notes"}
-        </button>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-foreground">Your Notes</h2>
+          {!isEditingNotes ? (
+            <button
+              onClick={() => setIsEditingNotes(true)}
+              className="rounded-lg border border-border px-3 py-1 text-xs text-muted hover:text-foreground transition-colors"
+            >
+              Edit Notes
+            </button>
+          ) : (
+            <button
+              onClick={handleSaveNotes}
+              disabled={isSavingNotes}
+              className="rounded-lg bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+            >
+              {isSavingNotes ? "Saving..." : "Save"}
+            </button>
+          )}
+        </div>
+        {isEditingNotes ? (
+          <textarea
+            value={notesValue}
+            onChange={(event) => setNotesValue(event.target.value)}
+            placeholder="Add personal notes about this badge..."
+            className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+            rows={3}
+            autoFocus
+          />
+        ) : (
+          <p className="mt-2 text-sm text-muted whitespace-pre-wrap">
+            {notesValue || "No notes yet."}
+          </p>
+        )}
       </div>
 
       {/* Comments */}
@@ -328,7 +322,6 @@ export function BadgeDetailClient({
           Comments ({comments.length})
         </h2>
 
-        {/* Comment form */}
         <div className="mt-3">
           <textarea
             value={newComment}
@@ -346,7 +339,6 @@ export function BadgeDetailClient({
           </button>
         </div>
 
-        {/* Comment list */}
         <div className="mt-4 space-y-4">
           {comments.map((comment) => (
             <div
@@ -364,33 +356,19 @@ export function BadgeDetailClient({
                       {comment.author.displayName.charAt(0)}
                     </div>
                   )}
-                  <span className="text-xs font-medium text-foreground">
-                    {comment.author.displayName}
-                  </span>
-                  {comment.isPinned && (
-                    <span className="text-[10px] text-accent">pinned</span>
-                  )}
-                  {comment.editedAt && (
-                    <span className="text-[10px] text-muted">(edited)</span>
-                  )}
+                  <span className="text-xs font-medium text-foreground">{comment.author.displayName}</span>
+                  {comment.isPinned && <span className="text-[10px] text-accent">pinned</span>}
+                  {comment.editedAt && <span className="text-[10px] text-muted">(edited)</span>}
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-muted">
-                    {new Date(comment.createdAt).toLocaleDateString()}
-                  </span>
+                  <span className="text-[10px] text-muted">{new Date(comment.createdAt).toLocaleDateString()}</span>
                   {currentUserRole === "superuser" && (
-                    <button
-                      onClick={() => toggleCommentPin(comment.id)}
-                      className="text-[10px] text-muted hover:text-accent"
-                    >
+                    <button onClick={() => toggleCommentPin(comment.id)} className="text-[10px] text-muted hover:text-accent">
                       {comment.isPinned ? "unpin" : "pin"}
                     </button>
                   )}
                   {(comment.author.id === currentUserId || currentUserRole === "superuser") && (
-                    <button
-                      onClick={() => deleteBadgeComment(comment.id)}
-                      className="text-[10px] text-muted hover:text-danger"
-                    >
+                    <button onClick={() => deleteBadgeComment(comment.id)} className="text-[10px] text-muted hover:text-danger">
                       delete
                     </button>
                   )}
@@ -398,7 +376,7 @@ export function BadgeDetailClient({
               </div>
               <p className="mt-1 text-sm text-foreground">{comment.body}</p>
 
-              {/* Reactions */}
+              {/* Reactions — one per user */}
               <div className="mt-2 flex flex-wrap gap-1">
                 {REACTION_TYPES.map((reactionOption) => {
                   const reactionCount = comment.reactions.filter(
@@ -418,9 +396,7 @@ export function BadgeDetailClient({
                       }`}
                     >
                       <span>{reactionOption.emoji}</span>
-                      {reactionCount > 0 && (
-                        <span className="text-muted">{reactionCount}</span>
-                      )}
+                      {reactionCount > 0 && <span className="text-muted">{reactionCount}</span>}
                     </button>
                   );
                 })}

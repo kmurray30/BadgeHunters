@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { createFeedbackPost, updateFeedbackStatus, toggleFeedbackReaction } from "@/app/actions/feedback";
+import { createFeedbackPost, toggleFeedbackReaction, updateFeedbackStatus } from "@/app/actions/feedback";
 import type { FeedbackStatus, ReactionType } from "@prisma/client";
+import { useState } from "react";
 
 const REACTION_TYPES: { value: ReactionType; emoji: string }[] = [
   { value: "thumbs_up", emoji: "\u{1F44D}" },
@@ -70,7 +70,7 @@ export function FeedbackClient({ posts, currentUserId, isSuperuser }: Props) {
         <textarea
           value={newFeedback}
           onChange={(event) => setNewFeedback(event.target.value)}
-          placeholder="What's on your mind? Bug report, feature request, general thoughts..."
+          placeholder="Bug report, feature request, general thoughts..."
           className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
           rows={3}
         />

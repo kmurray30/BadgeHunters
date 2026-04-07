@@ -100,10 +100,15 @@ export async function toggleCommentReaction(commentId: string, reactionType: Rea
   });
 
   if (existing) {
+    // Clicking the same reaction again removes it
     await prisma.badgeCommentReaction.delete({
       where: { id: existing.id },
     });
   } else {
+    // Remove any other reaction this user has on this comment first (one reaction per user)
+    await prisma.badgeCommentReaction.deleteMany({
+      where: { commentId, userId: user.id },
+    });
     await prisma.badgeCommentReaction.create({
       data: {
         commentId,

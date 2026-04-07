@@ -120,13 +120,26 @@ export async function joinSession(sessionId: string) {
 export async function removeSessionMember(sessionId: string, userId: string) {
   const user = await requireUser();
 
-  // Users can only remove themselves
-  if (userId !== user.id) {
-    throw new Error("You can only remove yourself from a session");
+  // Verify the remover is a session member
+  const membership = await prisma.sessionMember.findUnique({
+    where: { sessionId_userId: { sessionId, userId: user.id } },
+  });
+  if (!membership) {
+    throw new Error("Only session members can remove members");
   }
 
   await prisma.sessionMember.delete({
     where: { sessionId_userId: { sessionId, userId } },
+  });
+
+  // Clean up their acknowledgement too
+  await prisma.sessionUserAcknowledgement.deleteMany({
+    where: { sessionId, userId },
+  });
+
+  // Clean up their badge selections
+  await prisma.sessionBadgeSelection.deleteMany({
+    where: { sessionId, selectedByUserId: userId },
   });
 
   revalidatePath(`/sessions/${sessionId}`);

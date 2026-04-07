@@ -41,24 +41,8 @@ function inferBadgeData(badgeNumber: number, name: string, description: string):
     }
   }
 
-  // --- Infer tags ---
+  // Tags are not in the CSV — only set via admin tools
   const tags: string[] = [];
-
-  if (descLower.includes("competitive") || descLower.includes("rivalry")) tags.push("competitive");
-  if (descLower.includes("cooperative")) tags.push("cooperative");
-  if (descLower.includes("without losing a life") || descLower.includes("without missing")) tags.push("no-miss");
-  if (descLower.includes("without") && !tags.includes("no-miss")) tags.push("restriction");
-  if (descLower.includes("in a row")) tags.push("streak");
-  if (descLower.includes("high score") || descLower.includes("personal high")) tags.push("score");
-  if (descLower.includes("photo")) tags.push("photo");
-  if (nameLower.includes("easter egg")) tags.push("easter-egg");
-  if (nameLower.includes("riddle")) tags.push("riddle");
-  if (nameLower.includes("untouchable")) tags.push("no-miss");
-  if (nameLower.includes("deja vu") || nameLower.includes("déjà vu")) tags.push("streak");
-  if (nameLower.includes("total recall")) tags.push("memory");
-  if (nameLower.includes("direction inspection")) tags.push("precision");
-  if (nameLower.includes("sniper")) tags.push("precision");
-  if (descLower.includes("exactly") && (descLower.includes("points") || descLower.includes("seconds"))) tags.push("precision");
 
   // --- Infer player count bucket ---
   let playerCountBucket: PlayerCountBucket = "none";

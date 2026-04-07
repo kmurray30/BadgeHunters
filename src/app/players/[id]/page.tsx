@@ -4,6 +4,7 @@ import { isolationFilter } from "@/lib/isolation";
 import { getRankColor, RANK_COLOR_HEX } from "@/lib/rank";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { RankPopup } from "@/components/rank-popup";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -95,7 +96,7 @@ export default async function PlayerDetailPage({ params }: Props) {
           <p className="text-xs text-muted">Score</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 text-center">
-          <p className="text-2xl font-bold" style={{ color: rankHex }}>{rankColor}</p>
+          <RankPopup currentRank={rankColor} rankHex={rankHex} />
           <p className="text-xs text-muted">Rank</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 text-center">

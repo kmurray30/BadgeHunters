@@ -91,7 +91,8 @@ export default async function SessionsPage() {
                   <div>
                     <p className="font-medium text-foreground">
                       {session.title ?? new Date(session.sessionDateLocal).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
-                      <span className="ml-2 text-xs font-normal text-muted">
+                      {" "}
+                      <span className="text-xs font-normal text-muted">
                         {session.createdAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
                       </span>
                     </p>
@@ -153,7 +154,8 @@ export default async function SessionsPage() {
                   <div>
                     <p className="text-sm font-medium text-foreground">
                       {session.title ?? new Date(session.sessionDateLocal).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
-                      <span className="ml-2 text-xs font-normal text-muted">
+                      {" "}
+                      <span className="text-xs font-normal text-muted">
                         {session.createdAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
                       </span>
                     </p>

@@ -44,6 +44,8 @@ const DIFFICULTY_OPTIONS: { value: Difficulty; label: string; color: string }[] 
   { value: "unknown", label: "???", color: "text-muted" },
 ];
 
+const BADGE_GRID_COLUMNS = "auto minmax(0,2.5fr) minmax(0,3fr) 5rem 4rem 3.5rem";
+
 type SortOption = "number" | "name" | "difficulty" | "completions" | "players";
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
@@ -283,14 +285,13 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
 
       {/* Table header */}
       <div className="rounded-t-lg border border-border bg-card">
-        <div className="grid grid-cols-[auto_2.5fr_3fr_5rem_4rem_4rem_3rem] items-center gap-2 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
+        <div className="grid items-center gap-2 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted" style={{ gridTemplateColumns: BADGE_GRID_COLUMNS }}>
           <span className="w-5"></span>
           <span>Name</span>
           <span>Description</span>
           <span className="text-center">Difficulty</span>
           <span className="text-center">Players</span>
           <span className="text-center">Done</span>
-          <span></span>
         </div>
       </div>
 
@@ -302,9 +303,10 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
             <Link
               key={badge.id}
               href={`/badges/${badge.id}`}
-              className={`group grid grid-cols-[auto_2.5fr_3fr_5rem_4rem_4rem_3rem] items-center gap-2 px-3 py-2 transition-colors hover:bg-card-hover ${
-                badge.completedByCurrentUser ? "bg-success/[0.03]" : ""
+              className={`group grid items-center gap-2 px-3 py-2 transition-colors hover:bg-card-hover ${
+                badge.completedByCurrentUser ? "bg-success/[0.06]" : ""
               }`}
+              style={{ gridTemplateColumns: BADGE_GRID_COLUMNS }}
             >
               <span className="w-5 text-[10px] font-mono text-muted tabular-nums">
                 {badge.badgeNumber}
@@ -315,20 +317,16 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
                   {badge.name}
                 </span>
                 {badge.isPerVisit && (
-                  <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">
-                    visit
-                  </span>
+                  <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>
                 )}
                 {badge.isMetaBadge && (
-                  <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">
-                    meta
-                  </span>
+                  <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>
                 )}
               </div>
 
-              <span className="truncate text-xs text-muted">{badge.description}</span>
+              <span className="min-w-0 truncate text-xs text-muted">{badge.description}</span>
 
-              <div className="text-center" onClick={(event) => event.preventDefault()}>
+              <div className="min-w-0 text-center" onClick={(event) => event.preventDefault()}>
                 {editingDifficultyBadgeId === badge.id ? (
                   <select
                     autoFocus
@@ -357,15 +355,11 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
                 )}
               </div>
 
-              <span className={`text-center text-[11px] ${
+              <span className={`min-w-0 text-center text-[11px] ${
                 badge.playerCountBucket === "lte_3" ? "text-blue-400" :
                 badge.playerCountBucket === "gte_5" ? "text-orange-400" : "text-muted"
               }`}>
                 {playerCountLabel(badge.playerCountBucket)}
-              </span>
-
-              <span className="text-center text-[11px] text-muted">
-                {badge.totalCompletions > 0 ? badge.totalCompletions : "-"}
               </span>
 
               <div className="flex justify-center" onClick={(event) => event.preventDefault()}>
