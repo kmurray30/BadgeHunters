@@ -19,6 +19,7 @@ export default async function BadgesPage() {
           userId: true,
           isCompleted: true,
           personalDifficulty: true,
+          idealPlayerCountBucket: true,
           user: {
             select: {
               id: true,
@@ -62,6 +63,12 @@ export default async function BadgesPage() {
     currentUserDifficulty:
       badge.userStatuses.find((status) => status.userId === user.id)
         ?.personalDifficulty ?? null,
+    currentUserPlayerCount:
+      badge.userStatuses.find((status) => status.userId === user.id)
+        ?.idealPlayerCountBucket ?? null,
+    communityPlayerCountVotes: badge.userStatuses
+      .map((status) => status.idealPlayerCountBucket)
+      .filter(Boolean) as string[],
     completedByUsers: badge.userStatuses
       .filter((status) => status.isCompleted)
       .map((status) => ({

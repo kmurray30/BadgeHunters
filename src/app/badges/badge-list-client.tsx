@@ -2,8 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { toggleBadgeCompletion, updateBadgeDifficulty } from "@/app/actions/badges";
-import type { Difficulty } from "@prisma/client";
+import { toggleBadgeCompletion } from "@/app/actions/badges";
 
 interface BadgeUser {
   id: string;
@@ -24,6 +23,8 @@ interface BadgeData {
   isMetaBadge: boolean;
   completedByCurrentUser: boolean;
   currentUserDifficulty: string | null;
+  currentUserPlayerCount: string | null;
+  communityPlayerCountVotes: string[];
   completedByUsers: BadgeUser[];
   totalCompletions: number;
   communityDifficultyVotes: (string | null)[];
@@ -36,7 +37,7 @@ interface Props {
   allUsers: BadgeUser[];
 }
 
-const DIFFICULTY_OPTIONS: { value: Difficulty; label: string; color: string }[] = [
+const DIFFICULTY_OPTIONS: { value: string; label: string; color: string }[] = [
   { value: "easy", label: "Easy", color: "text-green-400" },
   { value: "medium", label: "Medium", color: "text-yellow-400" },
   { value: "hard", label: "Hard", color: "text-orange-400" },
@@ -88,10 +89,56 @@ function getDifficultyDisplay(badge: BadgeData): { label: string; color: string;
   return { ...(option ?? { label: "???", color: "text-muted" }), sortKey: numericMap[badge.defaultDifficulty] ?? 99 };
 }
 
+const PLAYER_COUNT_SORT: Record<string, number> = { lte_3: 1, none: 2, gte_5: 3 };
+
 function playerCountLabel(bucket: string): string {
   if (bucket === "lte_3") return "≤3";
   if (bucket === "gte_5") return "5+";
   return "Any";
+}
+
+/**
+ * Resolve the displayed player count bucket with the same precedence as difficulty:
+ *   1. Current user's personal setting (always wins)
+ *   2. Community mode (most common vote among all users)
+ *   3. Badge default from the seed data
+ */
+function getPlayerCountDisplay(badge: BadgeData): { bucket: string; label: string; color: string; sortKey: number } {
+  const personal = badge.currentUserPlayerCount;
+  if (personal && personal !== "none") {
+    return {
+      bucket: personal,
+      label: playerCountLabel(personal),
+      color: personal === "lte_3" ? "text-blue-400" : personal === "gte_5" ? "text-orange-400" : "text-muted",
+      sortKey: PLAYER_COUNT_SORT[personal] ?? 2,
+    };
+  }
+
+  if (badge.communityPlayerCountVotes.length > 0) {
+    const counts: Record<string, number> = {};
+    for (const vote of badge.communityPlayerCountVotes) {
+      if (vote !== "none") counts[vote] = (counts[vote] ?? 0) + 1;
+    }
+    const entries = Object.entries(counts);
+    if (entries.length > 0) {
+      entries.sort((entryA, entryB) => entryB[1] - entryA[1]);
+      const winner = entries[0][0];
+      return {
+        bucket: winner,
+        label: playerCountLabel(winner),
+        color: winner === "lte_3" ? "text-blue-400" : winner === "gte_5" ? "text-orange-400" : "text-muted",
+        sortKey: PLAYER_COUNT_SORT[winner] ?? 2,
+      };
+    }
+  }
+
+  const fallback = badge.playerCountBucket;
+  return {
+    bucket: fallback,
+    label: playerCountLabel(fallback),
+    color: fallback === "lte_3" ? "text-blue-400" : fallback === "gte_5" ? "text-orange-400" : "text-muted",
+    sortKey: PLAYER_COUNT_SORT[fallback] ?? 2,
+  };
 }
 
 export function BadgeListClient({ badges, currentUserId, currentUserRole, allUsers }: Props) {
@@ -120,9 +167,6 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
   const [roomFilter, setRoomFilter] = useState<string>("all");
   const [gameFilter, setGameFilter] = useState<string>("all");
 
-  // Editing state for inline difficulty rating
-  const [editingDifficultyBadgeId, setEditingDifficultyBadgeId] = useState<string | null>(null);
-
   const filteredAndSortedBadges = useMemo(() => {
     const filtered = badges.filter((badge) => {
       if (searchQuery) {
@@ -140,7 +184,7 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
         const diffOption = DIFFICULTY_OPTIONS.find((difficultyOpt) => difficultyOpt.value === difficultyFilter);
         if (diffOption && displayed.label !== diffOption.label) return false;
       }
-      if (playerCountFilter !== "all" && badge.playerCountBucket !== playerCountFilter) return false;
+      if (playerCountFilter !== "all" && getPlayerCountDisplay(badge).bucket !== playerCountFilter) return false;
       if (perVisitFilter === "per_visit" && !badge.isPerVisit) return false;
       if (perVisitFilter === "normal" && badge.isPerVisit) return false;
       if (roomFilter !== "all" && !badge.rooms.includes(roomFilter)) return false;
@@ -149,8 +193,6 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
       if (notCompletedByFilter !== "all" && badge.completedByUsers.some((completedUser) => completedUser.id === notCompletedByFilter)) return false;
       return true;
     });
-
-    const playerCountSortKey: Record<string, number> = { lte_3: 1, none: 2, gte_5: 3 };
 
     filtered.sort((badgeA, badgeB) => {
       let comparison = 0;
@@ -168,7 +210,7 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
           comparison = badgeA.totalCompletions - badgeB.totalCompletions;
           break;
         case "players":
-          comparison = (playerCountSortKey[badgeA.playerCountBucket] ?? 2) - (playerCountSortKey[badgeB.playerCountBucket] ?? 2);
+          comparison = getPlayerCountDisplay(badgeA).sortKey - getPlayerCountDisplay(badgeB).sortKey;
           break;
       }
       return sortAsc ? comparison : -comparison;
@@ -326,40 +368,12 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
 
               <span className="min-w-0 truncate text-xs text-muted">{badge.description}</span>
 
-              <div className="min-w-0 text-center" onClick={(event) => event.preventDefault()}>
-                {editingDifficultyBadgeId === badge.id ? (
-                  <select
-                    autoFocus
-                    value={badge.currentUserDifficulty ?? ""}
-                    onChange={(event) => {
-                      const selectedValue = event.target.value as Difficulty;
-                      if (selectedValue) updateBadgeDifficulty(badge.id, selectedValue);
-                      setEditingDifficultyBadgeId(null);
-                    }}
-                    onBlur={() => setEditingDifficultyBadgeId(null)}
-                    className="w-full rounded border border-border bg-background px-1 py-0.5 text-[10px] text-foreground focus:border-accent focus:outline-none"
-                  >
-                    <option value="">-</option>
-                    {DIFFICULTY_OPTIONS.filter((diffOption) => diffOption.value !== "unknown").map((diffOption) => (
-                      <option key={diffOption.value} value={diffOption.value}>{diffOption.label}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <button
-                    onClick={() => setEditingDifficultyBadgeId(badge.id)}
-                    className={`text-[11px] font-medium ${difficultyDisplay.color} hover:underline`}
-                    title="Click to rate"
-                  >
-                    {difficultyDisplay.label}
-                  </button>
-                )}
-              </div>
+              <span className={`min-w-0 text-center text-[11px] font-medium ${difficultyDisplay.color}`}>
+                {difficultyDisplay.label}
+              </span>
 
-              <span className={`min-w-0 text-center text-[11px] ${
-                badge.playerCountBucket === "lte_3" ? "text-blue-400" :
-                badge.playerCountBucket === "gte_5" ? "text-orange-400" : "text-muted"
-              }`}>
-                {playerCountLabel(badge.playerCountBucket)}
+              <span className={`min-w-0 text-center text-[11px] ${getPlayerCountDisplay(badge).color}`}>
+                {getPlayerCountDisplay(badge).label}
               </span>
 
               <div className="flex justify-center" onClick={(event) => event.preventDefault()}>

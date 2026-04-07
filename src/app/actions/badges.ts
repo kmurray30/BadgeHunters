@@ -75,6 +75,7 @@ export async function updateIdealPlayerCount(
     },
   });
 
+  revalidatePath("/badges");
   revalidatePath(`/badges/${badgeId}`);
 }
 

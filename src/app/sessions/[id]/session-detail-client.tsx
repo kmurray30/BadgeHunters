@@ -67,6 +67,8 @@ interface BadgeData {
   games: string[];
   memberCompletions: string[];
   communityVotes: string[];
+  currentUserPlayerCount: string | null;
+  communityPlayerCountVotes: string[];
 }
 
 interface AvailableUser {
@@ -101,6 +103,41 @@ function playerCountLabel(bucket: string): string {
   if (bucket === "lte_3") return "≤3";
   if (bucket === "gte_5") return "5+";
   return "Any";
+}
+
+function resolvePlayerCount(badge: BadgeData): { bucket: string; label: string; color: string } {
+  const personal = badge.currentUserPlayerCount;
+  if (personal && personal !== "none") {
+    return {
+      bucket: personal,
+      label: playerCountLabel(personal),
+      color: personal === "lte_3" ? "text-blue-400" : personal === "gte_5" ? "text-orange-400" : "text-muted",
+    };
+  }
+
+  if (badge.communityPlayerCountVotes.length > 0) {
+    const counts: Record<string, number> = {};
+    for (const vote of badge.communityPlayerCountVotes) {
+      if (vote !== "none") counts[vote] = (counts[vote] ?? 0) + 1;
+    }
+    const entries = Object.entries(counts);
+    if (entries.length > 0) {
+      entries.sort((entryA, entryB) => entryB[1] - entryA[1]);
+      const winner = entries[0][0];
+      return {
+        bucket: winner,
+        label: playerCountLabel(winner),
+        color: winner === "lte_3" ? "text-blue-400" : winner === "gte_5" ? "text-orange-400" : "text-muted",
+      };
+    }
+  }
+
+  const fallback = badge.playerCountBucket;
+  return {
+    bucket: fallback,
+    label: playerCountLabel(fallback),
+    color: fallback === "lte_3" ? "text-blue-400" : fallback === "gte_5" ? "text-orange-400" : "text-muted",
+  };
 }
 
 export function SessionDetailClient({
@@ -204,9 +241,10 @@ export function SessionDetailClient({
       }
 
       let bucketBoost = 0;
-      if (badge.playerCountBucket === "gte_5" && displayPartySize >= 5) bucketBoost = 1;
-      else if (badge.playerCountBucket === "lte_3" && displayPartySize <= 3) bucketBoost = 1;
-      else if (badge.playerCountBucket === "gte_5" && displayPartySize < 5) bucketBoost = -1;
+      const resolvedBucket = resolvePlayerCount(badge).bucket;
+      if (resolvedBucket === "gte_5" && displayPartySize >= 5) bucketBoost = 1;
+      else if (resolvedBucket === "lte_3" && displayPartySize <= 3) bucketBoost = 1;
+      else if (resolvedBucket === "gte_5" && displayPartySize < 5) bucketBoost = -1;
 
       const difficultySortKey = DIFFICULTY_MAP[badge.defaultDifficulty] ?? 99;
 
@@ -234,7 +272,7 @@ export function SessionDetailClient({
       );
     }
     if (yourBadgesDifficulty !== "all") list = list.filter((badge) => badge.defaultDifficulty === yourBadgesDifficulty);
-    if (yourBadgesPlayerCount !== "all") list = list.filter((badge) => badge.playerCountBucket === yourBadgesPlayerCount);
+    if (yourBadgesPlayerCount !== "all") list = list.filter((badge) => resolvePlayerCount(badge).bucket === yourBadgesPlayerCount);
     if (yourBadgesType === "per_visit") list = list.filter((badge) => badge.isPerVisit);
     else if (yourBadgesType === "normal") list = list.filter((badge) => !badge.isPerVisit);
     if (yourBadgesSort !== "relevance") {
@@ -553,7 +591,7 @@ export function SessionDetailClient({
                     </div>
                     <span className="min-w-0 truncate text-xs text-muted">{badge.description}</span>
                     <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>
-                    <span className={`min-w-0 text-center text-[11px] ${badge.playerCountBucket === "lte_3" ? "text-blue-400" : badge.playerCountBucket === "gte_5" ? "text-orange-400" : "text-muted"}`}>{playerCountLabel(badge.playerCountBucket)}</span>
+                    <span className={`min-w-0 text-center text-[11px] ${resolvePlayerCount(badge).color}`}>{resolvePlayerCount(badge).label}</span>
                     <span className="min-w-0 text-center text-[11px] text-success">{badge.otherUncompletedCount}/{memberCount - 1}</span>
                     {/* Completion toggle — separate from session selection */}
                     <div className="flex justify-center" onClick={(event) => event.stopPropagation()}>
@@ -649,7 +687,7 @@ function GroupBadgesTable({
           const fullBadge = badgeLookup.get(entry.selection.badgeId);
           const diffKey = fullBadge?.defaultDifficulty ?? "unknown";
           const diffInfo = DIFFICULTY_LABELS[diffKey] ?? DIFFICULTY_LABELS.unknown;
-          const bucket = fullBadge?.playerCountBucket ?? "none";
+          const playerCountResolved = fullBadge ? resolvePlayerCount(fullBadge) : { bucket: "none", label: "Any", color: "text-muted" };
           const blurb = metaRuleBlurbs[entry.selection.badgeId];
           const selectorNames = entry.selectors.map((selector) => selector.displayName).join(", ");
           const selectorCount = entry.selectors.length;
@@ -671,7 +709,7 @@ function GroupBadgesTable({
                 </div>
                 <span className="min-w-0 truncate text-xs text-muted">{entry.selection.badgeDescription}</span>
                 <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>
-                <span className={`min-w-0 text-center text-[11px] ${bucket === "lte_3" ? "text-blue-400" : bucket === "gte_5" ? "text-orange-400" : "text-muted"}`}>{playerCountLabel(bucket)}</span>
+                <span className={`min-w-0 text-center text-[11px] ${playerCountResolved.color}`}>{playerCountResolved.label}</span>
                 <span className="min-w-0 text-center text-[11px] text-success" title={selectorNames}>{selectorCount}</span>
                 <div className="flex justify-center">
                   <button

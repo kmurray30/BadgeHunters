@@ -86,6 +86,10 @@ export default async function BadgeDetailPage({ params }: Props) {
     .filter((status) => status.personalDifficulty && status.personalDifficulty !== "unknown")
     .map((status) => status.personalDifficulty!);
 
+  const communityPlayerCountVotes = badge.userStatuses
+    .filter((status) => status.idealPlayerCountBucket && status.idealPlayerCountBucket !== "none")
+    .map((status) => status.idealPlayerCountBucket!);
+
   const serializedComments = badge.comments.map((comment) => ({
     id: comment.id,
     body: comment.body,
@@ -134,6 +138,7 @@ export default async function BadgeDetailPage({ params }: Props) {
         }}
         completedByUsers={completedByUsers}
         communityDifficultyVotes={communityDifficultyVotes}
+        communityPlayerCountVotes={communityPlayerCountVotes}
         comments={serializedComments}
         metaRules={badge.metaRules.map((rule) => ({
           id: rule.id,

@@ -88,6 +88,7 @@ interface Props {
   currentUserStatus: UserStatus;
   completedByUsers: CompletedUser[];
   communityDifficultyVotes: string[];
+  communityPlayerCountVotes: string[];
   comments: Comment[];
   metaRules: MetaRule[];
 }
@@ -113,6 +114,23 @@ function computeCommunityAverage(votes: string[], defaultDifficulty: string): st
   return reverseMap[rounded];
 }
 
+function computeCommunityPlayerCount(votes: string[] | undefined, defaultBucket: string): string {
+  const counts: Record<string, number> = {};
+  for (const vote of (votes ?? [])) {
+    if (vote !== "none") counts[vote] = (counts[vote] ?? 0) + 1;
+  }
+  if (defaultBucket !== "none") counts[defaultBucket] = (counts[defaultBucket] ?? 0) + 1;
+
+  const entries = Object.entries(counts);
+  if (entries.length === 0) return "Any";
+
+  entries.sort((entryA, entryB) => entryB[1] - entryA[1]);
+  const winner = entries[0][0];
+  if (winner === "lte_3") return "≤3";
+  if (winner === "gte_5") return "5+";
+  return "Any";
+}
+
 export function BadgeDetailClient({
   badge,
   currentUserId,
@@ -120,6 +138,7 @@ export function BadgeDetailClient({
   currentUserStatus,
   completedByUsers,
   communityDifficultyVotes,
+  communityPlayerCountVotes,
   comments,
   metaRules,
 }: Props) {
@@ -129,6 +148,8 @@ export function BadgeDetailClient({
   const [isEditingNotes, setIsEditingNotes] = useState(false);
 
   const communityAverageLabel = computeCommunityAverage(communityDifficultyVotes, badge.defaultDifficulty);
+  const communityPlayerCountLabel = computeCommunityPlayerCount(communityPlayerCountVotes, badge.playerCountBucket);
+  const playerCountVoteCount = (communityPlayerCountVotes ?? []).filter((vote) => vote !== "none").length + (badge.playerCountBucket !== "none" ? 1 : 0);
 
   async function handleSaveNotes() {
     setIsSavingNotes(true);
@@ -218,11 +239,12 @@ export function BadgeDetailClient({
 
       {/* Difficulty + player count — one line each */}
       <div className="rounded-xl border border-border bg-card p-6 space-y-3">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted w-20 shrink-0">Difficulty</span>
           <span className="text-sm text-foreground">{communityAverageLabel}</span>
           <span className="text-[10px] text-muted">({communityDifficultyVotes.length} vote{communityDifficultyVotes.length !== 1 ? "s" : ""})</span>
-          <span className="text-[10px] text-muted ml-auto">Your rating:</span>
+          <span className="text-[10px] text-muted">·</span>
+          <span className="text-[10px] text-muted">Your rating:</span>
           <select
             value={currentUserStatus.personalDifficulty ?? ""}
             onChange={(event) => {
@@ -237,8 +259,12 @@ export function BadgeDetailClient({
           </select>
         </div>
 
-        <div className="flex items-center gap-4">
-          <span className="text-xs text-muted w-20 shrink-0">Ideal player count?</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted w-20 shrink-0">Players</span>
+          <span className="text-sm text-foreground">{communityPlayerCountLabel}</span>
+          <span className="text-[10px] text-muted">({playerCountVoteCount} vote{playerCountVoteCount !== 1 ? "s" : ""})</span>
+          <span className="text-[10px] text-muted">·</span>
+          <span className="text-[10px] text-muted">Your pick:</span>
           <select
             value={currentUserStatus.idealPlayerCountBucket ?? ""}
             onChange={(event) => {
@@ -250,7 +276,6 @@ export function BadgeDetailClient({
             <option value="">No preference</option>
             <option value="lte_3">3 or fewer</option>
             <option value="gte_5">5 or more</option>
-            <option value="none">No special requirement</option>
           </select>
         </div>
       </div>

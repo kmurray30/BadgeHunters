@@ -69,6 +69,7 @@ export default async function SessionDetailPage({ params }: Props) {
           userId: true,
           isCompleted: true,
           personalDifficulty: true,
+          idealPlayerCountBucket: true,
         },
       },
       metaRules: {
@@ -181,6 +182,12 @@ export default async function SessionDetailPage({ params }: Props) {
       .map((status) => status.userId),
     communityVotes: badge.userStatuses
       .map((status) => status.personalDifficulty)
+      .filter(Boolean) as string[],
+    currentUserPlayerCount:
+      badge.userStatuses.find((status) => status.userId === user.id)
+        ?.idealPlayerCountBucket ?? null,
+    communityPlayerCountVotes: badge.userStatuses
+      .map((status) => status.idealPlayerCountBucket)
       .filter(Boolean) as string[],
   }));
 
