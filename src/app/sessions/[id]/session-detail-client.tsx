@@ -1,22 +1,22 @@
 "use client";
 
-import { useState, useMemo, useTransition } from "react";
+import { toggleBadgeCompletion } from "@/app/actions/badges";
+import {
+    acknowledgeSession,
+    addGhostMember,
+    addSessionMember,
+    completeSession,
+    joinSession,
+    removeGhostMember,
+    removeSessionMember,
+    toggleBadgeSelection,
+} from "@/app/actions/sessions";
+import { BackButton } from "@/components/back-button";
+import { MultiFilter, type ActiveFilter, type FilterDefinition } from "@/components/multi-filter";
+import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  toggleBadgeSelection,
-  completeSession,
-  acknowledgeSession,
-  addSessionMember,
-  joinSession,
-  addGhostMember,
-  removeSessionMember,
-  removeGhostMember,
-} from "@/app/actions/sessions";
-import { toggleBadgeCompletion } from "@/app/actions/badges";
-import { BackButton } from "@/components/back-button";
-import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
-import { MultiFilter, type FilterDefinition, type ActiveFilter } from "@/components/multi-filter";
+import { useMemo, useState, useTransition } from "react";
 
 const SESSION_GRID_COLUMNS = "auto minmax(0,2.5fr) minmax(0,3fr) 5rem 4rem 4rem 3rem";
 
@@ -486,25 +486,45 @@ export function SessionDetailClient({
         )}
       </div>
 
-      {/* Tabs — hide Your Badges tab when closed or view-only */}
+      {/* Instruction box with animated switch button */}
       {showYourBadges && (
-        <div className="flex gap-1 rounded-lg bg-card p-1 border border-border">
-          <button
-            onClick={() => setActiveTab("your_badges")}
-            className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-              activeTab === "your_badges" ? "bg-accent text-white" : "text-muted hover:text-foreground"
-            }`}
-          >
-            Your Badges
-          </button>
-          <button
-            onClick={() => setActiveTab("group_badges")}
-            className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-              activeTab === "group_badges" ? "bg-accent text-white" : "text-muted hover:text-foreground"
-            }`}
-          >
-            Group Badges ({session.selections.length})
-          </button>
+        <div className="grid grid-cols-2 items-center gap-4 rounded-xl border border-highlight/20 bg-highlight/[0.06] px-6 py-4">
+          {activeTab === "your_badges" ? (
+            <>
+              <div>
+                <p className="text-xl font-bold text-foreground">Pick your badges!</p>
+                <p className="mt-1 text-sm text-highlight-hover">Tap any badge below to add it to your goals for this visit.</p>
+              </div>
+              <button
+                onClick={() => setActiveTab("group_badges")}
+                className="btn-glow group inline-flex w-full items-center justify-center gap-3 rounded-xl bg-gradient-to-r from-highlight to-pink-500 px-7 py-3.5 text-lg font-extrabold text-white transition-all"
+              >
+                Group Goals
+                {session.selections.length > 0 && (
+                  <span className="rounded-full bg-white/25 px-2.5 py-0.5 text-xs font-bold">{session.selections.length}</span>
+                )}
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setActiveTab("your_badges")}
+                className="btn-glow group inline-flex w-full items-center justify-center gap-3 rounded-xl bg-gradient-to-r from-pink-500 to-highlight px-7 py-3.5 text-lg font-extrabold text-white transition-all"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+                </svg>
+                Select Badges
+              </button>
+              <div className="text-right">
+                <p className="text-xl font-bold text-foreground">Group Goals</p>
+                <p className="mt-1 text-sm text-highlight-hover">Everyone&apos;s picks combined. Use the button to add yours!</p>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -609,7 +629,7 @@ export function SessionDetailClient({
           {session.selections.length === 0 ? (
             <div className="rounded-xl border border-border bg-card p-8 text-center">
               <p className="text-muted">No badges selected yet.</p>
-              {!viewOnlyMode && <p className="mt-1 text-sm text-muted">Switch to &quot;Your Badges&quot; to select badges for this session.</p>}
+              {!viewOnlyMode && <p className="mt-1 text-sm text-muted">Use the button above to select badges for this session.</p>}
             </div>
           ) : (
             <>
