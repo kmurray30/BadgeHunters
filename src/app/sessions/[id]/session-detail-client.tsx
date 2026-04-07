@@ -14,6 +14,7 @@ import {
   removeGhostMember,
 } from "@/app/actions/sessions";
 import { toggleBadgeCompletion } from "@/app/actions/badges";
+import { BackButton } from "@/components/back-button";
 
 const SESSION_GRID_COLUMNS = "auto minmax(0,2.5fr) minmax(0,3fr) 5rem 4rem 4rem 3rem";
 
@@ -306,13 +307,7 @@ export function SessionDetailClient({
         </div>
       )}
 
-      {/* Back button outside the card */}
-      <Link href="/sessions" className="inline-flex items-center gap-1 text-xs text-muted hover:text-foreground transition-colors">
-        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
-        Sessions
-      </Link>
+      <BackButton fallback="/sessions" label="Sessions" />
 
       {/* Session header */}
       <div className="rounded-xl border border-border bg-card p-6">
@@ -342,8 +337,11 @@ export function SessionDetailClient({
               <button
                 onClick={() => handleAction(() => completeSession(session.id))}
                 disabled={isPending}
-                className="rounded-full bg-warning/20 px-3 py-1 text-xs font-medium text-warning hover:bg-warning/30 transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning hover:bg-warning/25 hover:border-warning/60 transition-colors disabled:opacity-50"
               >
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
                 Complete
               </button>
             )}
@@ -355,7 +353,7 @@ export function SessionDetailClient({
           {session.members.map((member) => (
             <Link
               key={member.id}
-              href={`/players/${member.id}`}
+              href={`/players/${member.id}?from=${encodeURIComponent(`/sessions/${session.id}`)}`}
               className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium hover:opacity-80 transition-opacity ${
                 member.id === currentUserId ? "bg-accent/20 text-accent" : "bg-border text-foreground"
               }`}
@@ -536,15 +534,20 @@ export function SessionDetailClient({
                 <div key={badge.id}>
                   <div
                     onClick={() => toggleBadgeSelection(session.id, badge.id)}
-                    className={`group grid cursor-pointer select-none items-center gap-2 px-3 py-2 transition-colors hover:bg-card-hover ${
-                      isSelected ? "bg-accent/10 border-l-2 border-l-accent" : "border-l-2 border-l-transparent"
+                    className={`group grid cursor-pointer select-none items-center gap-2 px-3 py-2 transition-colors ${
+                      isSelected ? "bg-success/20 hover:bg-success/30" : "hover:bg-card-hover"
                     }`}
                     style={{ gridTemplateColumns: SESSION_GRID_COLUMNS }}
                   >
                     <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{badge.badgeNumber}</span>
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="truncate text-sm font-medium text-foreground">{badge.name}</span>
-                      {isSelected && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">selected</span>}
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <Link
+                        href={`/badges/${badge.id}`}
+                        onClick={(event) => event.stopPropagation()}
+                        className="min-w-0 truncate text-sm font-medium text-foreground hover:text-accent hover:underline"
+                      >
+                        {badge.name}
+                      </Link>
                       {badge.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>}
                       {badge.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
                     </div>
@@ -654,10 +657,15 @@ function GroupBadgesTable({
 
           return (
             <div key={entry.selection.badgeId}>
-              <Link href={`/badges/${entry.selection.badgeId}`} className="group grid items-center gap-2 px-3 py-2 transition-colors hover:bg-card-hover" style={{ gridTemplateColumns: SESSION_GRID_COLUMNS }}>
+              <div className="group grid items-center gap-2 px-3 py-2 transition-colors hover:bg-card-hover" style={{ gridTemplateColumns: SESSION_GRID_COLUMNS }}>
                 <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{entry.selection.badgeNumber}</span>
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="truncate text-sm font-medium text-foreground group-hover:text-accent transition-colors">{entry.selection.badgeName}</span>
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <Link
+                    href={`/badges/${entry.selection.badgeId}`}
+                    className="min-w-0 truncate text-sm font-medium text-foreground hover:text-accent hover:underline"
+                  >
+                    {entry.selection.badgeName}
+                  </Link>
                   {entry.selection.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>}
                   {fullBadge?.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
                 </div>
@@ -665,8 +673,9 @@ function GroupBadgesTable({
                 <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>
                 <span className={`min-w-0 text-center text-[11px] ${bucket === "lte_3" ? "text-blue-400" : bucket === "gte_5" ? "text-orange-400" : "text-muted"}`}>{playerCountLabel(bucket)}</span>
                 <span className="min-w-0 text-center text-[11px] text-success" title={selectorNames}>{selectorCount}</span>
-                <div className="flex justify-center" onClick={(event) => event.preventDefault()}>
+                <div className="flex justify-center">
                   <button
+                    type="button"
                     onClick={() => toggleBadgeCompletion(entry.selection.badgeId)}
                     className={`rounded p-0.5 transition-colors ${
                       isCompleted ? "text-success hover:text-success/70" : "text-border hover:text-muted"
@@ -678,7 +687,7 @@ function GroupBadgesTable({
                     </svg>
                   </button>
                 </div>
-              </Link>
+              </div>
               {blurb && (
                 <div className="bg-purple-500/5 px-3 py-1 text-[10px] text-purple-400 border-t border-purple-500/10">
                   {blurb}

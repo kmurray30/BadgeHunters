@@ -5,13 +5,20 @@ import { getRankColor, RANK_COLOR_HEX } from "@/lib/rank";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { RankPopup } from "@/components/rank-popup";
+import { BackButton } from "@/components/back-button";
+import { parseBackFromQuery } from "@/lib/back-navigation";
 
 interface Props {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string | string[] }>;
 }
 
-export default async function PlayerDetailPage({ params }: Props) {
+export default async function PlayerDetailPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const query = await searchParams;
+  const fromContext = parseBackFromQuery(query.from);
+  const backFallback = fromContext?.path ?? "/players";
+  const backLabel = fromContext?.label ?? "Players";
   const currentUser = await requireUser();
   const isolation = isolationFilter(currentUser);
 
@@ -52,9 +59,7 @@ export default async function PlayerDetailPage({ params }: Props) {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
-      <Link href="/players" className="text-sm text-muted hover:text-foreground transition-colors">
-        &larr; All players
-      </Link>
+      <BackButton fallback={backFallback} label={backLabel} />
 
       {/* Player header */}
       <div className="mt-4 rounded-xl border border-border bg-card p-6">

@@ -109,7 +109,7 @@ export default async function Home() {
             {otherPlayers.map((player) => (
               <Link
                 key={player.id}
-                href={`/players/${player.id}`}
+                href={`/players/${player.id}?from=${encodeURIComponent("/")}`}
                 className="flex items-center justify-between px-4 py-3 hover:bg-card-hover transition-colors"
               >
                 <span className="text-sm text-foreground">{getDisplayName(player)}</span>

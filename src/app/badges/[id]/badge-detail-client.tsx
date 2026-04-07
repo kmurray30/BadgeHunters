@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { BackButton } from "@/components/back-button";
 import {
   toggleBadgeCompletion,
   updateBadgeDifficulty,
@@ -144,9 +145,7 @@ export function BadgeDetailClient({
 
   return (
     <div className="space-y-6">
-      <Link href="/badges" className="text-sm text-muted hover:text-foreground transition-colors">
-        &larr; Back to badges
-      </Link>
+      <BackButton fallback="/badges" label="Badges" />
 
       {/* Badge header — no badge number */}
       <div className="rounded-xl border border-border bg-card p-6">

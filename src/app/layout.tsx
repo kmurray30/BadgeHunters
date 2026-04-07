@@ -16,6 +16,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Badge Hunters",
   description: "Activate badge planner for our crew",
+  // Pin icons to this app only. Omitting `icons` can leave stale merged metadata in dev
+  // (cached) that still references old absolute URLs from a previous layout version.
+  icons: {
+    icon: [{ url: "/favicon.ico", type: "image/x-icon" }],
+    shortcut: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
