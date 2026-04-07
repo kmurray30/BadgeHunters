@@ -69,7 +69,7 @@ export function NewSessionClient({ availableUsers, currentUserDisplayName }: Pro
         <div className="mt-3 space-y-2">
           {/* Current user — always included, shown as disabled */}
           <div
-            className="flex w-full items-center justify-between rounded-lg border border-accent/20 bg-accent/5 px-3 py-2 text-sm opacity-60 cursor-default"
+            className="flex w-full items-center justify-between rounded-lg bg-accent/5 px-3 py-2 text-sm opacity-50 cursor-default"
           >
             <span className="text-accent">{currentUserDisplayName}</span>
             <svg className="h-4 w-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

@@ -10,7 +10,7 @@ export default async function SessionsPage() {
 
   const sessions = await prisma.session.findMany({
     where: sessionFilter,
-    orderBy: { sessionDateLocal: "desc" },
+    orderBy: { createdAt: "desc" },
     include: {
       createdBy: {
         select: {
@@ -33,6 +33,10 @@ export default async function SessionsPage() {
         },
       },
       ghostMembers: true,
+      acknowledgements: {
+        where: { userId: user.id },
+        select: { needsReview: true },
+      },
       _count: {
         select: { selections: true },
       },
@@ -87,6 +91,9 @@ export default async function SessionsPage() {
                   <div>
                     <p className="font-medium text-foreground">
                       {session.title ?? new Date(session.sessionDateLocal).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+                      <span className="ml-2 text-xs font-normal text-muted">
+                        {session.createdAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                      </span>
                     </p>
                     <p className="mt-1 text-xs text-muted">
                       Created by {getDisplayName(session.createdBy)}
@@ -146,17 +153,20 @@ export default async function SessionsPage() {
                   <div>
                     <p className="text-sm font-medium text-foreground">
                       {session.title ?? new Date(session.sessionDateLocal).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+                      <span className="ml-2 text-xs font-normal text-muted">
+                        {session.createdAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                      </span>
                     </p>
                     <p className="text-xs text-muted">
                       {session.members.length} players &middot; {session._count.selections} badges selected
                     </p>
                   </div>
                   <span className={`rounded-full px-3 py-1 text-xs font-medium ${
-                    session.status === "completed_pending_ack"
+                    session.status === "completed_pending_ack" && session.acknowledgements[0]?.needsReview
                       ? "bg-warning/20 text-warning"
                       : "bg-border text-muted"
                   }`}>
-                    {session.status === "completed_pending_ack" ? "Pending Review" : "Closed"}
+                    {session.status === "completed_pending_ack" && session.acknowledgements[0]?.needsReview ? "Pending Review" : "Closed"}
                   </span>
                 </div>
               </Link>

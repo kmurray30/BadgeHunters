@@ -79,11 +79,39 @@ export async function addSessionMember(sessionId: string, userId: string) {
     },
   });
 
-  await prisma.sessionUserAcknowledgement.create({
+  await prisma.sessionUserAcknowledgement.upsert({
+    where: { sessionId_userId: { sessionId, userId } },
+    create: { sessionId, userId },
+    update: {},
+  });
+
+  revalidatePath(`/sessions/${sessionId}`);
+}
+
+/**
+ * Let a user join a session they're not already a member of.
+ * Per user request, allow self-joining.
+ */
+export async function joinSession(sessionId: string) {
+  const user = await requireUser();
+
+  const existing = await prisma.sessionMember.findUnique({
+    where: { sessionId_userId: { sessionId, userId: user.id } },
+  });
+  if (existing) return;
+
+  await prisma.sessionMember.create({
     data: {
       sessionId,
-      userId,
+      userId: user.id,
+      addedByUserId: user.id,
     },
+  });
+
+  await prisma.sessionUserAcknowledgement.upsert({
+    where: { sessionId_userId: { sessionId, userId: user.id } },
+    create: { sessionId, userId: user.id },
+    update: {},
   });
 
   revalidatePath(`/sessions/${sessionId}`);

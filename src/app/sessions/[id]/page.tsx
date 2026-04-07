@@ -53,8 +53,8 @@ export default async function SessionDetailPage({ params }: Props) {
 
   if (!session) notFound();
 
-  // Get all badges with completion status for session members
   const memberIds = session.members.map((member) => member.user.id);
+  const isMember = memberIds.includes(user.id);
 
   const allBadges = await prisma.badge.findMany({
     where: { active: true },
@@ -71,8 +71,29 @@ export default async function SessionDetailPage({ params }: Props) {
           personalDifficulty: true,
         },
       },
+      metaRules: {
+        where: { active: true },
+      },
     },
   });
+
+  // Fetch available users for "add member" UI (same-world, not already members)
+  const availableUsersForAdd = isMember
+    ? await prisma.user.findMany({
+        where: {
+          ...isolation,
+          isActive: true,
+          id: { notIn: memberIds },
+        },
+        select: {
+          id: true,
+          activatePlayerName: true,
+          realName: true,
+          displayNameMode: true,
+        },
+        orderBy: { activatePlayerName: "asc" },
+      })
+    : [];
 
   function getDisplayName(appUser: { displayNameMode: string; realName: string | null; activatePlayerName: string | null }) {
     return appUser.displayNameMode === "real_name"
@@ -120,6 +141,30 @@ export default async function SessionDetailPage({ params }: Props) {
       : null,
   };
 
+  // Build meta rule blurbs keyed by badgeId
+  const metaRuleBlurbs: Record<string, string> = {};
+  for (const badge of allBadges) {
+    if (!badge.isMetaBadge || badge.metaRules.length === 0) continue;
+    const blurbs: string[] = [];
+    for (const rule of badge.metaRules) {
+      const payload = rule.rulePayloadJson as Record<string, unknown>;
+      switch (rule.ruleType) {
+        case "time_window":
+          blurbs.push(`Active ${payload.start}–${payload.end}`);
+          break;
+        case "day_of_month":
+          blurbs.push(payload.match === "last_day_only" ? "Last day of month only" : `Days: ${(payload.days as number[]).join(", ")}`);
+          break;
+        case "unique_rank_colors":
+          blurbs.push(`Needs ${payload.min_distinct_colors} distinct rank colors in party`);
+          break;
+        default:
+          blurbs.push(`Special condition: ${rule.ruleType}`);
+      }
+    }
+    metaRuleBlurbs[badge.id] = blurbs.join(" · ");
+  }
+
   const serializedBadges = allBadges.map((badge) => ({
     id: badge.id,
     badgeNumber: badge.badgeNumber,
@@ -139,6 +184,11 @@ export default async function SessionDetailPage({ params }: Props) {
       .filter(Boolean) as string[],
   }));
 
+  const serializedAvailableUsers = availableUsersForAdd.map((appUser) => ({
+    id: appUser.id,
+    displayName: getDisplayName(appUser),
+  }));
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
       <SessionDetailClient
@@ -146,6 +196,9 @@ export default async function SessionDetailPage({ params }: Props) {
         allBadges={serializedBadges}
         currentUserId={user.id}
         currentUserRole={user.role}
+        isMember={isMember}
+        availableUsersForAdd={serializedAvailableUsers}
+        metaRuleBlurbs={metaRuleBlurbs}
       />
     </div>
   );

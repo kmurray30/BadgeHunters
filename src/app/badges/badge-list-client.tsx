@@ -299,19 +299,18 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
         {filteredAndSortedBadges.map((badge) => {
           const difficultyDisplay = getDifficultyDisplay(badge);
           return (
-            <div
+            <Link
               key={badge.id}
+              href={`/badges/${badge.id}`}
               className={`group grid grid-cols-[auto_2.5fr_3fr_5rem_4rem_4rem_3rem] items-center gap-2 px-3 py-2 transition-colors hover:bg-card-hover ${
                 badge.completedByCurrentUser ? "bg-success/[0.03]" : ""
               }`}
             >
-              {/* Badge number */}
               <span className="w-5 text-[10px] font-mono text-muted tabular-nums">
                 {badge.badgeNumber}
               </span>
 
-              {/* Name + tags */}
-              <Link href={`/badges/${badge.id}`} className="flex items-center gap-1.5 min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0">
                 <span className="truncate text-sm font-medium text-foreground group-hover:text-accent transition-colors">
                   {badge.name}
                 </span>
@@ -325,15 +324,11 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
                     meta
                   </span>
                 )}
-              </Link>
+              </div>
 
-              {/* Description */}
-              <span className="truncate text-xs text-muted">
-                {badge.description}
-              </span>
+              <span className="truncate text-xs text-muted">{badge.description}</span>
 
-              {/* Difficulty — click to rate */}
-              <div className="text-center">
+              <div className="text-center" onClick={(event) => event.preventDefault()}>
                 {editingDifficultyBadgeId === badge.id ? (
                   <select
                     autoFocus
@@ -362,7 +357,6 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
                 )}
               </div>
 
-              {/* Player count */}
               <span className={`text-center text-[11px] ${
                 badge.playerCountBucket === "lte_3" ? "text-blue-400" :
                 badge.playerCountBucket === "gte_5" ? "text-orange-400" : "text-muted"
@@ -370,13 +364,11 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
                 {playerCountLabel(badge.playerCountBucket)}
               </span>
 
-              {/* Completions count */}
               <span className="text-center text-[11px] text-muted">
                 {badge.totalCompletions > 0 ? badge.totalCompletions : "-"}
               </span>
 
-              {/* Completion toggle */}
-              <div className="flex justify-center">
+              <div className="flex justify-center" onClick={(event) => event.preventDefault()}>
                 <button
                   onClick={() => toggleBadgeCompletion(badge.id)}
                   className={`rounded p-0.5 transition-colors ${
@@ -391,7 +383,7 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
                   </svg>
                 </button>
               </div>
-            </div>
+            </Link>
           );
         })}
       </div>
