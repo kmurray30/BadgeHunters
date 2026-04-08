@@ -5,18 +5,24 @@ import { requireUser } from "@/lib/session-helpers";
 import { revalidatePath } from "next/cache";
 
 /**
- * Create a new session for today. Expires at 6am PST/PDT the following day.
+ * Create a new session. Expires at 6am PST/PDT the day after the session date.
+ * @param dateString - YYYY-MM-DD string for the session date (defaults to today in LA timezone)
  */
-export async function createSession(memberUserIds: string[], ghostNames: string[]) {
+export async function createSession(memberUserIds: string[], ghostNames: string[], dateString?: string) {
   const user = await requireUser();
 
-  // Session date = today in America/Los_Angeles
-  const nowLA = new Date(
-    new Date().toLocaleString("en-US", { timeZone: "America/Los_Angeles" })
-  );
-  const sessionDate = new Date(nowLA.getFullYear(), nowLA.getMonth(), nowLA.getDate());
+  let sessionDate: Date;
+  if (dateString) {
+    const [year, month, day] = dateString.split("-").map(Number);
+    sessionDate = new Date(year, month - 1, day);
+  } else {
+    const nowLA = new Date(
+      new Date().toLocaleString("en-US", { timeZone: "America/Los_Angeles" })
+    );
+    sessionDate = new Date(nowLA.getFullYear(), nowLA.getMonth(), nowLA.getDate());
+  }
 
-  // Expires at 6am PST/PDT the following day
+  // Expires at 6am the day after the SESSION date (not creation date)
   const expiresAt = new Date(sessionDate);
   expiresAt.setDate(expiresAt.getDate() + 1);
   expiresAt.setHours(6, 0, 0, 0);
@@ -256,6 +262,40 @@ export async function cancelSessionReview(sessionId: string) {
   const session = await prisma.session.findUnique({ where: { id: sessionId } });
   if (!session || session.status !== "completed_pending_ack") {
     throw new Error("Session is not in review mode");
+  }
+
+  await prisma.session.update({
+    where: { id: sessionId },
+    data: {
+      status: "active",
+      completedAt: null,
+      completedByUserId: null,
+    },
+  });
+
+  await prisma.sessionUserAcknowledgement.updateMany({
+    where: { sessionId },
+    data: {
+      needsReview: true,
+      acknowledgedAt: null,
+    },
+  });
+
+  revalidatePath(`/sessions/${sessionId}`);
+  revalidatePath("/sessions");
+}
+
+/**
+ * Revert a completed/closed session straight back to active.
+ * Resets all member acknowledgements so everyone is back to square one.
+ * Used for current-day "Re-open" — past-day editing is client-side only.
+ */
+export async function reopenSession(sessionId: string) {
+  await requireUser();
+
+  const session = await prisma.session.findUnique({ where: { id: sessionId } });
+  if (!session || (session.status !== "completed_pending_ack" && session.status !== "closed")) {
+    throw new Error("Session is not in a completed or closed state");
   }
 
   await prisma.session.update({

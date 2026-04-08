@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSession } from "@/app/actions/sessions";
 import Link from "next/link";
@@ -13,13 +13,50 @@ interface AvailableUser {
 interface Props {
   availableUsers: AvailableUser[];
   currentUserDisplayName: string;
+  defaultDate: string;
 }
 
-export function NewSessionClient({ availableUsers, currentUserDisplayName }: Props) {
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/**
+ * Produces a friendly label like "Today", "Tomorrow", "Wednesday", etc.
+ * Uses pure string math on YYYY-MM-DD strings to avoid any Date() timezone issues.
+ */
+function getFriendlyDateLabel(dateString: string, todayString: string): string {
+  // Parse both as [year, month, day] integers — no Date objects, no timezone drift
+  const [selY, selM, selD] = dateString.split("-").map(Number);
+  const [todY, todM, todD] = todayString.split("-").map(Number);
+
+  // Convert to day-count from a fixed epoch for diffing (good enough for ±year range)
+  function toDayCount(year: number, month: number, day: number): number {
+    // Simplified — accurate for diffs within a few years
+    return year * 365 + Math.floor(year / 4) + [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334][month - 1] + day;
+  }
+
+  const diffDays = toDayCount(selY, selM, selD) - toDayCount(todY, todM, todD);
+
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Tomorrow";
+  if (diffDays === -1) return "Yesterday";
+
+  if (diffDays > 1 && diffDays <= 6) {
+    // Get the day name using a known reference: Date with noon UTC to avoid timezone shift
+    const dayIndex = new Date(Date.UTC(selY, selM - 1, selD, 12)).getUTCDay();
+    return DAY_NAMES[dayIndex];
+  }
+
+  // Fallback: short formatted date (also timezone-safe via UTC)
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${monthNames[selM - 1]} ${selD}, ${selY}`;
+}
+
+export function NewSessionClient({ availableUsers, currentUserDisplayName, defaultDate }: Props) {
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [ghostNames, setGhostNames] = useState<string[]>([]);
   const [ghostInput, setGhostInput] = useState("");
+  const [sessionDate, setSessionDate] = useState(defaultDate);
   const [isCreating, setIsCreating] = useState(false);
+  const dateInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   function toggleMember(userId: string) {
@@ -44,7 +81,7 @@ export function NewSessionClient({ availableUsers, currentUserDisplayName }: Pro
   async function handleCreate() {
     setIsCreating(true);
     try {
-      const sessionId = await createSession(selectedMembers, ghostNames);
+      const sessionId = await createSession(selectedMembers, ghostNames, sessionDate);
       router.push(`/sessions/${sessionId}`);
     } catch {
       setIsCreating(false);
@@ -60,6 +97,28 @@ export function NewSessionClient({ availableUsers, currentUserDisplayName }: Pro
         <Link href="/sessions" className="text-sm text-muted hover:text-foreground">
           Cancel
         </Link>
+      </div>
+
+      {/* Session date — friendly label + native calendar picker */}
+      <div className="flex items-center gap-2">
+        <div className="rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground">
+          {getFriendlyDateLabel(sessionDate, defaultDate)}
+        </div>
+        <label className="rounded-lg border border-border bg-card p-2.5 text-muted hover:text-foreground hover:border-muted transition-colors cursor-pointer">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <input
+            ref={dateInputRef}
+            type="date"
+            value={sessionDate}
+            min={defaultDate}
+            onChange={(event) => { if (event.target.value) setSessionDate(event.target.value); }}
+            style={{ position: "absolute", width: "1px", height: "1px", padding: 0, margin: "-1px", overflow: "hidden", clipPath: "inset(50%)", border: 0 }}
+            tabIndex={-1}
+          />
+        </label>
+        <span className="text-xs text-muted">Set session date</span>
       </div>
 
       {/* Member selection */}

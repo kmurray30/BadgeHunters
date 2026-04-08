@@ -53,6 +53,7 @@ export default async function SessionDetailPage({ params }: Props) {
 
   if (!session) notFound();
 
+  const todayString = new Intl.DateTimeFormat("en-CA", { timeZone: "UTC" }).format(new Date());
   const memberIds = session.members.map((member) => member.user.id);
   const isMember = memberIds.includes(user.id);
 
@@ -107,6 +108,11 @@ export default async function SessionDetailPage({ params }: Props) {
     title: session.title,
     status: session.status,
     sessionDateLocal: session.sessionDateLocal.toISOString(),
+    sessionDateDisplay: session.sessionDateLocal.toLocaleDateString("en-US", {
+      timeZone: "UTC",
+      weekday: "long", month: "long", day: "numeric", year: "numeric",
+    }),
+    sessionDateLA: new Intl.DateTimeFormat("en-CA", { timeZone: "UTC" }).format(session.sessionDateLocal),
     expiresAt: session.expiresAt.toISOString(),
     completedAt: session.completedAt?.toISOString() ?? null,
     createdBy: { id: session.createdBy.id, displayName: getDisplayName(session.createdBy) },
@@ -206,6 +212,7 @@ export default async function SessionDetailPage({ params }: Props) {
         isMember={isMember}
         availableUsersForAdd={serializedAvailableUsers}
         metaRuleBlurbs={metaRuleBlurbs}
+        todayString={todayString}
       />
     </div>
   );

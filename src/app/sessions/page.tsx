@@ -10,7 +10,7 @@ export default async function SessionsPage() {
 
   const sessions = await prisma.session.findMany({
     where: sessionFilter,
-    orderBy: { createdAt: "desc" },
+    orderBy: { sessionDateLocal: "desc" },
     include: {
       createdBy: {
         select: {
@@ -61,6 +61,18 @@ export default async function SessionsPage() {
       : appUser.activatePlayerName ?? appUser.realName ?? "Unknown";
   }
 
+  function formatSessionDate(date: Date, format: "long" | "short"): string {
+    if (format === "long") {
+      return date.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric", year: "numeric" });
+    }
+    return date.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "long", month: "short", day: "numeric" });
+  }
+
+  function sessionDateStringLA(date: Date): string {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "UTC" }).format(date);
+  }
+
+  const todayString = new Intl.DateTimeFormat("en-CA", { timeZone: "UTC" }).format(new Date());
   const activeSessions = sessions.filter((session) => session.status === "active");
   const pastSessions = sessions.filter((session) => session.status !== "active");
 
@@ -90,11 +102,7 @@ export default async function SessionsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-medium text-foreground">
-                      {session.title ?? new Date(session.sessionDateLocal).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
-                      {" "}
-                      <span className="text-xs font-normal text-muted">
-                        {session.createdAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                      </span>
+                      {session.title ?? formatSessionDate(session.sessionDateLocal, "short")}
                     </p>
                     <p className="mt-1 text-xs text-muted">
                       Created by {getDisplayName(session.createdBy)}
@@ -104,9 +112,15 @@ export default async function SessionsPage() {
                     )}
                   </div>
                   <div className="text-right">
-                    <span className="rounded-full bg-success/20 px-3 py-1 text-xs font-medium text-success">
-                      Active
-                    </span>
+                    {sessionDateStringLA(session.sessionDateLocal) > todayString ? (
+                      <span className="rounded-full bg-blue-500/20 px-3 py-1 text-xs font-medium text-blue-400">
+                        Future
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-success/20 px-3 py-1 text-xs font-medium text-success">
+                        Active
+                      </span>
+                    )}
                     <p className="mt-1 text-xs text-muted">
                       {session.members.length} hunters + {session.ghostMembers.length} others
                     </p>
@@ -156,11 +170,7 @@ export default async function SessionsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-foreground">
-                      {session.title ?? new Date(session.sessionDateLocal).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
-                      {" "}
-                      <span className="text-xs font-normal text-muted">
-                        {session.createdAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                      </span>
+                      {session.title ?? formatSessionDate(session.sessionDateLocal, "short")}
                     </p>
                     <p className="text-xs text-muted">
                       {session.members.length} players &middot; {session._count.selections} badges selected

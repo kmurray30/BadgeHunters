@@ -10,6 +10,7 @@ import {
     joinSession,
     removeGhostMember,
     removeSessionMember,
+    reopenSession,
     toggleBadgeSelection,
 } from "@/app/actions/sessions";
 import { BackButton } from "@/components/back-button";
@@ -47,6 +48,8 @@ interface SessionData {
   title: string | null;
   status: string;
   sessionDateLocal: string;
+  sessionDateDisplay: string;
+  sessionDateLA: string;
   expiresAt: string;
   completedAt: string | null;
   createdBy: { id: string; displayName: string };
@@ -87,6 +90,7 @@ interface Props {
   isMember: boolean;
   availableUsersForAdd: AvailableUser[];
   metaRuleBlurbs: Record<string, string>;
+  todayString: string;
 }
 
 type TabMode = "your_badges" | "group_badges";
@@ -177,6 +181,7 @@ export function SessionDetailClient({
   isMember: initialIsMember,
   availableUsersForAdd,
   metaRuleBlurbs,
+  todayString,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -184,9 +189,25 @@ export function SessionDetailClient({
   const personallyDone =
     session.status === "closed" ||
     (session.status === "completed_pending_ack" && session.userAck && !session.userAck.needsReview);
+
+  // Past the 6am-next-day LA cutoff → edit mode. Before it → re-open to active.
+  // expiresAt is already set to 6am the day after the session date.
+  const isPastDate = Date.now() > new Date(session.expiresAt).getTime();
+
+  // Temporary client-side edit mode for past-date closed sessions.
+  // Not persisted — leaving the page reverts to the closed view.
+  const [isEditing, setIsEditing] = useState(false);
+  const effectivelyActive = session.status === "active" || isEditing;
+  // Editing is allowed when: active, in review (completed_pending_ack + needsReview), or in client edit mode.
+  // Closed (personallyDone + not editing) = read-only.
+  const canEdit = !personallyDone || isEditing;
   const showYourBadges = initialIsMember && !personallyDone && session.status === "active";
 
   const [activeTab, setActiveTab] = useState<TabMode>(showYourBadges ? "your_badges" : "group_badges");
+
+  // When showYourBadges turns off (e.g. session completed), fall back to group view
+  // so the badge list doesn't just vanish.
+  const displayTab = showYourBadges ? activeTab : "group_badges";
   const [showJoinPrompt, setShowJoinPrompt] = useState(!initialIsMember);
   const [viewOnlyMode, setViewOnlyMode] = useState(!initialIsMember);
   const [showAddMember, setShowAddMember] = useState(false);
@@ -371,9 +392,7 @@ export function SessionDetailClient({
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-xl font-bold text-foreground">
-              {session.title ?? new Date(session.sessionDateLocal).toLocaleDateString("en-US", {
-                weekday: "long", month: "long", day: "numeric", year: "numeric",
-              })}
+              {session.title ?? session.sessionDateDisplay}
               {" "}
               <span className="text-sm font-normal text-muted">(Created by {session.createdBy.displayName})</span>
             </h1>
@@ -382,14 +401,21 @@ export function SessionDetailClient({
             {viewOnlyMode && !showJoinPrompt && (
               <span className="rounded-full bg-border px-3 py-1 text-xs font-medium text-muted">Viewing</span>
             )}
-            <span className={`rounded-full px-3 py-1 text-xs font-medium ${
-              session.status === "active" ? "bg-success/20 text-success"
-                : personallyDone ? "bg-border text-muted"
+            {(() => {
+              const isFuture = session.status === "active" && session.sessionDateLA > todayString;
+              const label = isEditing ? "Editing"
+                : session.status === "active"
+                  ? (isFuture ? "Future" : "Active")
+                  : personallyDone ? "Closed"
+                  : session.status === "completed_pending_ack" ? "Review Pending"
+                  : "Closed";
+              const colorClass = isEditing ? "bg-accent/20 text-accent"
+                : isFuture ? "bg-blue-500/20 text-blue-400"
+                : session.status === "active" ? "bg-success/20 text-success"
                 : session.status === "completed_pending_ack" ? "bg-warning/20 text-warning"
-                : "bg-border text-muted"
-            }`}>
-              {session.status === "active" ? "Active" : personallyDone ? "Closed" : session.status === "completed_pending_ack" ? "Review Pending" : "Closed"}
-            </span>
+                : "bg-border text-muted";
+              return <span className={`rounded-full px-3 py-1 text-xs font-medium ${colorClass}`}>{label}</span>;
+            })()}
             
           </div>
         </div>
@@ -421,7 +447,7 @@ export function SessionDetailClient({
           ))}
           <span className="text-xs text-muted">= {displayPartySize} total</span>
 
-          {!viewOnlyMode && session.status === "active" && (
+          {!viewOnlyMode && effectivelyActive && (
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setShowAddMember(!showAddMember)}
@@ -440,6 +466,7 @@ export function SessionDetailClient({
             </div>
           )}
 
+          {/* Active session: "Review and Complete" */}
           {session.status === "active" && !viewOnlyMode && (
             <button
               onClick={() => handleAction(() => completeSession(session.id))}
@@ -452,10 +479,47 @@ export function SessionDetailClient({
               {isPending ? "Completing..." : "Review and Complete"}
             </button>
           )}
+
+          {/* Edit mode (past-date): "Done Editing" exits back to closed view */}
+          {isEditing && !viewOnlyMode && (
+            <button
+              onClick={() => setIsEditing(false)}
+              className="ml-auto inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-highlight to-pink-500 px-6 py-2.5 text-sm font-bold text-white shadow-[0_0_14px_rgba(217,70,239,0.25)] transition-all hover:shadow-[0_0_20px_rgba(217,70,239,0.4)] hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              Done Editing
+            </button>
+          )}
+
+          {/* Closed/acked: "Re-open" (current day) or "Edit" (past day) */}
+          {personallyDone && !isEditing && initialIsMember && !viewOnlyMode && (
+            <button
+              onClick={() => {
+                if (isPastDate) {
+                  setIsEditing(true);
+                } else {
+                  handleAction(() => reopenSession(session.id));
+                }
+              }}
+              disabled={isPending}
+              className="ml-auto inline-flex items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-5 py-2.5 text-sm font-medium text-accent hover:bg-accent/20 transition-colors disabled:opacity-50"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                {isPastDate ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Z" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" />
+                )}
+              </svg>
+              {isPending ? "Reopening..." : isPastDate ? "Edit" : "Re-open"}
+            </button>
+          )}
         </div>
 
         {/* Add member / ghost panel */}
-        {showAddMember && !viewOnlyMode && session.status === "active" && (
+        {showAddMember && !viewOnlyMode && effectivelyActive && (
           <div className="mt-2 space-y-2">
             {availableUsersForAdd.length > 0 && (
               <div className="flex flex-wrap gap-1">
@@ -562,7 +626,7 @@ export function SessionDetailClient({
       )}
 
       {/* ── Your Badges tab ── */}
-      {activeTab === "your_badges" && showYourBadges && (
+      {displayTab === "your_badges" && showYourBadges && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <MultiFilter
@@ -629,14 +693,15 @@ export function SessionDetailClient({
                     <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>
                     <span className={`min-w-0 text-center text-[11px] ${resolvePlayerCount(badge).color}`}>{resolvePlayerCount(badge).label}</span>
                     <span className="min-w-0 text-center text-[11px] text-success">{badge.otherUncompletedCount}/{memberCount - 1}</span>
-                    {/* Completion toggle — separate from session selection */}
+                    {/* Completion toggle — disabled when session is closed */}
                     <div className="flex justify-center" onClick={(event) => event.stopPropagation()}>
                       <button
-                        onClick={() => toggleBadgeCompletion(badge.id)}
+                        onClick={() => canEdit && toggleBadgeCompletion(badge.id)}
+                        disabled={!canEdit}
                         className={`flex h-6 w-6 items-center justify-center rounded border transition-colors ${
                           isCompleted ? "border-success bg-success/20 text-success hover:bg-success/30" : "border-border bg-background text-transparent hover:border-muted hover:text-muted"
-                        }`}
-                        title={isCompleted ? "Completed — click to undo" : "Mark completed"}
+                        } ${!canEdit ? "opacity-40 cursor-not-allowed pointer-events-none" : ""}`}
+                        title={!canEdit ? "Session is closed" : isCompleted ? "Completed — click to undo" : "Mark completed"}
                       >
                         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -663,7 +728,7 @@ export function SessionDetailClient({
       )}
 
       {/* ── Group Badges tab ── */}
-      {activeTab === "group_badges" && (
+      {displayTab === "group_badges" && (
         <div className="space-y-4">
           {session.selections.length === 0 ? (
             <div className="rounded-xl border border-border bg-card p-8 text-center">
@@ -675,13 +740,13 @@ export function SessionDetailClient({
               {groupPerVisit.length > 0 && (
                 <div>
                   <h3 className="mb-2 text-xs font-semibold text-accent uppercase tracking-wide">Per-Visit Badges</h3>
-                  <GroupBadgesTable entries={groupPerVisit} badgeLookup={badgeLookup} currentUserId={currentUserId} metaRuleBlurbs={metaRuleBlurbs} userSelectedBadgeIds={userSelectedBadgeIds} />
+                  <GroupBadgesTable entries={groupPerVisit} badgeLookup={badgeLookup} currentUserId={currentUserId} metaRuleBlurbs={metaRuleBlurbs} userSelectedBadgeIds={userSelectedBadgeIds} canEdit={canEdit} />
                 </div>
               )}
               {groupNormal.length > 0 && (
                 <div>
                   <h3 className="mb-2 text-xs font-semibold text-foreground uppercase tracking-wide">Standard Badges</h3>
-                  <GroupBadgesTable entries={groupNormal} badgeLookup={badgeLookup} currentUserId={currentUserId} metaRuleBlurbs={metaRuleBlurbs} userSelectedBadgeIds={userSelectedBadgeIds} />
+                  <GroupBadgesTable entries={groupNormal} badgeLookup={badgeLookup} currentUserId={currentUserId} metaRuleBlurbs={metaRuleBlurbs} userSelectedBadgeIds={userSelectedBadgeIds} canEdit={canEdit} />
                 </div>
               )}
             </>
@@ -700,12 +765,14 @@ function GroupBadgesTable({
   currentUserId,
   metaRuleBlurbs,
   userSelectedBadgeIds,
+  canEdit,
 }: {
   entries: { selection: Selection; selectors: { id: string; displayName: string }[] }[];
   badgeLookup: Map<string, BadgeData>;
   currentUserId: string;
   metaRuleBlurbs: Record<string, string>;
   userSelectedBadgeIds: Set<string>;
+  canEdit: boolean;
 }) {
   return (
     <>
@@ -759,11 +826,12 @@ function GroupBadgesTable({
                 <div className="flex justify-center">
                   <button
                     type="button"
-                    onClick={() => toggleBadgeCompletion(entry.selection.badgeId)}
+                    onClick={() => canEdit && toggleBadgeCompletion(entry.selection.badgeId)}
+                    disabled={!canEdit}
                     className={`flex h-6 w-6 items-center justify-center rounded border transition-colors ${
                       isCompleted ? "border-success bg-success/20 text-success hover:bg-success/30" : "border-border bg-background text-transparent hover:border-muted hover:text-muted"
-                    }`}
-                    title={isCompleted ? "Completed — click to undo" : "Mark completed"}
+                    } ${!canEdit ? "opacity-40 cursor-not-allowed pointer-events-none" : ""}`}
+                    title={!canEdit ? "Session is closed" : isCompleted ? "Completed — click to undo" : "Mark completed"}
                   >
                     <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />

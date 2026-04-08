@@ -31,11 +31,15 @@ export default async function NewSessionPage() {
       ? user.realName ?? user.activatePlayerName ?? "You"
       : user.activatePlayerName ?? user.realName ?? "You";
 
+  const now = new Date();
+  const todayString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
       <NewSessionClient
         availableUsers={serializedUsers}
         currentUserDisplayName={currentUserDisplayName}
+        defaultDate={todayString}
       />
     </div>
   );
