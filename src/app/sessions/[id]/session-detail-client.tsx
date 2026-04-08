@@ -14,14 +14,31 @@ import {
     toggleSessionBadgeCompletion,
 } from "@/app/actions/sessions";
 import { BackButton } from "@/components/back-button";
+import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type ColumnHeader } from "@/components/badge-table";
 import { MultiFilter, type ActiveFilter, type FilterDefinition } from "@/components/multi-filter";
 import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 
-const SESSION_GRID_COLUMNS = "auto minmax(0,2.5fr) minmax(0,3fr) 5rem 4rem 4rem 3rem";
-const YOUR_BADGES_GRID_COLUMNS = "auto minmax(0,2.5fr) minmax(0,3fr) 5rem 4rem 4rem";
+const YOUR_BADGES_COLUMNS: ColumnHeader[] = [
+  { label: "", width: "auto" },
+  { label: "Name", width: "minmax(0,2.5fr)" },
+  { label: "Description", width: "minmax(0,3fr)" },
+  { label: "Difficulty", width: "5rem", align: "center" },
+  { label: "Players", width: "4rem", align: "center" },
+  { label: "Need", width: "4rem", align: "center" },
+];
+
+const GROUP_BADGES_COLUMNS: ColumnHeader[] = [
+  { label: "", width: "auto" },
+  { label: "Name", width: "minmax(0,2.5fr)" },
+  { label: "Description", width: "minmax(0,3fr)" },
+  { label: "Difficulty", width: "5rem", align: "center" },
+  { label: "Players", width: "4rem", align: "center" },
+  { label: "Votes", width: "4rem", align: "center" },
+  { label: "Done", width: "3rem", align: "center", tooltip: "Mark as completed" },
+];
 
 interface SessionMember {
   id: string;
@@ -721,75 +738,59 @@ export function SessionDetailClient({
 
           <p className="text-[10px] text-muted">{yourBadgesList.length} badges</p>
 
-          {/* Table header */}
-          <div className="rounded-t-lg border border-border bg-card">
-            <div className="grid items-center gap-2 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted" style={{ gridTemplateColumns: YOUR_BADGES_GRID_COLUMNS }}>
-              <span className="w-5"></span>
-              <span>Name</span>
-              <span>Description</span>
-              <span className="text-center">Difficulty</span>
-              <span className="text-center">Players</span>
-              <span className="text-center">Need</span>
-            </div>
-          </div>
-          <div className="divide-y divide-border rounded-b-lg border-x border-b border-border">
-            {yourBadgesList.map((badge) => {
+          <BadgeTable
+            columns={YOUR_BADGES_COLUMNS}
+            rows={yourBadgesList.map((badge): BadgeTableRow => {
               const isSelected = userSelectedBadgeIds.has(badge.id);
               const isSessionCompleted = sessionCompletedSet.has(badge.id);
-              // Persistent completion (account-level) drives the green row shading.
-              // The Done checkbox reflects only session-specific completions.
-              const isPersistentlyCompleted = badge.memberCompletions.includes(currentUserId);
               const diffInfo = DIFFICULTY_LABELS[badge.defaultDifficulty] ?? DIFFICULTY_LABELS.unknown;
               const blurb = metaRuleBlurbs[badge.id];
-              // Green (completed) takes priority over blue (selected) for row background.
-              const rowBg = isPersistentlyCompleted
-                ? (suppressHover ? "bg-completed" : "bg-completed hover:bg-completed-hover")
+              // Green = completed in this session. Blue = selected. Green takes priority.
+              // suppressHover strips the hover variant so the list doesn't flash after reorder.
+              const rowClassName = isSessionCompleted
+                ? "bg-completed hover:bg-completed-hover"
                 : isSelected
                   ? (suppressHover ? "bg-selection" : "bg-selection hover:bg-selection-hover")
                   : "hover:bg-card-hover";
-              return (
-                <div key={badge.id}>
-                  <div
-                    onMouseDown={() => handleBadgeSelect(badge.id)}
-                    className={`group grid cursor-pointer select-none items-center gap-2 px-3 py-2 transition-colors ${rowBg}`}
-                    style={{ gridTemplateColumns: YOUR_BADGES_GRID_COLUMNS }}
-                  >
-                    <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{badge.badgeNumber}</span>
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <span className="min-w-0 truncate text-sm font-medium text-foreground">{badge.name}</span>
-                      <Link
-                        href={`/badges/${badge.id}`}
-                        onClick={(event) => event.stopPropagation()}
-                        className="shrink-0 text-muted hover:text-accent transition-colors"
-                        title="Badge info"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </Link>
-                      {badge.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>}
-                      {badge.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
-                    </div>
-                    <span className="min-w-0 truncate text-xs text-muted">{badge.description}</span>
-                    <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>
-                    <span className={`min-w-0 text-center text-[11px] ${resolvePlayerCount(badge).color}`}>{resolvePlayerCount(badge).label}</span>
-                    <span className="min-w-0 text-center text-[11px] text-success">{badge.otherUncompletedCount}/{memberCount - 1}</span>
+              return {
+                key: badge.id,
+                className: rowClassName,
+                onMouseDown: () => handleBadgeSelect(badge.id),
+                cells: [
+                  <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{badge.badgeNumber}</span>,
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span className="min-w-0 truncate text-sm font-medium text-foreground">{badge.name}</span>
+                    <Link
+                      href={`/badges/${badge.id}`}
+                      onClick={(event) => event.stopPropagation()}
+                      className="shrink-0 text-muted hover:text-accent transition-colors"
+                      title="Badge info"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </Link>
+                    {badge.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>}
+                    {badge.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
+                  </div>,
+                  <span className="min-w-0 truncate text-xs text-muted">{badge.description}</span>,
+                  <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
+                  <span className={`min-w-0 text-center text-[11px] ${resolvePlayerCount(badge).color}`}>{resolvePlayerCount(badge).label}</span>,
+                  <span className="min-w-0 text-center text-[11px] text-success">{badge.otherUncompletedCount}/{memberCount - 1}</span>,
+                ],
+                footer: blurb ? (
+                  <div className="bg-purple-500/5 px-3 py-1 text-[10px] text-purple-400 border-t border-purple-500/10">
+                    {blurb}
                   </div>
-                  {blurb && (
-                    <div className="bg-purple-500/5 px-3 py-1 text-[10px] text-purple-400 border-t border-purple-500/10">
-                      {blurb}
-                    </div>
-                  )}
-                </div>
-              );
+                ) : undefined,
+              };
             })}
-          </div>
-
-          {yourBadgesList.length === 0 && (
-            <div className="py-8 text-center text-muted">
-              <p className="text-sm">No badges match your filters.</p>
-            </div>
-          )}
+            emptyState={
+              <div className="py-8 text-center text-muted">
+                <p className="text-sm">No badges match your filters.</p>
+              </div>
+            }
+          />
         </div>
       )}
 
@@ -806,13 +807,19 @@ export function SessionDetailClient({
               {groupPerVisit.length > 0 && (
                 <div>
                   <h3 className="mb-2 text-xs font-semibold text-accent uppercase tracking-wide">Per-Visit Badges</h3>
-                  <GroupBadgesTable entries={groupPerVisit} badgeLookup={badgeLookup} currentUserId={currentUserId} metaRuleBlurbs={metaRuleBlurbs} userSelectedBadgeIds={userSelectedBadgeIds} canEdit={canEdit} sessionCompletedSet={sessionCompletedSet} onSessionCompletion={handleSessionCompletion} />
+                  <BadgeTable
+                    columns={GROUP_BADGES_COLUMNS}
+                    rows={buildGroupBadgeRows(groupPerVisit, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, sessionCompletedSet, canEdit, handleSessionCompletion)}
+                  />
                 </div>
               )}
               {groupNormal.length > 0 && (
                 <div>
                   <h3 className="mb-2 text-xs font-semibold text-foreground uppercase tracking-wide">Standard Badges</h3>
-                  <GroupBadgesTable entries={groupNormal} badgeLookup={badgeLookup} currentUserId={currentUserId} metaRuleBlurbs={metaRuleBlurbs} userSelectedBadgeIds={userSelectedBadgeIds} canEdit={canEdit} sessionCompletedSet={sessionCompletedSet} onSessionCompletion={handleSessionCompletion} />
+                  <BadgeTable
+                    columns={GROUP_BADGES_COLUMNS}
+                    rows={buildGroupBadgeRows(groupNormal, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, sessionCompletedSet, canEdit, handleSessionCompletion)}
+                  />
                 </div>
               )}
             </>
@@ -823,106 +830,70 @@ export function SessionDetailClient({
   );
 }
 
-/* ─── Group Badges table ─── */
+/* ─── Group Badges row builder ─── */
 
-function GroupBadgesTable({
-  entries,
-  badgeLookup,
-  currentUserId,
-  metaRuleBlurbs,
-  userSelectedBadgeIds,
-  canEdit,
-  sessionCompletedSet,
-  onSessionCompletion,
-}: {
-  entries: { selection: Selection; selectors: { id: string; displayName: string }[] }[];
-  badgeLookup: Map<string, BadgeData>;
-  currentUserId: string;
-  metaRuleBlurbs: Record<string, string>;
-  userSelectedBadgeIds: Set<string>;
-  canEdit: boolean;
-  sessionCompletedSet: Set<string>;
-  onSessionCompletion: (badgeId: string, badgeName: string) => void;
-}) {
-  return (
-    <>
-      <div className="rounded-t-lg border border-border bg-card">
-        <div className="grid items-center gap-2 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted" style={{ gridTemplateColumns: SESSION_GRID_COLUMNS }}>
-          <span className="w-5"></span>
-          <span>Name</span>
-          <span>Description</span>
-          <span className="text-center">Difficulty</span>
-          <span className="text-center">Players</span>
-          <span className="text-center">Votes</span>
-          <span className="text-center" title="Mark as completed">Done</span>
+function buildGroupBadgeRows(
+  entries: { selection: Selection; selectors: { id: string; displayName: string }[] }[],
+  badgeLookup: Map<string, BadgeData>,
+  currentUserId: string,
+  metaRuleBlurbs: Record<string, string>,
+  userSelectedBadgeIds: Set<string>,
+  sessionCompletedSet: Set<string>,
+  canEdit: boolean,
+  onSessionCompletion: (badgeId: string, badgeName: string) => void,
+): BadgeTableRow[] {
+  return entries.map((entry) => {
+    const fullBadge = badgeLookup.get(entry.selection.badgeId);
+    const diffKey = fullBadge?.defaultDifficulty ?? "unknown";
+    const diffInfo = DIFFICULTY_LABELS[diffKey] ?? DIFFICULTY_LABELS.unknown;
+    const playerCountResolved = fullBadge ? resolvePlayerCount(fullBadge) : { bucket: "none", label: "Any", color: "text-muted" };
+    const blurb = metaRuleBlurbs[entry.selection.badgeId];
+    const selectorNames = entry.selectors.map((selector) => selector.displayName).join(", ");
+    const selectorCount = entry.selectors.length;
+    const isSessionCompleted = sessionCompletedSet.has(entry.selection.badgeId);
+    const isUserSelected = userSelectedBadgeIds.has(entry.selection.badgeId);
+    // Green = completed in this session. Blue = selected by you. Green takes priority.
+    const rowClassName = isSessionCompleted
+      ? "bg-completed hover:bg-completed-hover"
+      : isUserSelected
+        ? "bg-selection hover:bg-selection-hover"
+        : "hover:bg-card-hover";
+
+    return {
+      key: entry.selection.badgeId,
+      className: rowClassName,
+      cells: [
+        <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{entry.selection.badgeNumber}</span>,
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="min-w-0 truncate text-sm font-medium text-foreground">{entry.selection.badgeName}</span>
+          <Link
+            href={`/badges/${entry.selection.badgeId}`}
+            className="shrink-0 text-muted hover:text-accent transition-colors"
+            title="Badge info"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </Link>
+          {entry.selection.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>}
+          {fullBadge?.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
+        </div>,
+        <span className="min-w-0 truncate text-xs text-muted">{entry.selection.badgeDescription}</span>,
+        <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
+        <span className={`min-w-0 text-center text-[11px] ${playerCountResolved.color}`}>{playerCountResolved.label}</span>,
+        <span className="min-w-0 text-center text-[11px] text-success" title={selectorNames}>{selectorCount}</span>,
+        <BadgeCheckbox
+          checked={isSessionCompleted}
+          disabled={!canEdit}
+          title={!canEdit ? "Session is closed" : isSessionCompleted ? "Completed this session — click to undo" : "Mark completed in this session"}
+          onClick={() => onSessionCompletion(entry.selection.badgeId, entry.selection.badgeName)}
+        />,
+      ],
+      footer: blurb ? (
+        <div className="bg-purple-500/5 px-3 py-1 text-[10px] text-purple-400 border-t border-purple-500/10">
+          {blurb}
         </div>
-      </div>
-      <div className="divide-y divide-border rounded-b-lg border-x border-b border-border">
-        {entries.map((entry) => {
-          const fullBadge = badgeLookup.get(entry.selection.badgeId);
-          const diffKey = fullBadge?.defaultDifficulty ?? "unknown";
-          const diffInfo = DIFFICULTY_LABELS[diffKey] ?? DIFFICULTY_LABELS.unknown;
-          const playerCountResolved = fullBadge ? resolvePlayerCount(fullBadge) : { bucket: "none", label: "Any", color: "text-muted" };
-          const blurb = metaRuleBlurbs[entry.selection.badgeId];
-          const selectorNames = entry.selectors.map((selector) => selector.displayName).join(", ");
-          const selectorCount = entry.selectors.length;
-          const isSessionCompleted = sessionCompletedSet.has(entry.selection.badgeId);
-          const isPersistentlyCompleted = fullBadge?.memberCompletions.includes(currentUserId) ?? false;
-          const isUserSelected = userSelectedBadgeIds.has(entry.selection.badgeId);
-          // Green (completed) takes priority over blue (selected).
-          const rowBg = isPersistentlyCompleted
-            ? "bg-completed hover:bg-completed-hover"
-            : isUserSelected
-              ? "bg-selection hover:bg-selection-hover"
-              : "hover:bg-card-hover";
-
-          return (
-            <div key={entry.selection.badgeId}>
-              <div className={`group grid items-center gap-2 px-3 py-2 transition-colors ${rowBg}`} style={{ gridTemplateColumns: SESSION_GRID_COLUMNS }}>
-                <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{entry.selection.badgeNumber}</span>
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <span className="min-w-0 truncate text-sm font-medium text-foreground">{entry.selection.badgeName}</span>
-                  <Link
-                    href={`/badges/${entry.selection.badgeId}`}
-                    className="shrink-0 text-muted hover:text-accent transition-colors"
-                    title="Badge info"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </Link>
-                  {entry.selection.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>}
-                  {fullBadge?.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
-                </div>
-                <span className="min-w-0 truncate text-xs text-muted">{entry.selection.badgeDescription}</span>
-                <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>
-                <span className={`min-w-0 text-center text-[11px] ${playerCountResolved.color}`}>{playerCountResolved.label}</span>
-                <span className="min-w-0 text-center text-[11px] text-success" title={selectorNames}>{selectorCount}</span>
-                <div className="flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => onSessionCompletion(entry.selection.badgeId, entry.selection.badgeName)}
-                    disabled={!canEdit}
-                    className={`flex h-6 w-6 items-center justify-center rounded border transition-colors ${
-                      isSessionCompleted ? "border-success bg-success/20 text-success hover:bg-success/30" : "border-border bg-background text-transparent hover:border-muted hover:text-muted"
-                    } ${!canEdit ? "opacity-40 cursor-not-allowed pointer-events-none" : ""}`}
-                    title={!canEdit ? "Session is closed" : isSessionCompleted ? "Completed this session — click to undo" : "Mark completed in this session"}
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              {blurb && (
-                <div className="bg-purple-500/5 px-3 py-1 text-[10px] text-purple-400 border-t border-purple-500/10">
-                  {blurb}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
+      ) : undefined,
+    };
+  });
 }

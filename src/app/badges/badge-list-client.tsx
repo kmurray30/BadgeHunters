@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import Link from "next/link";
 import { toggleBadgeCompletion } from "@/app/actions/badges";
+import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type ColumnHeader } from "@/components/badge-table";
+import { MultiFilter, type ActiveFilter, type FilterDefinition } from "@/components/multi-filter";
 import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
-import { MultiFilter, type FilterDefinition, type ActiveFilter } from "@/components/multi-filter";
+import { useMemo, useState } from "react";
 
 interface BadgeUser {
   id: string;
@@ -47,7 +47,14 @@ const DIFFICULTY_OPTIONS: { value: string; label: string; color: string }[] = [
   { value: "unknown", label: "???", color: "text-muted" },
 ];
 
-const BADGE_GRID_COLUMNS = "auto minmax(0,2.5fr) minmax(0,3fr) 5rem 4rem 3.5rem";
+const BADGE_TABLE_COLUMNS: ColumnHeader[] = [
+  { label: "", width: "auto" },
+  { label: "Name", width: "minmax(0,2.5fr)" },
+  { label: "Description", width: "minmax(0,3fr)" },
+  { label: "Difficulty", width: "5rem", align: "center" },
+  { label: "Players", width: "4rem", align: "center" },
+  { label: "Done", width: "3.5rem", align: "center" },
+];
 
 const SORT_FIELDS: SortField[] = [
   { value: "difficulty", label: "Difficulty" },
@@ -307,35 +314,19 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
         {filteredAndSortedBadges.length} of {badges.length}
       </p>
 
-      {/* Table header */}
-      <div className="rounded-t-lg border border-border bg-card">
-        <div className="grid items-center gap-2 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted" style={{ gridTemplateColumns: BADGE_GRID_COLUMNS }}>
-          <span className="w-5"></span>
-          <span>Name</span>
-          <span>Description</span>
-          <span className="text-center">Difficulty</span>
-          <span className="text-center">Players</span>
-          <span className="text-center">Done</span>
-        </div>
-      </div>
-
-      {/* Badge rows */}
-      <div className="divide-y divide-border rounded-b-lg border-x border-b border-border">
-        {filteredAndSortedBadges.map((badge) => {
+      <BadgeTable
+        columns={BADGE_TABLE_COLUMNS}
+        rows={filteredAndSortedBadges.map((badge): BadgeTableRow => {
           const difficultyDisplay = getDifficultyDisplay(badge);
-          return (
-            <Link
-              key={badge.id}
-              href={`/badges/${badge.id}`}
-              className={`group grid items-center gap-2 px-3 py-2 transition-colors ${
-                badge.completedByCurrentUser ? "bg-completed hover:bg-completed-hover" : "hover:bg-card-hover"
-              }`}
-              style={{ gridTemplateColumns: BADGE_GRID_COLUMNS }}
-            >
-              <span className="w-5 text-[10px] font-mono text-muted tabular-nums">
-                {badge.badgeNumber}
-              </span>
-
+          const playerCount = getPlayerCountDisplay(badge);
+          return {
+            key: badge.id,
+            href: `/badges/${badge.id}`,
+            className: badge.completedByCurrentUser
+              ? "bg-completed hover:bg-completed-hover"
+              : "hover:bg-card-hover",
+            cells: [
+              <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{badge.badgeNumber}</span>,
               <div className="flex items-center gap-1.5 min-w-0">
                 <span className="truncate text-sm font-medium text-foreground group-hover:text-accent transition-colors">
                   {badge.name}
@@ -346,44 +337,30 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
                 {badge.isMetaBadge && (
                   <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>
                 )}
-              </div>
-
-              <span className="min-w-0 truncate text-xs text-muted">{badge.description}</span>
-
+              </div>,
+              <span className="min-w-0 truncate text-xs text-muted">{badge.description}</span>,
               <span className={`min-w-0 text-center text-[11px] font-medium ${difficultyDisplay.color}`}>
                 {difficultyDisplay.label}
-              </span>
-
-              <span className={`min-w-0 text-center text-[11px] ${getPlayerCountDisplay(badge).color}`}>
-                {getPlayerCountDisplay(badge).label}
-              </span>
-
-              <div className="flex justify-center" onClick={(event) => event.preventDefault()}>
-                <button
-                  onClick={() => toggleBadgeCompletion(badge.id)}
-                  className={`flex h-6 w-6 items-center justify-center rounded border transition-colors ${
-                    badge.completedByCurrentUser
-                      ? "border-success bg-success/20 text-success hover:bg-success/30"
-                      : "border-border bg-background text-transparent hover:border-muted hover:text-muted"
-                  }`}
-                  title={badge.completedByCurrentUser ? "Mark incomplete" : "Mark complete"}
-                >
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                </button>
-              </div>
-            </Link>
-          );
+              </span>,
+              <span className={`min-w-0 text-center text-[11px] ${playerCount.color}`}>
+                {playerCount.label}
+              </span>,
+              <BadgeCheckbox
+                checked={badge.completedByCurrentUser}
+                title={badge.completedByCurrentUser ? "Mark incomplete" : "Mark complete"}
+                onClick={() => toggleBadgeCompletion(badge.id)}
+                preventLinkNavigation
+              />,
+            ],
+          };
         })}
-      </div>
-
-      {filteredAndSortedBadges.length === 0 && (
-        <div className="py-12 text-center text-muted">
-          <p className="text-lg font-medium">No badges match your filters</p>
-          <p className="mt-1 text-sm">Try adjusting your search or filter criteria.</p>
-        </div>
-      )}
+        emptyState={
+          <div className="py-12 text-center text-muted">
+            <p className="text-lg font-medium">No badges match your filters</p>
+            <p className="mt-1 text-sm">Try adjusting your search or filter criteria.</p>
+          </div>
+        }
+      />
     </div>
   );
 }
