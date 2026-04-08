@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 export default async function LoginPage() {
   const session = await auth();
   if (session?.user) {
-    redirect("/badges");
+    redirect("/");
   }
 
   const cookieStore = await cookies();

@@ -161,7 +161,7 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
       });
 
       if (response.ok) {
-        router.push("/badges");
+        router.push("/");
         router.refresh();
       }
     } catch {
@@ -186,7 +186,7 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
         {/* Google OAuth */}
         <div className="rounded-xl border border-border bg-card p-6">
           <button
-            onClick={() => signIn("google", { callbackUrl: "/badges" })}
+            onClick={() => signIn("google", { callbackUrl: "/" })}
             className="flex w-full items-center justify-center gap-3 rounded-lg bg-white px-4 py-3 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50 transition-colors"
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -212,6 +212,7 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
         </div>
 
         {/* Admin mode section */}
+        {(adminMode || showAdminEntry) && (
         <div className="rounded-xl border border-border bg-card p-6">
           {adminMode ? (
             <div className="space-y-4">
@@ -346,57 +347,59 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
                 </div>
               )}
             </div>
-          ) : (
+          ) : showAdminEntry ? (
             <div className="space-y-3">
-              {showAdminEntry ? (
-                <>
-                  <label className="text-xs font-medium text-muted">
-                    Admin Password
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="password"
-                      value={adminPassword}
-                      onChange={(event) => setAdminPassword(event.target.value)}
-                      onKeyDown={(event) =>
-                        event.key === "Enter" && handleActivateAdmin()
-                      }
-                      placeholder="Enter admin password..."
-                      className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
-                    />
-                    <button
-                      onClick={handleActivateAdmin}
-                      disabled={isLoading}
-                      className="rounded-lg bg-warning/20 px-4 py-2 text-sm font-medium text-warning hover:bg-warning/30 transition-colors disabled:opacity-50"
-                    >
-                      Activate
-                    </button>
-                  </div>
-                  {adminError && (
-                    <p className="text-xs text-danger">{adminError}</p>
-                  )}
-                  <button
-                    onClick={() => {
-                      setShowAdminEntry(false);
-                      setAdminPassword("");
-                      setAdminError("");
-                    }}
-                    className="text-xs text-muted hover:text-foreground transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </>
-              ) : (
+              <label className="text-xs font-medium text-muted">
+                Admin Password
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={adminPassword}
+                  onChange={(event) => setAdminPassword(event.target.value)}
+                  onKeyDown={(event) =>
+                    event.key === "Enter" && handleActivateAdmin()
+                  }
+                  placeholder="Enter admin password..."
+                  className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+                />
                 <button
-                  onClick={() => setShowAdminEntry(true)}
-                  className="w-full text-center text-xs text-muted hover:text-foreground transition-colors"
+                  onClick={handleActivateAdmin}
+                  disabled={isLoading}
+                  className="rounded-lg bg-warning/20 px-4 py-2 text-sm font-medium text-warning hover:bg-warning/30 transition-colors disabled:opacity-50"
                 >
-                  Enter Admin Mode
+                  Activate
                 </button>
+              </div>
+              {adminError && (
+                <p className="text-xs text-danger">{adminError}</p>
               )}
+              <button
+                onClick={() => {
+                  setShowAdminEntry(false);
+                  setAdminPassword("");
+                  setAdminError("");
+                }}
+                className="text-xs text-muted hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
             </div>
-          )}
+          ) : null}
         </div>
+        )}
+
+        {/* Collapsed admin entry — tiny, outside the card */}
+        {!adminMode && !showAdminEntry && (
+          <div className="mt-2 text-center">
+            <button
+              onClick={() => setShowAdminEntry(true)}
+              className="text-[10px] text-muted/30 hover:text-muted/60 transition-colors"
+            >
+              admin
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

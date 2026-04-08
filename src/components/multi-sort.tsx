@@ -6,6 +6,8 @@ import { CustomSelect } from "./custom-select";
 export interface SortField {
   value: string;
   label: string;
+  /** Tooltip shown when hovering this option in the dropdown */
+  tooltip?: string;
 }
 
 export interface SortCriterion {

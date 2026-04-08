@@ -99,6 +99,9 @@ export default async function SessionsPage() {
                     <p className="mt-1 text-xs text-muted">
                       Created by {getDisplayName(session.createdBy)}
                     </p>
+                    {session.members.some((member) => member.user.id === user.id) && (
+                      <p className="mt-0.5 text-[11px] font-medium text-success">You are in this session</p>
+                    )}
                   </div>
                   <div className="text-right">
                     <span className="rounded-full bg-success/20 px-3 py-1 text-xs font-medium text-success">
@@ -162,6 +165,9 @@ export default async function SessionsPage() {
                     <p className="text-xs text-muted">
                       {session.members.length} players &middot; {session._count.selections} badges selected
                     </p>
+                    {session.members.some((member) => member.user.id === user.id) && (
+                      <p className="mt-0.5 text-[11px] font-medium text-success">You are in this session</p>
+                    )}
                   </div>
                   <span className={`rounded-full px-3 py-1 text-xs font-medium ${
                     session.status === "completed_pending_ack" && session.acknowledgements[0]?.needsReview

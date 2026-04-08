@@ -50,9 +50,9 @@ const DIFFICULTY_OPTIONS: { value: string; label: string; color: string }[] = [
 const BADGE_GRID_COLUMNS = "auto minmax(0,2.5fr) minmax(0,3fr) 5rem 4rem 3.5rem";
 
 const SORT_FIELDS: SortField[] = [
-  { value: "number", label: "Badge #" },
-  { value: "name", label: "Name" },
   { value: "difficulty", label: "Difficulty" },
+  { value: "name", label: "Name" },
+  { value: "number", label: "Badge #", tooltip: "The order in which the badges appear in the Activate terminal" },
   { value: "completions", label: "Completions" },
   { value: "players", label: "Player count" },
 ];
@@ -143,9 +143,11 @@ function getPlayerCountDisplay(badge: BadgeData): { bucket: string; label: strin
 
 export function BadgeListClient({ badges, currentUserId, currentUserRole, allUsers }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
+  const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([
+    { key: "completion", value: "not_completed" },
+  ]);
   const [sortCriteria, setSortCriteria] = useState<SortCriterion[]>([
-    { field: "number", ascending: true },
+    { field: "difficulty", ascending: true },
   ]);
 
   const allRooms = useMemo(() => {
@@ -175,7 +177,6 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
         { value: "all", label: "Any # players" },
         { value: "lte_3", label: "≤3 players" },
         { value: "gte_5", label: "5+ players" },
-        { value: "none", label: "No pref" },
       ]},
       { key: "type", label: "Type", options: [
         { value: "all", label: "All types" },
@@ -326,8 +327,8 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
             <Link
               key={badge.id}
               href={`/badges/${badge.id}`}
-              className={`group grid items-center gap-2 px-3 py-2 transition-colors hover:bg-card-hover ${
-                badge.completedByCurrentUser ? "bg-success/[0.06]" : ""
+              className={`group grid items-center gap-2 px-3 py-2 transition-colors ${
+                badge.completedByCurrentUser ? "bg-completed hover:bg-completed-hover" : "hover:bg-card-hover"
               }`}
               style={{ gridTemplateColumns: BADGE_GRID_COLUMNS }}
             >
@@ -360,14 +361,14 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
               <div className="flex justify-center" onClick={(event) => event.preventDefault()}>
                 <button
                   onClick={() => toggleBadgeCompletion(badge.id)}
-                  className={`rounded p-0.5 transition-colors ${
+                  className={`flex h-6 w-6 items-center justify-center rounded border transition-colors ${
                     badge.completedByCurrentUser
-                      ? "text-success hover:text-success/70"
-                      : "text-border hover:text-muted"
+                      ? "border-success bg-success/20 text-success hover:bg-success/30"
+                      : "border-border bg-background text-transparent hover:border-muted hover:text-muted"
                   }`}
                   title={badge.completedByCurrentUser ? "Mark incomplete" : "Mark complete"}
                 >
-                  <svg className="h-4 w-4" fill={badge.completedByCurrentUser ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                 </button>

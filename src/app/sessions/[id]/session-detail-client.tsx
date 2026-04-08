@@ -2,21 +2,22 @@
 
 import { toggleBadgeCompletion } from "@/app/actions/badges";
 import {
-  acknowledgeSession,
-  addGhostMember,
-  addSessionMember,
-  completeSession,
-  joinSession,
-  removeGhostMember,
-  removeSessionMember,
-  toggleBadgeSelection,
+    acknowledgeSession,
+    addGhostMember,
+    addSessionMember,
+    cancelSessionReview,
+    completeSession,
+    joinSession,
+    removeGhostMember,
+    removeSessionMember,
+    toggleBadgeSelection,
 } from "@/app/actions/sessions";
 import { BackButton } from "@/components/back-button";
 import { MultiFilter, type ActiveFilter, type FilterDefinition } from "@/components/multi-filter";
 import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 
 const SESSION_GRID_COLUMNS = "auto minmax(0,2.5fr) minmax(0,3fr) 5rem 4rem 4rem 3rem";
 
@@ -192,6 +193,19 @@ export function SessionDetailClient({
   const [ghostNameInput, setGhostNameInput] = useState("");
   const [editingParty, setEditingParty] = useState(false);
 
+  // Brief hover suppression after badge selection causes list reorder
+  const [suppressHover, setSuppressHover] = useState(false);
+  const handleBadgeSelect = useCallback((badgeId: string) => {
+    setSuppressHover(true);
+    toggleBadgeSelection(session.id, badgeId);
+  }, [session.id]);
+  useEffect(() => {
+    if (!suppressHover) return;
+    const handler = () => setSuppressHover(false);
+    window.addEventListener("mousemove", handler, { once: true });
+    return () => window.removeEventListener("mousemove", handler);
+  }, [suppressHover]);
+
   const [yourBadgesSearch, setYourBadgesSearch] = useState("");
   const [yourBadgesFilters, setYourBadgesFilters] = useState<ActiveFilter[]>([]);
   const [yourBadgesSortCriteria, setYourBadgesSortCriteria] = useState<SortCriterion[]>([
@@ -248,6 +262,10 @@ export function SessionDetailClient({
     });
   }
 
+  const userSelectedBadgeIds = useMemo(() => new Set(
+    session.selections.filter((selection) => selection.selectedBy.id === currentUserId).map((selection) => selection.badgeId)
+  ), [session.selections, currentUserId]);
+
   const yourBadgesList = useMemo(() => {
     if (viewOnlyMode) return [];
 
@@ -278,6 +296,11 @@ export function SessionDetailClient({
     else if (typeVal === "normal") list = list.filter((badge) => !badge.isPerVisit);
 
     list.sort((badgeA, badgeB) => {
+      // Selected badges always bubble to the top
+      const aSelected = userSelectedBadgeIds.has(badgeA.id) ? 0 : 1;
+      const bSelected = userSelectedBadgeIds.has(badgeB.id) ? 0 : 1;
+      if (aSelected !== bSelected) return aSelected - bSelected;
+
       for (const criterion of yourBadgesSortCriteria) {
         let comparison = 0;
         switch (criterion.field) {
@@ -293,11 +316,8 @@ export function SessionDetailClient({
     });
 
     return list;
-  }, [allBadges, currentUserId, otherRealMemberIds, viewOnlyMode, yourBadgesSearch, yourBadgesFilters, yourBadgesSortCriteria]);
+  }, [allBadges, currentUserId, otherRealMemberIds, viewOnlyMode, yourBadgesSearch, yourBadgesFilters, yourBadgesSortCriteria, userSelectedBadgeIds]);
 
-  const userSelectedBadgeIds = new Set(
-    session.selections.filter((selection) => selection.selectedBy.id === currentUserId).map((selection) => selection.badgeId)
-  );
 
   const badgeLookup = useMemo(() => {
     const lookup = new Map<string, BadgeData>();
@@ -370,18 +390,7 @@ export function SessionDetailClient({
             }`}>
               {session.status === "active" ? "Active" : personallyDone ? "Closed" : session.status === "completed_pending_ack" ? "Review Pending" : "Closed"}
             </span>
-            {session.status === "active" && !viewOnlyMode && (
-              <button
-                onClick={() => handleAction(() => completeSession(session.id))}
-                disabled={isPending}
-                className="inline-flex items-center gap-1 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning hover:bg-warning/25 hover:border-warning/60 transition-colors disabled:opacity-50"
-              >
-                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-                Complete
-              </button>
-            )}
+            
           </div>
         </div>
 
@@ -430,6 +439,19 @@ export function SessionDetailClient({
               </button>
             </div>
           )}
+
+          {session.status === "active" && !viewOnlyMode && (
+            <button
+              onClick={() => handleAction(() => completeSession(session.id))}
+              disabled={isPending}
+              className="ml-auto inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-highlight to-pink-500 px-6 py-2.5 text-sm font-bold text-white shadow-[0_0_14px_rgba(217,70,239,0.25)] transition-all hover:shadow-[0_0_20px_rgba(217,70,239,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              {isPending ? "Completing..." : "Review and Complete"}
+            </button>
+          )}
         </div>
 
         {/* Add member / ghost panel */}
@@ -469,19 +491,30 @@ export function SessionDetailClient({
           </div>
         )}
 
+        
+
         {/* Review prompt — uses handleAction to force refresh */}
         {session.status === "completed_pending_ack" && session.userAck?.needsReview && !viewOnlyMode && (
           <div className="mt-4 rounded-lg border border-warning/30 bg-warning/5 p-3">
             <p className="text-sm text-warning">
               {session.completedBy?.displayName} has completed this session. Review your badge completions?
             </p>
-            <button
-              onClick={() => handleAction(() => acknowledgeSession(session.id))}
-              disabled={isPending}
-              className="mt-2 rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
-            >
-              {isPending ? "Updating..." : "I have checked off all my completed badges"}
-            </button>
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                onClick={() => handleAction(() => acknowledgeSession(session.id))}
+                disabled={isPending}
+                className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+              >
+                {isPending ? "Updating..." : "I have checked off all completed badges"}
+              </button>
+              <button
+                onClick={() => handleAction(() => cancelSessionReview(session.id))}
+                disabled={isPending}
+                className="cursor-pointer rounded-lg border border-danger/30 bg-danger/10 px-4 py-2 text-xs font-medium text-danger hover:bg-danger/20 hover:border-danger/50 transition-colors disabled:opacity-50"
+              >
+                Cancel Review
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -568,20 +601,26 @@ export function SessionDetailClient({
               return (
                 <div key={badge.id}>
                   <div
-                    onClick={() => toggleBadgeSelection(session.id, badge.id)}
+                    onMouseDown={() => handleBadgeSelect(badge.id)}
                     className={`group grid cursor-pointer select-none items-center gap-2 px-3 py-2 transition-colors ${
-                      isSelected ? "bg-success/20 hover:bg-success/30" : "hover:bg-card-hover"
+                      suppressHover
+                        ? (isSelected ? "bg-selection" : "")
+                        : (isSelected ? "bg-selection hover:bg-selection-hover" : "hover:bg-card-hover")
                     }`}
                     style={{ gridTemplateColumns: SESSION_GRID_COLUMNS }}
                   >
                     <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{badge.badgeNumber}</span>
                     <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="min-w-0 truncate text-sm font-medium text-foreground">{badge.name}</span>
                       <Link
                         href={`/badges/${badge.id}`}
                         onClick={(event) => event.stopPropagation()}
-                        className="min-w-0 truncate text-sm font-medium text-foreground hover:text-accent hover:underline"
+                        className="shrink-0 text-muted hover:text-accent transition-colors"
+                        title="Badge info"
                       >
-                        {badge.name}
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
                       </Link>
                       {badge.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>}
                       {badge.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
@@ -594,12 +633,12 @@ export function SessionDetailClient({
                     <div className="flex justify-center" onClick={(event) => event.stopPropagation()}>
                       <button
                         onClick={() => toggleBadgeCompletion(badge.id)}
-                        className={`rounded p-0.5 transition-colors ${
-                          isCompleted ? "text-success hover:text-success/70" : "text-border hover:text-muted"
+                        className={`flex h-6 w-6 items-center justify-center rounded border transition-colors ${
+                          isCompleted ? "border-success bg-success/20 text-success hover:bg-success/30" : "border-border bg-background text-transparent hover:border-muted hover:text-muted"
                         }`}
                         title={isCompleted ? "Completed — click to undo" : "Mark completed"}
                       >
-                        <svg className="h-4 w-4" fill={isCompleted ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
                       </button>
@@ -636,13 +675,13 @@ export function SessionDetailClient({
               {groupPerVisit.length > 0 && (
                 <div>
                   <h3 className="mb-2 text-xs font-semibold text-accent uppercase tracking-wide">Per-Visit Badges</h3>
-                  <GroupBadgesTable entries={groupPerVisit} badgeLookup={badgeLookup} currentUserId={currentUserId} metaRuleBlurbs={metaRuleBlurbs} />
+                  <GroupBadgesTable entries={groupPerVisit} badgeLookup={badgeLookup} currentUserId={currentUserId} metaRuleBlurbs={metaRuleBlurbs} userSelectedBadgeIds={userSelectedBadgeIds} />
                 </div>
               )}
               {groupNormal.length > 0 && (
                 <div>
                   <h3 className="mb-2 text-xs font-semibold text-foreground uppercase tracking-wide">Standard Badges</h3>
-                  <GroupBadgesTable entries={groupNormal} badgeLookup={badgeLookup} currentUserId={currentUserId} metaRuleBlurbs={metaRuleBlurbs} />
+                  <GroupBadgesTable entries={groupNormal} badgeLookup={badgeLookup} currentUserId={currentUserId} metaRuleBlurbs={metaRuleBlurbs} userSelectedBadgeIds={userSelectedBadgeIds} />
                 </div>
               )}
             </>
@@ -660,11 +699,13 @@ function GroupBadgesTable({
   badgeLookup,
   currentUserId,
   metaRuleBlurbs,
+  userSelectedBadgeIds,
 }: {
   entries: { selection: Selection; selectors: { id: string; displayName: string }[] }[];
   badgeLookup: Map<string, BadgeData>;
   currentUserId: string;
   metaRuleBlurbs: Record<string, string>;
+  userSelectedBadgeIds: Set<string>;
 }) {
   return (
     <>
@@ -689,17 +730,24 @@ function GroupBadgesTable({
           const selectorNames = entry.selectors.map((selector) => selector.displayName).join(", ");
           const selectorCount = entry.selectors.length;
           const isCompleted = fullBadge?.memberCompletions.includes(currentUserId) ?? false;
+          const isUserSelected = userSelectedBadgeIds.has(entry.selection.badgeId);
 
           return (
             <div key={entry.selection.badgeId}>
-              <div className="group grid items-center gap-2 px-3 py-2 transition-colors hover:bg-card-hover" style={{ gridTemplateColumns: SESSION_GRID_COLUMNS }}>
+              <div className={`group grid items-center gap-2 px-3 py-2 transition-colors ${
+                isUserSelected ? "bg-selection hover:bg-selection-hover" : "hover:bg-card-hover"
+              }`} style={{ gridTemplateColumns: SESSION_GRID_COLUMNS }}>
                 <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{entry.selection.badgeNumber}</span>
                 <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="min-w-0 truncate text-sm font-medium text-foreground">{entry.selection.badgeName}</span>
                   <Link
                     href={`/badges/${entry.selection.badgeId}`}
-                    className="min-w-0 truncate text-sm font-medium text-foreground hover:text-accent hover:underline"
+                    className="shrink-0 text-muted hover:text-accent transition-colors"
+                    title="Badge info"
                   >
-                    {entry.selection.badgeName}
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
                   </Link>
                   {entry.selection.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>}
                   {fullBadge?.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
@@ -712,12 +760,12 @@ function GroupBadgesTable({
                   <button
                     type="button"
                     onClick={() => toggleBadgeCompletion(entry.selection.badgeId)}
-                    className={`rounded p-0.5 transition-colors ${
-                      isCompleted ? "text-success hover:text-success/70" : "text-border hover:text-muted"
+                    className={`flex h-6 w-6 items-center justify-center rounded border transition-colors ${
+                      isCompleted ? "border-success bg-success/20 text-success hover:bg-success/30" : "border-border bg-background text-transparent hover:border-muted hover:text-muted"
                     }`}
                     title={isCompleted ? "Completed — click to undo" : "Mark completed"}
                   >
-                    <svg className="h-4 w-4" fill={isCompleted ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
                   </button>

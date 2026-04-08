@@ -246,6 +246,39 @@ export async function acknowledgeSession(sessionId: string) {
   revalidatePath("/sessions");
 }
 
+/**
+ * Cancel review mode and revert the session back to active for all players.
+ * Resets all acknowledgements and clears the completed state.
+ */
+export async function cancelSessionReview(sessionId: string) {
+  await requireUser();
+
+  const session = await prisma.session.findUnique({ where: { id: sessionId } });
+  if (!session || session.status !== "completed_pending_ack") {
+    throw new Error("Session is not in review mode");
+  }
+
+  await prisma.session.update({
+    where: { id: sessionId },
+    data: {
+      status: "active",
+      completedAt: null,
+      completedByUserId: null,
+    },
+  });
+
+  await prisma.sessionUserAcknowledgement.updateMany({
+    where: { sessionId },
+    data: {
+      needsReview: true,
+      acknowledgedAt: null,
+    },
+  });
+
+  revalidatePath(`/sessions/${sessionId}`);
+  revalidatePath("/sessions");
+}
+
 export async function dismissSessionReview(sessionId: string) {
   const user = await requireUser();
 

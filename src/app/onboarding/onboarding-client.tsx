@@ -47,7 +47,7 @@ export function OnboardingClient({ userId, email, googleName }: Props) {
       });
 
       if (response.ok) {
-        router.push("/badges");
+        router.push("/");
         router.refresh();
       } else {
         const data = await response.json();

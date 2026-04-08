@@ -66,64 +66,78 @@ export function NewSessionClient({ availableUsers, currentUserDisplayName }: Pro
       <div className="rounded-xl border border-border bg-card p-6">
         <h2 className="text-sm font-semibold text-foreground">Party Members</h2>
 
-        <div className="mt-3 space-y-2">
-          {/* Current user — always included, shown as disabled */}
-          <div
-            className="flex w-full items-center justify-between rounded-lg bg-accent/5 px-3 py-2 text-sm opacity-50 cursor-default"
-          >
+        {/* Selected party — boxed together */}
+        {(selectedMembers.length > 0 || ghostNames.length > 0) && (
+          <div className="mt-3 rounded-lg border border-accent/20 bg-accent/[0.03] p-2 space-y-2">
+            <p className="px-1 text-[10px] font-semibold uppercase tracking-wide text-accent/60">Going</p>
+
+            {/* Current user — always included */}
+            <div className="flex w-full items-center justify-between rounded-lg bg-accent/5 px-3 py-2 text-sm opacity-50 cursor-default">
+              <span className="text-accent">{currentUserDisplayName}</span>
+              <svg className="h-4 w-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+
+            {availableUsers.filter((appUser) => selectedMembers.includes(appUser.id)).map((appUser) => (
+              <button
+                key={appUser.id}
+                onClick={() => toggleMember(appUser.id)}
+                className="flex w-full items-center justify-between rounded-lg border border-accent/30 bg-accent/10 text-accent px-3 py-2 text-sm transition-colors"
+              >
+                <span>{appUser.displayName}</span>
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </button>
+            ))}
+
+            {ghostNames.map((ghostName, ghostIndex) => (
+              <div key={`ghost-${ghostIndex}`} className="flex w-full items-center justify-between rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-sm">
+                <span className="text-warning">
+                  {ghostName} <span className="text-[10px] text-warning/60">(non badge-hunter)</span>
+                </span>
+                <button
+                  onClick={() => removeGhostPlayer(ghostIndex)}
+                  className="text-xs text-muted hover:text-danger transition-colors"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Current user shown here when nobody else is selected yet */}
+        {selectedMembers.length === 0 && ghostNames.length === 0 && (
+          <div className="mt-3 flex w-full items-center justify-between rounded-lg bg-accent/5 px-3 py-2 text-sm opacity-50 cursor-default">
             <span className="text-accent">{currentUserDisplayName}</span>
             <svg className="h-4 w-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
+        )}
 
-          {/* Other selectable users */}
-          {availableUsers.map((appUser) => (
+        {/* Unselected users */}
+        <div className="mt-4 space-y-2">
+          <p className="px-1 text-[10px] font-semibold uppercase tracking-wide text-muted">Select players</p>
+          {availableUsers.filter((appUser) => !selectedMembers.includes(appUser.id)).map((appUser) => (
             <button
               key={appUser.id}
               onClick={() => toggleMember(appUser.id)}
-              className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm transition-colors ${
-                selectedMembers.includes(appUser.id)
-                  ? "border-accent/30 bg-accent/10 text-accent"
-                  : "border-border text-foreground hover:bg-card-hover"
-              }`}
+              className="flex w-full items-center justify-between rounded-lg border border-border text-foreground hover:bg-card-hover px-3 py-2 text-sm transition-colors"
             >
               <span>{appUser.displayName}</span>
-              {selectedMembers.includes(appUser.id) && (
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              )}
             </button>
           ))}
-          {availableUsers.length === 0 && (
-            <p className="text-xs text-muted">No other users available. Create test users in admin mode, or have friends sign up!</p>
+          {availableUsers.filter((appUser) => !selectedMembers.includes(appUser.id)).length === 0 && (
+            <p className="text-xs text-muted">All players selected!</p>
           )}
         </div>
-      </div>
 
-      {/* Other players (non badge hunters) */}
-      <div className="rounded-xl border border-border bg-card p-6">
-        <h2 className="text-sm font-semibold text-foreground">Other Players</h2>
-        <p className="mt-1 text-xs text-muted">
-          People who are physically there but don&apos;t have Badge Hunters accounts. They count toward party size only.
-        </p>
-
-        <div className="mt-3 space-y-2">
-          {/* Already-added ghost players */}
-          {ghostNames.map((ghostName, ghostIndex) => (
-            <div key={ghostIndex} className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
-              <span className="text-sm text-foreground">{ghostName}</span>
-              <button
-                onClick={() => removeGhostPlayer(ghostIndex)}
-                className="text-xs text-muted hover:text-danger transition-colors"
-              >
-                Remove
-              </button>
-            </div>
-          ))}
-
-          {/* Input to add a new ghost player */}
+        {/* Add other players (non badge hunters) */}
+        <div className="mt-4 border-t border-border pt-4">
+          <p className="text-xs font-medium text-muted mb-2">Add non badge-hunter players</p>
           <div className="flex gap-2">
             <input
               type="text"
@@ -136,7 +150,7 @@ export function NewSessionClient({ availableUsers, currentUserDisplayName }: Pro
             <button
               onClick={addGhostPlayer}
               disabled={!ghostInput.trim()}
-              className="rounded-lg bg-accent/20 px-4 py-2 text-sm font-medium text-accent hover:bg-accent/30 transition-colors disabled:opacity-40"
+              className="rounded-lg bg-warning/20 px-4 py-2 text-sm font-medium text-warning hover:bg-warning/30 transition-colors disabled:opacity-40"
             >
               Add
             </button>

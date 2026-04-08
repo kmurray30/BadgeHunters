@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from "react";
 export interface SelectOption {
   value: string;
   label: string;
+  tooltip?: string;
 }
 
 interface CustomSelectProps {
@@ -87,6 +88,7 @@ export function CustomSelect({ options, value, onChange, placeholder = "Select..
               key={option.value}
               type="button"
               onClick={() => { onChange(option.value); setIsOpen(false); }}
+              title={option.tooltip}
               className={`w-full px-3 py-1.5 text-left text-xs transition-colors ${
                 option.value === value
                   ? "bg-accent/15 text-accent"
