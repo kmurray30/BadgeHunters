@@ -3,6 +3,7 @@
 import { toggleBadgeCompletion } from "@/app/actions/badges";
 import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type ColumnHeader } from "@/components/badge-table";
 import { MultiFilter, type ActiveFilter, type FilterDefinition } from "@/components/multi-filter";
+import { usePersistedState } from "@/hooks/use-persisted-state";
 import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
 import { useMemo, useState } from "react";
 
@@ -149,11 +150,11 @@ function getPlayerCountDisplay(badge: BadgeData): { bucket: string; label: strin
 }
 
 export function BadgeListClient({ badges, currentUserId, currentUserRole, allUsers }: Props) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([
+  const [searchQuery, setSearchQuery] = usePersistedState("bh:badges:search", "");
+  const [activeFilters, setActiveFilters] = usePersistedState<ActiveFilter[]>("bh:badges:filters", [
     { key: "completion", value: "not_completed" },
   ]);
-  const [sortCriteria, setSortCriteria] = useState<SortCriterion[]>([
+  const [sortCriteria, setSortCriteria] = usePersistedState<SortCriterion[]>("bh:badges:sort", [
     { field: "difficulty", ascending: true },
   ]);
 

@@ -17,6 +17,7 @@ import { BackButton } from "@/components/back-button";
 import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type ColumnHeader } from "@/components/badge-table";
 import { MultiFilter, type ActiveFilter, type FilterDefinition } from "@/components/multi-filter";
 import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
+import { usePersistedState } from "@/hooks/use-persisted-state";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
@@ -226,7 +227,7 @@ export function SessionDetailClient({
   const canEdit = !personallyDone || isEditing;
   const showYourBadges = initialIsMember && !personallyDone && session.status === "active";
 
-  const [activeTab, setActiveTab] = useState<TabMode>(showYourBadges ? "your_badges" : "group_badges");
+  const [activeTab, setActiveTab] = usePersistedState<TabMode>("bh:session:tab", showYourBadges ? "your_badges" : "group_badges");
 
   // When showYourBadges turns off (e.g. session completed), fall back to group view
   // so the badge list doesn't just vanish.
@@ -284,9 +285,9 @@ export function SessionDetailClient({
     return () => window.removeEventListener("mousemove", handler);
   }, [suppressHover]);
 
-  const [yourBadgesSearch, setYourBadgesSearch] = useState("");
-  const [yourBadgesFilters, setYourBadgesFilters] = useState<ActiveFilter[]>([]);
-  const [yourBadgesSortCriteria, setYourBadgesSortCriteria] = useState<SortCriterion[]>([
+  const [yourBadgesSearch, setYourBadgesSearch] = usePersistedState("bh:session:your-badges:search", "");
+  const [yourBadgesFilters, setYourBadgesFilters] = usePersistedState<ActiveFilter[]>("bh:session:your-badges:filters", []);
+  const [yourBadgesSortCriteria, setYourBadgesSortCriteria] = usePersistedState<SortCriterion[]>("bh:session:your-badges:sort", [
     { field: "need", ascending: false },
     { field: "difficulty", ascending: true },
     { field: "number", ascending: true },
