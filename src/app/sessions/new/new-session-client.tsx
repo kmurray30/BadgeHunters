@@ -82,7 +82,9 @@ export function NewSessionClient({ availableUsers, currentUserDisplayName, defau
     setIsCreating(true);
     try {
       const sessionId = await createSession(selectedMembers, ghostNames, sessionDate);
-      router.push(`/sessions/${sessionId}`);
+      // Replace instead of push so the creation form is removed from history —
+      // pressing Back from the new session goes to sessions list, not back here.
+      router.replace(`/sessions/${sessionId}`);
     } catch {
       setIsCreating(false);
     }

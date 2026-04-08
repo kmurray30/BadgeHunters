@@ -176,7 +176,7 @@ export default async function SessionsPage() {
                       {session.members.length} players &middot; {session._count.selections} badges selected
                     </p>
                     {session.members.some((member) => member.user.id === user.id) && (
-                      <p className="mt-0.5 text-[11px] font-medium text-success">You are in this session</p>
+                      <p className="mt-0.5 text-[11px] font-medium text-success">You were in this session</p>
                     )}
                   </div>
                   <span className={`rounded-full px-3 py-1 text-xs font-medium ${

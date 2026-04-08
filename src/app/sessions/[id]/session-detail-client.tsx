@@ -194,6 +194,9 @@ export function SessionDetailClient({
   // expiresAt is already set to 6am the day after the session date.
   const isPastDate = Date.now() > new Date(session.expiresAt).getTime();
 
+  // Future = active status but session date hasn't arrived yet.
+  const isFuture = session.status === "active" && session.sessionDateLA > todayString;
+
   // Temporary client-side edit mode for past-date closed sessions.
   // Not persisted — leaving the page reverts to the closed view.
   const [isEditing, setIsEditing] = useState(false);
@@ -366,15 +369,21 @@ export function SessionDetailClient({
       {/* Join prompt for non-members */}
       {showJoinPrompt && (
         <div className="rounded-xl border border-accent/30 bg-accent/5 p-6 text-center">
-          <p className="text-sm text-foreground">You&apos;re not a member of this session.</p>
+          <p className="text-sm text-foreground">
+            {isPastDate
+              ? "You weren't in this session."
+              : "You're not a member of this session."}
+          </p>
           <div className="mt-3 flex justify-center gap-3">
-            <button
-              onClick={handleJoinSession}
-              disabled={isPending}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
-            >
-              {isPending ? "Joining..." : "Join Session"}
-            </button>
+            {!isPastDate && (
+              <button
+                onClick={handleJoinSession}
+                disabled={isPending}
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+              >
+                {isPending ? "Joining..." : "Join Session"}
+              </button>
+            )}
             <button
               onClick={handleViewOnly}
               className="rounded-lg border border-border px-4 py-2 text-sm text-muted hover:text-foreground transition-colors"
@@ -402,7 +411,6 @@ export function SessionDetailClient({
               <span className="rounded-full bg-border px-3 py-1 text-xs font-medium text-muted">Viewing</span>
             )}
             {(() => {
-              const isFuture = session.status === "active" && session.sessionDateLA > todayString;
               const label = isEditing ? "Editing"
                 : session.status === "active"
                   ? (isFuture ? "Future" : "Active")
@@ -466,8 +474,8 @@ export function SessionDetailClient({
             </div>
           )}
 
-          {/* Active session: "Review and Complete" */}
-          {session.status === "active" && !viewOnlyMode && (
+          {/* Active session: "Review and Complete" — not available for future sessions */}
+          {session.status === "active" && !isFuture && !viewOnlyMode && (
             <button
               onClick={() => handleAction(() => completeSession(session.id))}
               disabled={isPending}
