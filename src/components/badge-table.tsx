@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type React from "react";
+import React from "react";
 
 // ─── Column header ────────────────────────────────────────────────────────────
 
@@ -92,9 +92,7 @@ function RowWrapper({
   const innerCells = (
     <>
       {row.cells.map((cell, index) => (
-        <span key={index} className="contents">
-          {cell}
-        </span>
+        <React.Fragment key={index}>{cell}</React.Fragment>
       ))}
     </>
   );

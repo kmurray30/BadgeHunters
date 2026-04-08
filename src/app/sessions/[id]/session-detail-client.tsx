@@ -24,8 +24,8 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 
 const YOUR_BADGES_COLUMNS: ColumnHeader[] = [
   { label: "", width: "auto" },
-  { label: "Name", width: "minmax(0,2.5fr)" },
-  { label: "Description", width: "minmax(0,3fr)" },
+  { label: "Name", width: "auto" },
+  { label: "Description", width: "minmax(0,1fr)" },
   { label: "Difficulty", width: "5rem", align: "center" },
   { label: "Players", width: "4rem", align: "center" },
   { label: "Need", width: "4rem", align: "center" },
@@ -33,8 +33,8 @@ const YOUR_BADGES_COLUMNS: ColumnHeader[] = [
 
 const GROUP_BADGES_COLUMNS: ColumnHeader[] = [
   { label: "", width: "auto" },
-  { label: "Name", width: "minmax(0,2.5fr)" },
-  { label: "Description", width: "minmax(0,3fr)" },
+  { label: "Name", width: "auto" },
+  { label: "Description", width: "minmax(0,1fr)" },
   { label: "Difficulty", width: "5rem", align: "center" },
   { label: "Players", width: "4rem", align: "center" },
   { label: "Votes", width: "4rem", align: "center" },
@@ -774,7 +774,7 @@ export function SessionDetailClient({
                     {badge.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>}
                     {badge.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
                   </div>,
-                  <span className="min-w-0 truncate text-xs text-muted">{badge.description}</span>,
+                  <span className="block min-w-0 truncate text-xs text-muted">{badge.description}</span>,
                   <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
                   <span className={`min-w-0 text-center text-[11px] ${resolvePlayerCount(badge).color}`}>{resolvePlayerCount(badge).label}</span>,
                   <span className="min-w-0 text-center text-[11px] text-success">{badge.otherUncompletedCount}/{memberCount - 1}</span>,
@@ -879,7 +879,7 @@ function buildGroupBadgeRows(
           {entry.selection.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>}
           {fullBadge?.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
         </div>,
-        <span className="min-w-0 truncate text-xs text-muted">{entry.selection.badgeDescription}</span>,
+        <span className="block min-w-0 truncate text-xs text-muted">{entry.selection.badgeDescription}</span>,
         <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
         <span className={`min-w-0 text-center text-[11px] ${playerCountResolved.color}`}>{playerCountResolved.label}</span>,
         <span className="min-w-0 text-center text-[11px] text-success" title={selectorNames}>{selectorCount}</span>,

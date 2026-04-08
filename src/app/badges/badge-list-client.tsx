@@ -50,8 +50,8 @@ const DIFFICULTY_OPTIONS: { value: string; label: string; color: string }[] = [
 
 const BADGE_TABLE_COLUMNS: ColumnHeader[] = [
   { label: "", width: "auto" },
-  { label: "Name", width: "minmax(0,2.5fr)" },
-  { label: "Description", width: "minmax(0,3fr)" },
+  { label: "Name", width: "auto" },
+  { label: "Description", width: "minmax(0,1fr)" },
   { label: "Difficulty", width: "5rem", align: "center" },
   { label: "Players", width: "4rem", align: "center" },
   { label: "Done", width: "3.5rem", align: "center" },
@@ -339,7 +339,7 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
                   <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>
                 )}
               </div>,
-              <span className="min-w-0 truncate text-xs text-muted">{badge.description}</span>,
+              <span className="block min-w-0 truncate text-xs text-muted">{badge.description}</span>,
               <span className={`min-w-0 text-center text-[11px] font-medium ${difficultyDisplay.color}`}>
                 {difficultyDisplay.label}
               </span>,
