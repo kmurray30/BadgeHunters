@@ -57,6 +57,14 @@ export default async function SessionDetailPage({ params }: Props) {
   const memberIds = session.members.map((member) => member.user.id);
   const isMember = memberIds.includes(user.id);
 
+  // Fetch badge IDs that this user marked as completed specifically within this session.
+  // This is separate from BadgeUserStatus.isCompleted (global persistent state) — it lets
+  // old sessions show their own completion snapshot rather than reflecting later completions.
+  const sessionCompletions = await prisma.sessionBadgeCompletion.findMany({
+    where: { sessionId: id, userId: user.id },
+    select: { badgeId: true },
+  });
+
   const allBadges = await prisma.badge.findMany({
     where: { active: true },
     orderBy: { badgeNumber: "asc" },
@@ -213,6 +221,7 @@ export default async function SessionDetailPage({ params }: Props) {
         availableUsersForAdd={serializedAvailableUsers}
         metaRuleBlurbs={metaRuleBlurbs}
         todayString={todayString}
+        sessionCompletedBadgeIds={sessionCompletions.map((completion) => completion.badgeId)}
       />
     </div>
   );

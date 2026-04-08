@@ -99,6 +99,7 @@ model User {
   completedSessions   Session[]              @relation("SessionCompleter")
   sessionMemberships  SessionMember[]
   sessionSelections   SessionBadgeSelection[]
+  sessionCompletions  SessionBadgeCompletion[]
   sessionAcks         SessionUserAcknowledgement[]
   feedbackPosts       FeedbackPost[]
   feedbackReactions   FeedbackReaction[]
@@ -148,6 +149,7 @@ model Badge {
   comments           BadgeComment[]
   metaRules          BadgeMetaRule[]
   sessionSelections  SessionBadgeSelection[]
+  sessionCompletions SessionBadgeCompletion[]
 
   @@map("badges")
 }
@@ -234,6 +236,7 @@ model Session {
   members        SessionMember[]
   ghostMembers   SessionGhostMember[]
   selections     SessionBadgeSelection[]
+  completions    SessionBadgeCompletion[]
   acknowledgements SessionUserAcknowledgement[]
 
   @@map("sessions")
@@ -279,6 +282,26 @@ model SessionBadgeSelection {
 
   @@unique([sessionId, badgeId, selectedByUserId])
   @@map("session_badge_selections")
+}
+
+// Tracks which badges a user marked as completed within a specific session.
+// This is intentionally separate from BadgeUserStatus.isCompleted (global persistent state).
+// Checking a box here ALSO writes to BadgeUserStatus, but old sessions retain their own completion
+// snapshot so viewing a past session doesn't reflect later completions.
+model SessionBadgeCompletion {
+  id          String   @id @default(cuid())
+  sessionId   String   @map("session_id")
+  userId      String   @map("user_id")
+  badgeId     String   @map("badge_id")
+  completedAt DateTime @default(now()) @map("completed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge   Badge   @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, userId, badgeId])
+  @@map("session_badge_completions")
 }
 
 model SessionUserAcknowledgement {
