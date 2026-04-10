@@ -175,6 +175,7 @@ export function PlayerBadgesClient({ badges, isOwnProfile }: Props) {
             preventLinkNavigation
             checkedClassName="border-amber-500 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
             crossWhenDisabled
+            useStar
           />
         ) : (
           <BadgeCheckbox
@@ -185,6 +186,7 @@ export function PlayerBadgesClient({ badges, isOwnProfile }: Props) {
             preventLinkNavigation
             checkedClassName="border-amber-500 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
             crossWhenDisabled
+            useStar
           />
         ),
         // Done By Me — static indicator, not editable from this page

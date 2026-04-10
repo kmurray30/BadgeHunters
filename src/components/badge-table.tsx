@@ -334,6 +334,8 @@ interface BadgeCheckboxProps {
   checkedClassName?: string;
   /** When true (and disabled), show an × instead of a checkmark — used to signal "locked out" */
   crossWhenDisabled?: boolean;
+  /** Render a star icon instead of a checkmark (hollow when unchecked, filled when checked) */
+  useStar?: boolean;
 }
 
 export function BadgeCheckbox({
@@ -344,8 +346,47 @@ export function BadgeCheckbox({
   preventLinkNavigation,
   checkedClassName = "border-success bg-success/20 text-success hover:bg-success/30",
   crossWhenDisabled = false,
+  useStar = false,
 }: BadgeCheckboxProps) {
   const showCross = crossWhenDisabled && disabled;
+
+  if (useStar) {
+    const starButton = (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        title={title}
+        className={`flex h-6 w-6 items-center justify-center transition-colors ${
+          disabled ? "cursor-not-allowed opacity-40" : "hover:opacity-80"
+        }`}
+      >
+        <svg className="h-5 w-5 text-foreground" viewBox="0 0 24 24" fill={checked ? "currentColor" : "none"} stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.562.562 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.562.562 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+        </svg>
+      </button>
+    );
+    if (preventLinkNavigation) {
+      return <div className="flex justify-center" onClick={(event) => event.preventDefault()}>{starButton}</div>;
+    }
+    return <div className="flex justify-center">{starButton}</div>;
+  }
+
+  function renderIcon() {
+    if (showCross) {
+      return (
+        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      );
+    }
+    return (
+      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+      </svg>
+    );
+  }
+
   const button = (
     <button
       type="button"
@@ -358,15 +399,7 @@ export function BadgeCheckbox({
           : "border-border bg-background text-transparent hover:border-muted hover:text-muted"
       } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
     >
-      {showCross ? (
-        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      ) : (
-        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-        </svg>
-      )}
+      {renderIcon()}
     </button>
   );
 

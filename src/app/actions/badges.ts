@@ -55,6 +55,7 @@ export async function toggleBadgeTodo(badgeId: string) {
 
   revalidatePath("/badges");
   revalidatePath(`/badges/${badgeId}`);
+  revalidatePath("/sessions", "layout");
 }
 
 export async function updateBadgeDifficulty(

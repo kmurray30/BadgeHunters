@@ -29,8 +29,7 @@ const YOUR_BADGES_COLUMNS: ColumnHeader[] = [
   { label: "Description", width: "minmax(0,1fr)" },
   { label: "Difficulty", width: "5rem", align: "right", sortField: "difficulty" },
   { label: "Players", width: "4rem", align: "right", sortField: "players" },
-  { label: "Have", width: "4rem", align: "right", sortField: "need", sortDefaultDescending: true },
-  { label: "To Do", width: "3.5rem", align: "center", sortField: "todo", sortDefaultDescending: true },
+  { label: "Group", width: "4rem", align: "right", sortField: "need", sortDefaultDescending: true },
 ];
 
 function buildGroupBadgeColumns(members: { id: string; displayName: string }[], currentUserId: string): ColumnHeader[] {
@@ -45,7 +44,7 @@ function buildGroupBadgeColumns(members: { id: string; displayName: string }[], 
     { label: "Description", width: "minmax(0,1fr)" },
     { label: "Difficulty", width: "5rem", align: "right" },
     { label: "Players", width: "4rem", align: "right" },
-    { label: "Have", width: "2.5rem", align: "center", vertical: true },
+    { label: "Group", width: "2.5rem", align: "center", vertical: true },
     ...sorted.map((member) => ({
       label: member.displayName.slice(0, 4),
       width: "2rem",
@@ -133,8 +132,7 @@ type TabMode = "your_badges" | "group_badges";
 const DIFFICULTY_MAP: Record<string, number> = { easy: 1, medium: 2, hard: 3, impossible: 4 };
 
 const SESSION_SORT_FIELDS: SortField[] = [
-  { value: "need", label: "Have (others)" },
-  { value: "todo", label: "To Do" },
+  { value: "need", label: "Group (others)" },
   { value: "difficulty", label: "Difficulty" },
   { value: "name", label: "Name" },
   { value: "players", label: "Player count" },
@@ -288,7 +286,6 @@ export function SessionDetailClient({
   const [yourBadgesFilters, setYourBadgesFilters] = usePersistedState<ActiveFilter[]>("bh:session:your-badges:filters", []);
   const [yourBadgesSortCriteria, setYourBadgesSortCriteria] = usePersistedState<SortCriterion[]>("bh:session:your-badges:sort", [
     { field: "need", ascending: false },
-    { field: "todo", ascending: false },
     { field: "difficulty", ascending: true },
   ]);
 
@@ -396,7 +393,6 @@ export function SessionDetailClient({
         let comparison = 0;
         switch (criterion.field) {
           case "need": comparison = badgeA.totalUncompletedCount - badgeB.totalUncompletedCount; break;
-          case "todo": comparison = (badgeA.isTodoByCurrentUser ? 1 : 0) - (badgeB.isTodoByCurrentUser ? 1 : 0); break;
           case "difficulty": comparison = badgeA.difficultySortKey - badgeB.difficultySortKey; break;
           case "name": comparison = badgeA.name.localeCompare(badgeB.name); break;
           case "players": comparison = (resolvePlayerCount(badgeA) as { bucket: string }).bucket.localeCompare(resolvePlayerCount(badgeB).bucket); break;
@@ -841,12 +837,6 @@ export function SessionDetailClient({
                     <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
                     <span className={`min-w-0 text-center text-[11px] ${resolvePlayerCount(badge).color}`}>{resolvePlayerCount(badge).label}</span>,
                     <span className="min-w-0 text-center text-[11px] text-success">{badge.totalUncompletedCount}/{memberCount}</span>,
-                    <span
-                      className={`min-w-0 flex items-center justify-center text-[13px] ${badge.isTodoByCurrentUser ? "text-amber-400" : "text-border"}`}
-                      title={badge.isTodoByCurrentUser ? "On your To Do list" : "Not on your To Do list"}
-                    >
-                      ★
-                    </span>,
                   ],
                   footer: undefined,
                 };

@@ -358,6 +358,7 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
                 disabled={badge.completedByCurrentUser}
                 checkedClassName="border-amber-500 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
                 crossWhenDisabled
+                useStar
               />,
               <BadgeCheckbox
                 checked={badge.completedByCurrentUser}
