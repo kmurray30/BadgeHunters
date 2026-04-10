@@ -56,6 +56,7 @@ export async function NavBar() {
           )}
           {session?.user ? (
             <NavUserMenu
+              userId={session.user.id}
               userName={session.user.name ?? "User"}
               userImage={session.user.image ?? undefined}
               isTestUser={session.user.isTestUser}

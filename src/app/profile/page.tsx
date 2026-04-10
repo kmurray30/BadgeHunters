@@ -16,7 +16,7 @@ export default async function ProfilePage() {
   const recentCompletions = await prisma.badgeUserStatus.findMany({
     where: { userId: user.id, isCompleted: true },
     orderBy: { completedAt: "desc" },
-    take: 10,
+    take: 5,
     include: {
       badge: {
         select: { id: true, badgeNumber: true, name: true },

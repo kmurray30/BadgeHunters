@@ -286,7 +286,7 @@ This is for maintenance/fixing, not to disable sync.
 Preferred model:
 
 * store current displayed score directly
-* also store whether last update source was `scrape`, `manual`, or `test_override`
+* also store whether last update source was `scrape` or `manual`
 * future scrapes may continue to update unless a protected override mode is later added
 
 Minimum fields to track:

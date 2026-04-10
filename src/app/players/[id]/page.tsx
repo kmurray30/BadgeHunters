@@ -128,6 +128,11 @@ export default async function PlayerDetailPage({ params, searchParams }: Props) 
         <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${progressPercent}%` }} />
       </div>
 
+      {/* Last synced */}
+      <p className="mt-3 text-xs text-muted">
+        Last synced: {player.lastSyncedAt ? player.lastSyncedAt.toLocaleString() : "Never"}
+      </p>
+
       {/* Completed badges list */}
       <div className="mt-6">
         <h2 className="mb-3 text-sm font-semibold text-foreground">

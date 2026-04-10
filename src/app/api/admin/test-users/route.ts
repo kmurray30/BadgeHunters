@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
       onboardingComplete: true,
       currentScore: template.score,
       rankColor: rankColor,
-      lastScoreSource: "test_override",
+      lastScoreSource: "manual",
     },
   });
 

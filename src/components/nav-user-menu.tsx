@@ -5,13 +5,14 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 interface NavUserMenuProps {
+  userId: string;
   userName: string;
   userImage?: string;
   isTestUser: boolean;
   role: string;
 }
 
-export function NavUserMenu({ userName, userImage, isTestUser, role }: NavUserMenuProps) {
+export function NavUserMenu({ userId, userName, userImage, isTestUser, role }: NavUserMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -68,11 +69,11 @@ export function NavUserMenu({ userName, userImage, isTestUser, role }: NavUserMe
             Profile
           </Link>
           <Link
-            href="/players"
+            href="/settings"
             className="block px-4 py-2 text-sm text-foreground hover:bg-card-hover"
             onClick={() => setIsOpen(false)}
           >
-            Players
+            Settings
           </Link>
           {role === "superuser" && (
             <Link
