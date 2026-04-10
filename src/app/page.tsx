@@ -24,13 +24,21 @@ export default async function Home() {
   const yourCompletedCount = await prisma.badgeUserStatus.count({
     where: { userId: user.id, isCompleted: true },
   });
-  const activeSession = await prisma.session.findFirst({
+  const mySessions = await prisma.session.findMany({
     where: {
-      status: "active",
+      status: { not: "closed" },
       members: { some: { userId: user.id } },
     },
-    select: { id: true },
+    include: {
+      createdBy: { select: { activatePlayerName: true, realName: true, displayNameMode: true } },
+    },
+    orderBy: { sessionDateLocal: "desc" },
   });
+
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
+  const activeSessions = mySessions.filter((s) => s.status === "active" && new Intl.DateTimeFormat("en-CA", { timeZone: "UTC" }).format(s.sessionDateLocal) <= today);
+  const futureSessions = mySessions.filter((s) => s.status === "active" && new Intl.DateTimeFormat("en-CA", { timeZone: "UTC" }).format(s.sessionDateLocal) > today);
+  const pendingReviewSessions = mySessions.filter((s) => s.status === "completed_pending_ack");
 
   // Other players summary
   const otherPlayers = await prisma.user.findMany({
@@ -89,15 +97,40 @@ export default async function Home() {
         </div>
       )}
 
-      {/* Active session callout */}
-      {activeSession ? (
-        <Link href={`/sessions/${activeSession.id}`} className="mt-4 block rounded-xl border border-success/30 bg-success/5 p-4 text-center hover:bg-success/10 transition-colors">
-          <p className="text-sm font-medium text-success">You have an active session</p>
-          <p className="mt-0.5 text-xs text-muted">Tap to view</p>
-        </Link>
+      {/* Session groups */}
+      {activeSessions.length + futureSessions.length + pendingReviewSessions.length > 0 ? (
+        <div className="mt-6 space-y-4">
+          <SessionGroup
+            label={`You are in ${activeSessions.length} active session${activeSessions.length !== 1 ? "s" : ""}`}
+            sessions={activeSessions}
+            borderColor="border-success/30"
+            bgColor="bg-success/5"
+            hoverColor="hover:bg-success/10"
+            textColor="text-success"
+            getDisplayName={getDisplayName}
+          />
+          <SessionGroup
+            label={`You are in ${pendingReviewSessions.length} pending review session${pendingReviewSessions.length !== 1 ? "s" : ""}`}
+            sessions={pendingReviewSessions}
+            borderColor="border-warning/30"
+            bgColor="bg-warning/5"
+            hoverColor="hover:bg-warning/10"
+            textColor="text-warning"
+            getDisplayName={getDisplayName}
+          />
+          <SessionGroup
+            label={`You are in ${futureSessions.length} future session${futureSessions.length !== 1 ? "s" : ""}`}
+            sessions={futureSessions}
+            borderColor="border-accent/30"
+            bgColor="bg-accent/5"
+            hoverColor="hover:bg-accent/10"
+            textColor="text-accent"
+            getDisplayName={getDisplayName}
+          />
+        </div>
       ) : (
         <div className="mt-4 rounded-xl border border-border bg-card p-4 text-center">
-          <p className="text-sm text-muted">No active session</p>
+          <p className="text-sm text-muted">No active sessions</p>
         </div>
       )}
 
@@ -124,6 +157,44 @@ export default async function Home() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+interface SessionGroupProps {
+  label: string;
+  sessions: {
+    id: string;
+    sessionDateLocal: Date;
+    createdBy: { activatePlayerName: string | null; realName: string | null; displayNameMode: string };
+  }[];
+  borderColor: string;
+  bgColor: string;
+  hoverColor: string;
+  textColor: string;
+  getDisplayName: (u: { displayNameMode: string; realName: string | null; activatePlayerName: string | null }) => string;
+}
+
+function SessionGroup({ label, sessions, borderColor, bgColor, hoverColor, textColor, getDisplayName }: SessionGroupProps) {
+  if (sessions.length === 0) return null;
+
+  return (
+    <div>
+      <p className={`text-xs font-semibold uppercase tracking-wide ${textColor}`}>{label}</p>
+      <div className={`mt-2 divide-y divide-border rounded-xl border ${borderColor} ${bgColor}`}>
+        {sessions.map((userSession) => (
+          <Link
+            key={userSession.id}
+            href={`/sessions/${userSession.id}`}
+            className={`flex items-center justify-between px-4 py-3 ${hoverColor} transition-colors`}
+          >
+            <span className="text-sm text-foreground">
+              {userSession.sessionDateLocal.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" })}
+            </span>
+            <span className="text-xs text-muted">by {getDisplayName(userSession.createdBy)}</span>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

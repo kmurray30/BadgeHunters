@@ -15,6 +15,7 @@ import {
 } from "@/app/actions/sessions";
 import { BackButton } from "@/components/back-button";
 import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type BadgeTableSection, type ColumnHeader } from "@/components/badge-table";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MultiFilter, type ActiveFilter, type FilterDefinition } from "@/components/multi-filter";
 import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
 import { usePersistedState } from "@/hooks/use-persisted-state";
@@ -343,6 +344,22 @@ export function SessionDetailClient({
     handleAction(() => removeSessionMember(session.id, userId));
   }
 
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+
+  function handleLeaveSession() {
+    setShowLeaveConfirm(true);
+  }
+
+  function confirmLeave() {
+    setShowLeaveConfirm(false);
+    startTransition(async () => {
+      await removeSessionMember(session.id, currentUserId);
+      setViewOnlyMode(true);
+      setShowJoinPrompt(true);
+      router.refresh();
+    });
+  }
+
   function handleRemoveGhost(ghostId: string) {
     handleAction(() => removeGhostMember(ghostId));
   }
@@ -435,38 +452,31 @@ export function SessionDetailClient({
 
   return (
     <div className="space-y-6">
-      {/* Uncheck confirmation popup */}
+      {/* Uncheck confirmation dialog */}
       {uncompletConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setUncompletConfirm(null)}>
-          <div className="rounded-xl border border-border bg-card p-6 max-w-sm w-full shadow-2xl" onClick={(event) => event.stopPropagation()}>
-            <p className="text-sm font-medium text-foreground">
-              Uncheck &ldquo;{uncompletConfirm.badgeName}&rdquo;?
-            </p>
-            <p className="mt-1 text-xs text-muted">
-              Do you also want to remove this badge from your account&rsquo;s completed list?
-            </p>
-            <div className="mt-4 flex flex-col gap-2">
-              <button
-                onClick={() => handleUncompletConfirm(true)}
-                className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-2 text-sm font-medium text-danger hover:bg-danger/20 transition-colors"
-              >
-                Yes, un-complete on my account too
-              </button>
-              <button
-                onClick={() => handleUncompletConfirm(false)}
-                className="rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:bg-card-hover transition-colors"
-              >
-                Just uncheck in this session
-              </button>
-              <button
-                onClick={() => setUncompletConfirm(null)}
-                className="text-xs text-muted hover:text-foreground transition-colors text-center py-1"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title={`Uncheck \u201c${uncompletConfirm.badgeName}\u201d?`}
+          description="Do you also want to remove this badge from your account\u2019s completed list?"
+          onClose={() => setUncompletConfirm(null)}
+          actions={[
+            { label: "Yes, un-complete on my account too", onClick: () => handleUncompletConfirm(true), variant: "danger" },
+            { label: "Just uncheck in this session", onClick: () => handleUncompletConfirm(false) },
+            { label: "Cancel", onClick: () => setUncompletConfirm(null), variant: "muted" },
+          ]}
+        />
+      )}
+
+      {/* Leave session confirmation dialog */}
+      {showLeaveConfirm && (
+        <ConfirmDialog
+          title="Leave this session?"
+          description="Your badge selections will be removed."
+          onClose={() => setShowLeaveConfirm(false)}
+          actions={[
+            { label: "Yes, leave session", onClick: confirmLeave, variant: "danger" },
+            { label: "Cancel", onClick: () => setShowLeaveConfirm(false), variant: "muted" },
+          ]}
+        />
       )}
       {/* Join prompt for non-members */}
       {showJoinPrompt && (
@@ -572,6 +582,13 @@ export function SessionDetailClient({
                 }`}
               >
                 {editingParty ? "Done" : "Edit"}
+              </button>
+              <button
+                onClick={handleLeaveSession}
+                disabled={isPending}
+                className="rounded-full border border-danger/30 px-3 py-1 text-xs text-danger/60 hover:text-danger transition-colors"
+              >
+                Leave
               </button>
             </div>
           )}
