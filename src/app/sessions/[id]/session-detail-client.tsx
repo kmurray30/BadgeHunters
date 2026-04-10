@@ -29,7 +29,7 @@ const YOUR_BADGES_COLUMNS: ColumnHeader[] = [
   { label: "Description", width: "minmax(0,1fr)" },
   { label: "Difficulty", width: "5rem", align: "right", sortField: "difficulty" },
   { label: "Players", width: "4rem", align: "right", sortField: "players" },
-  { label: "Need", width: "4rem", align: "right", sortField: "need", sortDefaultDescending: true },
+  { label: "Have", width: "4rem", align: "right", sortField: "need", sortDefaultDescending: true },
   { label: "To Do", width: "3.5rem", align: "center", sortField: "todo", sortDefaultDescending: true },
 ];
 
@@ -45,7 +45,7 @@ function buildGroupBadgeColumns(members: { id: string; displayName: string }[], 
     { label: "Description", width: "minmax(0,1fr)" },
     { label: "Difficulty", width: "5rem", align: "right" },
     { label: "Players", width: "4rem", align: "right" },
-    { label: "Total", width: "2.5rem", align: "center", vertical: true },
+    { label: "Have", width: "2.5rem", align: "center", vertical: true },
     ...sorted.map((member) => ({
       label: member.displayName.slice(0, 4),
       width: "2rem",
@@ -133,7 +133,7 @@ type TabMode = "your_badges" | "group_badges";
 const DIFFICULTY_MAP: Record<string, number> = { easy: 1, medium: 2, hard: 3, impossible: 4 };
 
 const SESSION_SORT_FIELDS: SortField[] = [
-  { value: "need", label: "Need (others)" },
+  { value: "need", label: "Have (others)" },
   { value: "todo", label: "To Do" },
   { value: "difficulty", label: "Difficulty" },
   { value: "name", label: "Name" },
@@ -318,7 +318,6 @@ export function SessionDetailClient({
   function handleAddMember(userId: string) {
     handleAction(async () => {
       await addSessionMember(session.id, userId);
-      setShowAddMember(false);
     });
   }
 
@@ -561,9 +560,11 @@ export function SessionDetailClient({
             </span>
           ))}
           <span className="text-xs text-muted">= {displayPartySize} total</span>
+        </div>
 
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           {!viewOnlyMode && effectivelyActive && (
-            <div className="flex items-center gap-1">
+            <>
               <button
                 onClick={() => setShowAddMember(!showAddMember)}
                 className="rounded-full border border-border px-3 py-1 text-xs text-muted hover:text-foreground transition-colors"
@@ -585,7 +586,7 @@ export function SessionDetailClient({
               >
                 Leave
               </button>
-            </div>
+            </>
           )}
 
           {/* Step 1: "Review For Completion" — active session, not future, triggers review mode */}
