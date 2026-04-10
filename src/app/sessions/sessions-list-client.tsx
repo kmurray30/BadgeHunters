@@ -68,52 +68,48 @@ export function SessionsListClient({ activeSessions, pastSessions, todayString }
       {visibleActive.length > 0 && (
         <div>
           <h2 className="mb-3 text-sm font-semibold text-foreground">Active Sessions</h2>
-          <div className="space-y-3">
+          <div className="space-y-2">
             {visibleActive.map((session) => (
               <Link
                 key={session.id}
                 href={`/sessions/${session.id}`}
-                className="block rounded-xl border border-accent/30 bg-card p-4 hover:bg-card-hover transition-colors"
+                className="block rounded-xl border border-accent/30 bg-card px-4 py-2.5 hover:bg-card-hover transition-colors"
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-foreground">{session.title ?? session.dateDisplay}</p>
-                    <p className="mt-1 text-xs text-muted">Created by {session.createdByDisplayName}</p>
-                    {session.isMember && (
-                      <p className="mt-0.5 text-[11px] font-medium text-success">You are in this session</p>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    {session.dateStringLA > todayString ? (
-                      <span className="rounded-full bg-blue-500/20 px-3 py-1 text-xs font-medium text-blue-400">
-                        Future
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-success/20 px-3 py-1 text-xs font-medium text-success">
-                        Active
-                      </span>
-                    )}
-                    <p className="mt-1 text-xs text-muted">
-                      {session.members.length} hunters + {session.ghostMembers.length} others
-                    </p>
-                  </div>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="min-w-0 truncate font-medium text-foreground">
+                    {session.title ?? session.dateDisplay}
+                    <span className="text-xs font-normal text-muted"> &mdash; {session.createdByDisplayName}</span>
+                  </p>
+                  {session.dateStringLA > todayString ? (
+                    <span className="shrink-0 rounded-full bg-blue-500/20 px-3 py-0.5 text-xs font-medium text-blue-400">Future</span>
+                  ) : (
+                    <span className="shrink-0 rounded-full bg-success/20 px-3 py-0.5 text-xs font-medium text-success">Active</span>
+                  )}
                 </div>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {session.members.map((member) => (
-                    <span
-                      key={member.id}
-                      className={`rounded-full px-2 py-0.5 text-[10px] ${
-                        member.isCurrentUser ? "bg-accent/20 text-accent" : "bg-border text-muted"
-                      }`}
-                    >
-                      {member.displayName}
-                    </span>
-                  ))}
-                  {session.ghostMembers.map((ghost) => (
-                    <span key={ghost.id} className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] text-warning">
-                      {ghost.displayName}
-                    </span>
-                  ))}
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-1">
+                    {session.members.map((member) => (
+                      <span
+                        key={member.id}
+                        className={`rounded-full px-2 py-0.5 text-[10px] ${
+                          member.isCurrentUser ? "bg-accent/20 text-accent" : "bg-border text-muted"
+                        }`}
+                      >
+                        {member.displayName}
+                      </span>
+                    ))}
+                    {session.ghostMembers.map((ghost) => (
+                      <span key={ghost.id} className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] text-warning">
+                        {ghost.displayName}
+                      </span>
+                    ))}
+                    <span className="ml-1 text-[10px] text-muted">{session.selectionCount} badges</span>
+                  </div>
+                  {session.isMember ? (
+                    <span className="shrink-0 text-[11px] font-medium text-success">You are in this session</span>
+                  ) : (
+                    <span />
+                  )}
                 </div>
               </Link>
             ))}
@@ -139,23 +135,43 @@ export function SessionsListClient({ activeSessions, pastSessions, todayString }
               <Link
                 key={session.id}
                 href={`/sessions/${session.id}`}
-                className="block rounded-xl border border-border bg-card p-4 hover:bg-card-hover transition-colors"
+                className="block rounded-xl border border-border bg-card px-4 py-2.5 hover:bg-card-hover transition-colors"
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{session.title ?? session.dateDisplay}</p>
-                    <p className="text-xs text-muted">
-                      {session.members.length} players &middot; {session.selectionCount} badges selected
-                    </p>
-                    {session.isMember && (
-                      <p className="mt-0.5 text-[11px] font-medium text-success">You were in this session</p>
-                    )}
-                  </div>
-                  <span className={`rounded-full px-3 py-1 text-xs font-medium ${
+                <div className="flex items-center justify-between gap-2">
+                  <p className="min-w-0 truncate text-sm font-medium text-foreground">
+                    {session.title ?? session.dateDisplay}
+                    <span className="text-xs font-normal text-muted"> &mdash; {session.createdByDisplayName}</span>
+                  </p>
+                  <span className={`shrink-0 rounded-full px-3 py-0.5 text-xs font-medium ${
                     session.needsReview ? "bg-warning/20 text-warning" : "bg-border text-muted"
                   }`}>
                     {session.needsReview ? "Pending Review" : "Closed"}
                   </span>
+                </div>
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-1">
+                    {session.members.map((member) => (
+                      <span
+                        key={member.id}
+                        className={`rounded-full px-2 py-0.5 text-[10px] ${
+                          member.isCurrentUser ? "bg-accent/20 text-accent" : "bg-border text-muted"
+                        }`}
+                      >
+                        {member.displayName}
+                      </span>
+                    ))}
+                    {session.ghostMembers.map((ghost) => (
+                      <span key={ghost.id} className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] text-warning">
+                        {ghost.displayName}
+                      </span>
+                    ))}
+                    <span className="ml-1 text-[10px] text-muted">{session.selectionCount} badges</span>
+                  </div>
+                  {session.isMember ? (
+                    <span className={`shrink-0 text-[11px] font-medium ${session.needsReview ? "text-success" : "text-blue-400"}`}>You were in this session</span>
+                  ) : (
+                    <span />
+                  )}
                 </div>
               </Link>
             ))}
