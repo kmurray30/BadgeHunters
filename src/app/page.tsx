@@ -31,14 +31,39 @@ export default async function Home() {
     },
     include: {
       createdBy: { select: { activatePlayerName: true, realName: true, displayNameMode: true } },
+      acknowledgements: { where: { userId: user.id }, select: { needsReview: true } },
     },
     orderBy: { sessionDateLocal: "desc" },
   });
 
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
-  const activeSessions = mySessions.filter((s) => s.status === "active" && new Intl.DateTimeFormat("en-CA", { timeZone: "UTC" }).format(s.sessionDateLocal) <= today);
-  const futureSessions = mySessions.filter((s) => s.status === "active" && new Intl.DateTimeFormat("en-CA", { timeZone: "UTC" }).format(s.sessionDateLocal) > today);
-  const pendingReviewSessions = mySessions.filter((s) => s.status === "completed_pending_ack");
+
+  // Categorize sessions considering the new per-user review model.
+  // "Effectively in review" = explicitly completed_pending_ack OR active but past date.
+  const activeSessions: typeof mySessions = [];
+  const futureSessions: typeof mySessions = [];
+  const pendingReviewSessions: typeof mySessions = [];
+
+  for (const sessionItem of mySessions) {
+    const dateLA = new Intl.DateTimeFormat("en-CA", { timeZone: "UTC" }).format(sessionItem.sessionDateLocal);
+    const isFuture = dateLA > today;
+    const isPastDate = Date.now() > new Date(sessionItem.expiresAt).getTime();
+    const userAck = sessionItem.acknowledgements[0];
+    const myReviewDone = userAck ? !userAck.needsReview : false;
+
+    const effectivelyInReview =
+      sessionItem.status === "completed_pending_ack" ||
+      (sessionItem.status === "active" && isPastDate && !isFuture);
+
+    if (effectivelyInReview && !myReviewDone) {
+      pendingReviewSessions.push(sessionItem);
+    } else if (isFuture) {
+      futureSessions.push(sessionItem);
+    } else if (sessionItem.status === "active" && !effectivelyInReview) {
+      activeSessions.push(sessionItem);
+    }
+    // Sessions where the user has already completed their review are excluded from the landing page
+  }
 
   // Other players summary
   const otherPlayers = await prisma.user.findMany({

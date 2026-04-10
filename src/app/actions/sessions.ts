@@ -62,6 +62,18 @@ export async function createSession(memberUserIds: string[], ghostNames: string[
     })),
   });
 
+  // Notify all non-creator members that they've been added
+  const nonCreatorMemberIds = memberUserIds.filter((memberId) => memberId !== user.id);
+  if (nonCreatorMemberIds.length > 0) {
+    await prisma.notification.createMany({
+      data: nonCreatorMemberIds.map((memberId) => ({
+        userId: memberId,
+        type: "session_added" as const,
+        sessionId: session.id,
+      })),
+    });
+  }
+
   revalidatePath("/sessions");
   return session.id;
 }
@@ -90,6 +102,13 @@ export async function addSessionMember(sessionId: string, userId: string) {
     create: { sessionId, userId },
     update: {},
   });
+
+  // Notify the added user (not for self-joins — this is for being added by someone else)
+  if (userId !== user.id) {
+    await prisma.notification.create({
+      data: { userId, type: "session_added", sessionId },
+    });
+  }
 
   revalidatePath(`/sessions/${sessionId}`);
 }
@@ -146,6 +165,11 @@ export async function removeSessionMember(sessionId: string, userId: string) {
   // Clean up their badge selections
   await prisma.sessionBadgeSelection.deleteMany({
     where: { sessionId, selectedByUserId: userId },
+  });
+
+  // Clean up their notifications for this session
+  await prisma.notification.deleteMany({
+    where: { sessionId, userId },
   });
 
   revalidatePath(`/sessions/${sessionId}`);
@@ -206,8 +230,18 @@ export async function toggleBadgeSelection(sessionId: string, badgeId: string) {
   revalidatePath(`/sessions/${sessionId}`);
 }
 
-export async function completeSession(sessionId: string) {
+/**
+ * Transition session from `active` → `completed_pending_ack`.
+ * Any member can trigger this. Does NOT mark the triggering user as done —
+ * they still need to call completeMyReview separately.
+ * Notifies all OTHER members that the session is ready for review.
+ */
+export async function startReview(sessionId: string) {
   const user = await requireUser();
+
+  const session = await prisma.session.findUnique({ where: { id: sessionId } });
+  if (!session) throw new Error("Session not found");
+  if (session.status !== "active") throw new Error("Session is not active");
 
   await prisma.session.update({
     where: { id: sessionId },
@@ -218,33 +252,18 @@ export async function completeSession(sessionId: string) {
     },
   });
 
-  revalidatePath(`/sessions/${sessionId}`);
-  revalidatePath("/sessions");
-}
-
-export async function acknowledgeSession(sessionId: string) {
-  const user = await requireUser();
-
-  await prisma.sessionUserAcknowledgement.update({
-    where: { sessionId_userId: { sessionId, userId: user.id } },
-    data: {
-      acknowledgedAt: new Date(),
-      needsReview: false,
-    },
+  // Notify other members (not the one who triggered review)
+  const otherMembers = await prisma.sessionMember.findMany({
+    where: { sessionId, userId: { not: user.id } },
+    select: { userId: true },
   });
-
-  // Check if all members have acknowledged — if so, close the session
-  const pendingAcks = await prisma.sessionUserAcknowledgement.count({
-    where: {
-      sessionId,
-      needsReview: true,
-    },
-  });
-
-  if (pendingAcks === 0) {
-    await prisma.session.update({
-      where: { id: sessionId },
-      data: { status: "closed" },
+  if (otherMembers.length > 0) {
+    await prisma.notification.createMany({
+      data: otherMembers.map((member) => ({
+        userId: member.userId,
+        type: "session_review" as const,
+        sessionId,
+      })),
     });
   }
 
@@ -253,41 +272,87 @@ export async function acknowledgeSession(sessionId: string) {
 }
 
 /**
- * Cancel review mode and revert the session back to active for all players.
- * Resets all acknowledgements and clears the completed state.
+ * Per-user review completion. Marks the current user as done reviewing.
+ * Session must already be in `completed_pending_ack`.
+ * When all members have completed, the session auto-closes.
  */
-export async function cancelSessionReview(sessionId: string) {
-  await requireUser();
+export async function completeMyReview(sessionId: string) {
+  const user = await requireUser();
 
-  const session = await prisma.session.findUnique({ where: { id: sessionId } });
-  if (!session || session.status !== "completed_pending_ack") {
-    throw new Error("Session is not in review mode");
+  await prisma.sessionUserAcknowledgement.update({
+    where: { sessionId_userId: { sessionId, userId: user.id } },
+    data: { acknowledgedAt: new Date(), needsReview: false },
+  });
+
+  // Delete this user's review notification
+  await prisma.notification.deleteMany({
+    where: { sessionId, userId: user.id, type: "session_review" },
+  });
+
+  // Check if everyone is done → close
+  const pendingAcks = await prisma.sessionUserAcknowledgement.count({
+    where: { sessionId, needsReview: true },
+  });
+  if (pendingAcks === 0) {
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: { status: "closed" },
+    });
+    await prisma.notification.deleteMany({
+      where: { sessionId, type: "session_review" },
+    });
   }
-
-  await prisma.session.update({
-    where: { id: sessionId },
-    data: {
-      status: "active",
-      completedAt: null,
-      completedByUserId: null,
-    },
-  });
-
-  await prisma.sessionUserAcknowledgement.updateMany({
-    where: { sessionId },
-    data: {
-      needsReview: true,
-      acknowledgedAt: null,
-    },
-  });
 
   revalidatePath(`/sessions/${sessionId}`);
   revalidatePath("/sessions");
 }
 
 /**
- * Revert a completed/closed session straight back to active.
- * Resets all member acknowledgements so everyone is back to square one.
+ * Per-user cancel: the current user un-completes their own review.
+ * Only allowed when the session date has NOT passed.
+ * Does NOT affect other users' states.
+ *
+ * If all users end up un-completed while in `completed_pending_ack`,
+ * the session reverts to `active`.
+ */
+export async function cancelMyReview(sessionId: string) {
+  const user = await requireUser();
+
+  // Reset only this user's ack
+  await prisma.sessionUserAcknowledgement.update({
+    where: { sessionId_userId: { sessionId, userId: user.id } },
+    data: { needsReview: true, acknowledgedAt: null },
+  });
+
+  // Delete this user's review notification
+  await prisma.notification.deleteMany({
+    where: { sessionId, userId: user.id, type: "session_review" },
+  });
+
+  // If everyone is now un-completed, revert session to active
+  const session = await prisma.session.findUnique({ where: { id: sessionId } });
+  if (session?.status === "completed_pending_ack") {
+    const doneCount = await prisma.sessionUserAcknowledgement.count({
+      where: { sessionId, needsReview: false },
+    });
+    if (doneCount === 0) {
+      await prisma.session.update({
+        where: { id: sessionId },
+        data: { status: "active", completedAt: null, completedByUserId: null },
+      });
+      // Clean up all review notifications since session is back to active
+      await prisma.notification.deleteMany({
+        where: { sessionId, type: "session_review" },
+      });
+    }
+  }
+
+  revalidatePath(`/sessions/${sessionId}`);
+  revalidatePath("/sessions");
+}
+
+/**
+ * Global reopen: reverts session to active and resets ALL acknowledgements.
  * Used for current-day "Re-open" — past-day editing is client-side only.
  */
 export async function reopenSession(sessionId: string) {
@@ -300,36 +365,20 @@ export async function reopenSession(sessionId: string) {
 
   await prisma.session.update({
     where: { id: sessionId },
-    data: {
-      status: "active",
-      completedAt: null,
-      completedByUserId: null,
-    },
+    data: { status: "active", completedAt: null, completedByUserId: null },
   });
 
   await prisma.sessionUserAcknowledgement.updateMany({
     where: { sessionId },
-    data: {
-      needsReview: true,
-      acknowledgedAt: null,
-    },
+    data: { needsReview: true, acknowledgedAt: null },
+  });
+
+  await prisma.notification.deleteMany({
+    where: { sessionId, type: "session_review" },
   });
 
   revalidatePath(`/sessions/${sessionId}`);
   revalidatePath("/sessions");
-}
-
-export async function dismissSessionReview(sessionId: string) {
-  const user = await requireUser();
-
-  await prisma.sessionUserAcknowledgement.update({
-    where: { sessionId_userId: { sessionId, userId: user.id } },
-    data: {
-      dismissedAt: new Date(),
-    },
-  });
-
-  revalidatePath(`/sessions/${sessionId}`);
 }
 
 /**

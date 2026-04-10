@@ -1,18 +1,18 @@
 "use client";
 
 import {
-    acknowledgeSession,
     addGhostMember,
     addSessionMember,
-    cancelSessionReview,
-    completeSession,
+    cancelMyReview,
+    completeMyReview,
     joinSession,
     removeGhostMember,
     removeSessionMember,
     reopenSession,
+    startReview,
     toggleBadgeSelection,
-    toggleSessionBadgeCompletion,
 } from "@/app/actions/sessions";
+import { toggleBadgeCompletion } from "@/app/actions/badges";
 import { BackButton } from "@/components/back-button";
 import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type BadgeTableSection, type ColumnHeader } from "@/components/badge-table";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -33,16 +33,28 @@ const YOUR_BADGES_COLUMNS: ColumnHeader[] = [
   { label: "To Do", width: "3.5rem", align: "center", sortField: "todo", sortDefaultDescending: true },
 ];
 
-const GROUP_BADGES_COLUMNS: ColumnHeader[] = [
-  { label: "#", width: "1.5rem", align: "right" },
-  { label: "Name", width: "minmax(0,12rem)" },
-  { label: "Description", width: "minmax(0,1fr)" },
-  { label: "Difficulty", width: "5rem", align: "right" },
-  { label: "Players", width: "4rem", align: "right" },
-  { label: "Votes", width: "4rem", align: "right" },
-  { label: "Done", width: "3rem", align: "center", tooltip: "Mark as completed" },
-  { label: "Status", width: "auto", tooltip: "Who selected or completed this badge this session" },
-];
+function buildGroupBadgeColumns(members: { id: string; displayName: string }[], currentUserId: string): ColumnHeader[] {
+  const sorted = [...members].sort((memberA, memberB) => {
+    if (memberA.id === currentUserId) return -1;
+    if (memberB.id === currentUserId) return 1;
+    return 0;
+  });
+  return [
+    { label: "#", width: "1.5rem", align: "right" },
+    { label: "Name", width: "minmax(0,12rem)" },
+    { label: "Description", width: "minmax(0,1fr)" },
+    { label: "Difficulty", width: "5rem", align: "right" },
+    { label: "Players", width: "4rem", align: "right" },
+    { label: "Total", width: "2.5rem", align: "center", vertical: true },
+    ...sorted.map((member) => ({
+      label: member.displayName.slice(0, 4),
+      width: "2rem",
+      align: "center" as const,
+      vertical: true,
+      tooltip: member.displayName,
+    })),
+  ];
+}
 
 interface SessionMember {
   id: string;
@@ -114,8 +126,6 @@ interface Props {
   availableUsersForAdd: AvailableUser[];
   metaRuleBlurbs: Record<string, string>;
   todayString: string;
-  sessionCompletedBadgeIds: string[];
-  allSessionCompletions: { userId: string; badgeId: string }[];
 }
 
 type TabMode = "your_badges" | "group_badges";
@@ -207,31 +217,40 @@ export function SessionDetailClient({
   availableUsersForAdd,
   metaRuleBlurbs,
   todayString,
-  sessionCompletedBadgeIds,
-  allSessionCompletions,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const personallyDone =
-    session.status === "closed" ||
-    (session.status === "completed_pending_ack" && session.userAck && !session.userAck.needsReview);
-
-  // Past the 6am-next-day LA cutoff → edit mode. Before it → re-open to active.
-  // expiresAt is already set to 6am the day after the session date.
+  // Past the 6am-next-day LA cutoff.
   const isPastDate = Date.now() > new Date(session.expiresAt).getTime();
 
   // Future = active status but session date hasn't arrived yet.
   const isFuture = session.status === "active" && session.sessionDateLA > todayString;
 
-  // Temporary client-side edit mode for past-date closed sessions.
-  // Not persisted — leaving the page reverts to the closed view.
+  // This user's personal review state
+  const myReviewDone = session.userAck ? !session.userAck.needsReview : false;
+
+  // "Effectively in review" means the session is explicitly in review mode OR
+  // the date has passed on an active session. Only relevant for members —
+  // non-members just see active/closed.
+  const effectivelyInReview = initialIsMember && (
+    session.status === "completed_pending_ack" ||
+    (session.status === "active" && isPastDate && !isFuture)
+  );
+
+  // User is personally done when: session is closed, OR they've completed their review
+  const personallyDone =
+    session.status === "closed" || (effectivelyInReview && myReviewDone);
+
+  // Temporary client-side edit mode for closed/done sessions.
   const [isEditing, setIsEditing] = useState(false);
-  const effectivelyActive = session.status === "active" || isEditing;
-  // Editing is allowed when: active, in review (completed_pending_ack + needsReview), or in client edit mode.
-  // Closed (personallyDone + not editing) = read-only.
+  const effectivelyActive = (session.status === "active" && !effectivelyInReview) || isEditing;
   const canEdit = !personallyDone || isEditing;
-  const showYourBadges = initialIsMember && !personallyDone && session.status === "active";
+
+  // Badge selection tab: available during active phase and during edit mode
+  const showYourBadges = initialIsMember && (
+    (session.status === "active" && !effectivelyInReview && !personallyDone) || isEditing
+  );
 
   const [activeTab, setActiveTab] = usePersistedState<TabMode>("bh:session:tab", showYourBadges ? "your_badges" : "group_badges");
 
@@ -244,49 +263,12 @@ export function SessionDetailClient({
   const [ghostNameInput, setGhostNameInput] = useState("");
   const [editingParty, setEditingParty] = useState(false);
 
-  // Optimistic local tracking of which badges were completed in this session.
-  // Seeded from the server prop; updates immediately on toggle so no refresh is needed
-  // for the checkbox state itself.
-  const [sessionCompletedSet, setSessionCompletedSet] = useState(
-    () => new Set(sessionCompletedBadgeIds)
-  );
-
-  // badgeId → Set<userId> lookup for ALL members' session completions.
-  // The current user's entry is overridden by sessionCompletedSet for optimistic accuracy.
-  const sessionCompletionsByBadge = useMemo(() => {
-    const map = new Map<string, Set<string>>();
-    for (const { userId, badgeId } of allSessionCompletions) {
-      if (!map.has(badgeId)) map.set(badgeId, new Set());
-      map.get(badgeId)!.add(userId);
-    }
-    return map;
-  }, [allSessionCompletions]);
-
-  // When the user unchecks a Done box, we prompt whether to also un-complete persistently.
-  const [uncompletConfirm, setUncompletConfirm] = useState<{ badgeId: string; badgeName: string } | null>(null);
-
-  function handleSessionCompletion(badgeId: string, badgeName: string) {
+  function handleToggleBadgeCompletion(badgeId: string) {
     if (!canEdit) return;
-    if (sessionCompletedSet.has(badgeId)) {
-      // Prompt before removing — unchecking has two possible meanings.
-      setUncompletConfirm({ badgeId, badgeName });
-    } else {
-      // Optimistically mark as done in this session + persist to account.
-      setSessionCompletedSet((prev) => new Set([...prev, badgeId]));
-      toggleSessionBadgeCompletion(session.id, badgeId, false);
-    }
-  }
-
-  function handleUncompletConfirm(alsoUncompletePersistently: boolean) {
-    if (!uncompletConfirm) return;
-    const { badgeId } = uncompletConfirm;
-    setSessionCompletedSet((prev) => {
-      const next = new Set(prev);
-      next.delete(badgeId);
-      return next;
+    startTransition(async () => {
+      await toggleBadgeCompletion(badgeId);
+      router.refresh();
     });
-    toggleSessionBadgeCompletion(session.id, badgeId, alsoUncompletePersistently);
-    setUncompletConfirm(null);
   }
 
   // Brief hover suppression after badge selection causes list reorder
@@ -445,27 +427,29 @@ export function SessionDetailClient({
     return Array.from(badgeMap.values());
   }, [session.selections]);
 
-  const groupPerVisit = groupBadges.filter((entry) => entry.selection.isPerVisit);
-  const groupNormal = groupBadges.filter((entry) => !entry.selection.isPerVisit);
+  // Badges the current user has persistently completed go in their own section
+  const groupCompletedByMe = groupBadges.filter((entry) => {
+    const fullBadge = badgeLookup.get(entry.selection.badgeId);
+    return fullBadge?.memberCompletions.includes(currentUserId) ?? false;
+  });
+  const completedByMeIds = new Set(groupCompletedByMe.map((entry) => entry.selection.badgeId));
+  const groupPerVisit = groupBadges.filter((entry) => entry.selection.isPerVisit && !completedByMeIds.has(entry.selection.badgeId));
+  const groupNormal = groupBadges.filter((entry) => !entry.selection.isPerVisit && !completedByMeIds.has(entry.selection.badgeId));
 
   const memberCount = session.members.length;
+  const groupBadgeColumns = useMemo(() => buildGroupBadgeColumns(session.members, currentUserId), [session.members, currentUserId]);
+
+  // Members sorted with current user first, matching column order
+  const sortedMembers = useMemo(() => {
+    return [...session.members].sort((memberA, memberB) => {
+      if (memberA.id === currentUserId) return -1;
+      if (memberB.id === currentUserId) return 1;
+      return 0;
+    });
+  }, [session.members, currentUserId]);
 
   return (
     <div className="space-y-6">
-      {/* Uncheck confirmation dialog */}
-      {uncompletConfirm && (
-        <ConfirmDialog
-          title={`Uncheck \u201c${uncompletConfirm.badgeName}\u201d?`}
-          description="Do you also want to remove this badge from your account\u2019s completed list?"
-          onClose={() => setUncompletConfirm(null)}
-          actions={[
-            { label: "Yes, un-complete on my account too", onClick: () => handleUncompletConfirm(true), variant: "danger" },
-            { label: "Just uncheck in this session", onClick: () => handleUncompletConfirm(false) },
-            { label: "Cancel", onClick: () => setUncompletConfirm(null), variant: "muted" },
-          ]}
-        />
-      )}
-
       {/* Leave session confirmation dialog */}
       {showLeaveConfirm && (
         <ConfirmDialog
@@ -523,16 +507,27 @@ export function SessionDetailClient({
               <span className="rounded-full bg-border px-3 py-1 text-xs font-medium text-muted">Viewing</span>
             )}
             {(() => {
+              // Non-members see a simplified view: Active or Closed
+              if (!initialIsMember) {
+                const isClosed = session.status === "closed" || isPastDate;
+                const label = isEditing ? "Editing" : isClosed ? "Closed" : "Active";
+                const colorClass = isEditing ? "bg-accent/20 text-accent"
+                  : isClosed ? "bg-border text-muted"
+                  : "bg-success/20 text-success";
+                return <span className={`rounded-full px-3 py-1 text-xs font-medium ${colorClass}`}>{label}</span>;
+              }
+              // Members see the full granularity
               const label = isEditing ? "Editing"
-                : session.status === "active"
-                  ? (isFuture ? "Future" : "Active")
-                  : personallyDone ? "Closed"
-                  : session.status === "completed_pending_ack" ? "Review Pending"
-                  : "Closed";
+                : personallyDone ? "Closed"
+                : effectivelyInReview ? "Review Pending"
+                : isFuture ? "Future"
+                : session.status === "active" ? "Active"
+                : "Closed";
               const colorClass = isEditing ? "bg-accent/20 text-accent"
+                : personallyDone ? "bg-border text-muted"
+                : effectivelyInReview ? "bg-warning/20 text-warning"
                 : isFuture ? "bg-blue-500/20 text-blue-400"
                 : session.status === "active" ? "bg-success/20 text-success"
-                : session.status === "completed_pending_ack" ? "bg-warning/20 text-warning"
                 : "bg-border text-muted";
               return <span className={`rounded-full px-3 py-1 text-xs font-medium ${colorClass}`}>{label}</span>;
             })()}
@@ -593,22 +588,36 @@ export function SessionDetailClient({
             </div>
           )}
 
-          {/* Active session: "Review and Complete" — not available for future sessions */}
-          {session.status === "active" && !isFuture && !viewOnlyMode && (
+          {/* Step 1: "Review For Completion" — active session, not future, triggers review mode */}
+          {session.status === "active" && !effectivelyInReview && !isFuture && !viewOnlyMode && initialIsMember && (
             <button
-              onClick={() => handleAction(() => completeSession(session.id))}
+              onClick={() => handleAction(() => startReview(session.id))}
+              disabled={isPending}
+              className="ml-auto inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-highlight to-pink-500 px-6 py-2.5 text-sm font-bold text-white shadow-[0_0_14px_rgba(217,70,239,0.25)] transition-all hover:shadow-[0_0_20px_rgba(217,70,239,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              {isPending ? "Starting Review..." : "Review For Completion"}
+            </button>
+          )}
+
+          {/* Step 2: "Complete My Review" — in review mode, user hasn't completed yet */}
+          {effectivelyInReview && !myReviewDone && !viewOnlyMode && (
+            <button
+              onClick={() => handleAction(() => completeMyReview(session.id))}
               disabled={isPending}
               className="ml-auto inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-highlight to-pink-500 px-6 py-2.5 text-sm font-bold text-white shadow-[0_0_14px_rgba(217,70,239,0.25)] transition-all hover:shadow-[0_0_20px_rgba(217,70,239,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
-              {isPending ? "Completing..." : "Review and Complete"}
+              {isPending ? "Completing..." : "Complete My Review"}
             </button>
           )}
 
-          {/* Edit mode (past-date): "Done Editing" exits back to closed view */}
-          {isEditing && !viewOnlyMode && (
+          {/* Edit mode: "Done Editing" exits back to closed view */}
+          {isEditing && (
             <button
               onClick={() => setIsEditing(false)}
               className="ml-auto inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-highlight to-pink-500 px-6 py-2.5 text-sm font-bold text-white shadow-[0_0_14px_rgba(217,70,239,0.25)] transition-all hover:shadow-[0_0_20px_rgba(217,70,239,0.4)] hover:scale-[1.02] active:scale-[0.98]"
@@ -620,27 +629,47 @@ export function SessionDetailClient({
             </button>
           )}
 
-          {/* Closed/acked: "Re-open" (current day) or "Edit" (past day) */}
-          {personallyDone && !isEditing && initialIsMember && !viewOnlyMode && (
+          {/* Closed/done: "Re-open" (current day, member only) or "Edit" (anyone) */}
+          {personallyDone && !isEditing && !viewOnlyMode && (
+            <>
+              {/* Re-open is member-only, current-day only */}
+              {initialIsMember && !isPastDate && (
+                <button
+                  onClick={() => handleAction(() => reopenSession(session.id))}
+                  disabled={isPending}
+                  className="ml-auto inline-flex items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-5 py-2.5 text-sm font-medium text-accent hover:bg-accent/20 transition-colors disabled:opacity-50"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" />
+                  </svg>
+                  {isPending ? "Reopening..." : "Re-open"}
+                </button>
+              )}
+              {/* Edit is available for anyone on past-date sessions */}
+              {isPastDate && (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="ml-auto inline-flex items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-5 py-2.5 text-sm font-medium text-accent hover:bg-accent/20 transition-colors"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Z" />
+                  </svg>
+                  Edit
+                </button>
+              )}
+            </>
+          )}
+
+          {/* Non-member closed sessions: Edit button (past-date only) */}
+          {session.status === "closed" && !initialIsMember && !isEditing && !viewOnlyMode && isPastDate && (
             <button
-              onClick={() => {
-                if (isPastDate) {
-                  setIsEditing(true);
-                } else {
-                  handleAction(() => reopenSession(session.id));
-                }
-              }}
-              disabled={isPending}
-              className="ml-auto inline-flex items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-5 py-2.5 text-sm font-medium text-accent hover:bg-accent/20 transition-colors disabled:opacity-50"
+              onClick={() => setIsEditing(true)}
+              className="ml-auto inline-flex items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-5 py-2.5 text-sm font-medium text-accent hover:bg-accent/20 transition-colors"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                {isPastDate ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Z" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" />
-                )}
+                <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Z" />
               </svg>
-              {isPending ? "Reopening..." : isPastDate ? "Edit" : "Re-open"}
+              Edit
             </button>
           )}
         </div>
@@ -684,28 +713,28 @@ export function SessionDetailClient({
 
         
 
-        {/* Review prompt — uses handleAction to force refresh */}
-        {session.status === "completed_pending_ack" && session.userAck?.needsReview && !viewOnlyMode && (
+        {/* Review prompt — shown when session is in review (or past-date active) and user hasn't completed yet */}
+        {effectivelyInReview && !myReviewDone && !viewOnlyMode && (
           <div className="mt-4 rounded-lg border border-warning/30 bg-warning/5 p-3">
             <p className="text-sm text-warning">
-              {session.completedBy?.displayName} has completed this session. Review your badge completions?
+              {session.status === "completed_pending_ack" && session.completedBy
+                ? `${session.completedBy.displayName} started the review. Check off your badge completions and complete yours.`
+                : "The session date has passed. Review your badge completions and complete your review."}
             </p>
-            <div className="mt-2 flex items-center gap-2">
-              <button
-                onClick={() => handleAction(() => acknowledgeSession(session.id))}
-                disabled={isPending}
-                className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
-              >
-                {isPending ? "Updating..." : "I have checked off all completed badges"}
-              </button>
-              <button
-                onClick={() => handleAction(() => cancelSessionReview(session.id))}
-                disabled={isPending}
-                className="cursor-pointer rounded-lg border border-danger/30 bg-danger/10 px-4 py-2 text-xs font-medium text-danger hover:bg-danger/20 hover:border-danger/50 transition-colors disabled:opacity-50"
-              >
-                Cancel Review
-              </button>
-            </div>
+          </div>
+        )}
+
+        {/* Cancel my review — only allowed when user has completed AND date has NOT passed */}
+        {effectivelyInReview && myReviewDone && !isPastDate && !viewOnlyMode && (
+          <div className="mt-4 rounded-lg border border-accent/20 bg-accent/5 p-3 flex items-center justify-between">
+            <p className="text-xs text-accent">You have completed your review.</p>
+            <button
+              onClick={() => handleAction(() => cancelMyReview(session.id))}
+              disabled={isPending}
+              className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-2 text-xs font-medium text-danger hover:bg-danger/20 hover:border-danger/50 transition-colors disabled:opacity-50"
+            >
+              Undo My Review
+            </button>
           </div>
         )}
       </div>
@@ -778,10 +807,10 @@ export function SessionDetailClient({
             sections={(() => {
               const buildRow = (badge: typeof yourBadgesList[number]): BadgeTableRow => {
                 const isSelected = userSelectedBadgeIds.has(badge.id);
-                const isSessionCompleted = sessionCompletedSet.has(badge.id);
+                const isCompleted = badge.memberCompletions.includes(currentUserId);
                 const diffInfo = DIFFICULTY_LABELS[badge.defaultDifficulty] ?? DIFFICULTY_LABELS.unknown;
                 const blurb = metaRuleBlurbs[badge.id];
-                const rowClassName = isSessionCompleted
+                const rowClassName = isCompleted
                   ? "bg-completed hover:bg-completed-hover"
                   : isSelected
                     ? (suppressHover ? "bg-selection" : "bg-selection hover:bg-selection-hover")
@@ -847,13 +876,16 @@ export function SessionDetailClient({
             </div>
           ) : (
             <BadgeTable
-              columns={GROUP_BADGES_COLUMNS}
+              columns={groupBadgeColumns}
               sections={[
                 ...(groupPerVisit.length > 0
-                  ? [{ label: "Per-Visit Badges", rows: buildGroupBadgeRows(groupPerVisit, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, sessionCompletedSet, canEdit, handleSessionCompletion, sessionCompletionsByBadge, session.members) } satisfies BadgeTableSection]
+                  ? [{ label: "Per-Visit Badges", rows: buildGroupBadgeRows(groupPerVisit, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers) } satisfies BadgeTableSection]
                   : []),
                 ...(groupNormal.length > 0
-                  ? [{ label: "Standard Badges", rows: buildGroupBadgeRows(groupNormal, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, sessionCompletedSet, canEdit, handleSessionCompletion, sessionCompletionsByBadge, session.members) } satisfies BadgeTableSection]
+                  ? [{ label: "Standard Badges", rows: buildGroupBadgeRows(groupNormal, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers) } satisfies BadgeTableSection]
+                  : []),
+                ...(groupCompletedByMe.length > 0
+                  ? [{ label: "Completed By Me", rows: buildGroupBadgeRows(groupCompletedByMe, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers) } satisfies BadgeTableSection]
                   : []),
               ]}
             />
@@ -872,10 +904,8 @@ function buildGroupBadgeRows(
   currentUserId: string,
   metaRuleBlurbs: Record<string, string>,
   userSelectedBadgeIds: Set<string>,
-  sessionCompletedSet: Set<string>,
   canEdit: boolean,
-  onSessionCompletion: (badgeId: string, badgeName: string) => void,
-  sessionCompletionsByBadge: Map<string, Set<string>>,
+  onToggleCompletion: (badgeId: string) => void,
   members: { id: string; displayName: string }[],
 ): BadgeTableRow[] {
   return entries.map((entry) => {
@@ -883,49 +913,52 @@ function buildGroupBadgeRows(
     const diffKey = fullBadge?.defaultDifficulty ?? "unknown";
     const diffInfo = DIFFICULTY_LABELS[diffKey] ?? DIFFICULTY_LABELS.unknown;
     const playerCountResolved = fullBadge ? resolvePlayerCount(fullBadge) : { bucket: "none", label: "Any", color: "text-muted" };
-    const blurb = metaRuleBlurbs[entry.selection.badgeId];
-    const selectorNames = entry.selectors.map((selector) => selector.displayName).join(", ");
-    const selectorCount = entry.selectors.length;
-    const isSessionCompleted = sessionCompletedSet.has(entry.selection.badgeId);
+    const persistentCompletions = new Set(fullBadge?.memberCompletions ?? []);
+    const currentUserCompleted = persistentCompletions.has(currentUserId);
+
     const isUserSelected = userSelectedBadgeIds.has(entry.selection.badgeId);
-    // Green = completed in this session. Blue = selected by you. Green takes priority.
-    const rowClassName = isSessionCompleted
+    const rowClassName = currentUserCompleted
       ? "bg-completed hover:bg-completed-hover"
       : isUserSelected
         ? "bg-selection hover:bg-selection-hover"
         : "hover:bg-card-hover";
 
-    // Build per-player status chips.
-    // Server-side completions, with the current user overridden by optimistic sessionCompletedSet.
-    const serverCompletedIds = sessionCompletionsByBadge.get(entry.selection.badgeId) ?? new Set<string>();
-    const selectorIds = new Set(entry.selectors.map((selector) => selector.id));
+    const completedCount = members.filter((member) => persistentCompletions.has(member.id)).length;
+    const fractionCell = (
+      <span className={`text-[11px] tabular-nums ${completedCount === members.length ? "text-success font-semibold" : "text-muted"}`}>
+        {completedCount}/{members.length}
+      </span>
+    );
 
-    // Collect all user IDs that should appear: selectors + anyone who completed it in-session.
-    const relevantIds = new Set<string>([...selectorIds]);
-    for (const uid of serverCompletedIds) relevantIds.add(uid);
-    // Apply optimistic current-user override.
-    if (isSessionCompleted) relevantIds.add(currentUserId);
-
-    // Build display name lookup from members list (selectors already have displayName).
-    const memberNameById = new Map(members.map((member) => [member.id, member.displayName]));
-    for (const selector of entry.selectors) memberNameById.set(selector.id, selector.displayName);
-
-    const playerStatusChips = Array.from(relevantIds).map((uid) => {
-      // Current user's completion state comes from optimistic sessionCompletedSet.
-      const completed = uid === currentUserId
-        ? sessionCompletedSet.has(entry.selection.badgeId)
-        : serverCompletedIds.has(uid);
-      const name = memberNameById.get(uid) ?? "Unknown";
+    // Per-member completion cells: clickable checkbox for current user, static indicator for others
+    const memberCells = members.map((member) => {
+      const completed = persistentCompletions.has(member.id);
+      if (member.id === currentUserId) {
+        return (
+          <BadgeCheckbox
+            key={member.id}
+            checked={currentUserCompleted}
+            disabled={!canEdit}
+            title={!canEdit ? "Session is closed" : currentUserCompleted ? "Click to un-complete" : "Mark as completed"}
+            onClick={() => onToggleCompletion(entry.selection.badgeId)}
+          />
+        );
+      }
       return (
         <span
-          key={uid}
-          className={`inline-flex items-center gap-0.5 text-[11px] font-medium ${
-            completed ? "text-success" : "text-accent"
-          }`}
-          title={completed ? `${name} completed in this session` : `${name} selected this badge`}
+          key={member.id}
+          className={`flex items-center justify-center ${completed ? "text-success" : "text-accent/40"}`}
+          title={completed ? `${member.displayName} has completed` : `${member.displayName} has not completed`}
         >
-          {name}
-          {completed ? " ✓" : " ◐"}
+          {completed ? (
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <rect x="4" y="4" width="16" height="16" rx="2" />
+            </svg>
+          )}
         </span>
       );
     });
@@ -952,18 +985,8 @@ function buildGroupBadgeRows(
         <span className="block min-w-0 truncate text-xs text-muted">{entry.selection.badgeDescription}</span>,
         <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
         <span className={`min-w-0 text-center text-[11px] ${playerCountResolved.color}`}>{playerCountResolved.label}</span>,
-        <span className="min-w-0 text-center text-[11px] text-success" title={selectorNames}>{selectorCount}</span>,
-        <BadgeCheckbox
-          checked={isSessionCompleted}
-          disabled={!canEdit}
-          title={!canEdit ? "Session is closed" : isSessionCompleted ? "Completed this session — click to undo" : "Mark completed in this session"}
-          onClick={() => onSessionCompletion(entry.selection.badgeId, entry.selection.badgeName)}
-        />,
-        <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-0.5">
-          {playerStatusChips.length > 0 ? playerStatusChips : (
-            <span className="text-[11px] text-muted">—</span>
-          )}
-        </div>,
+        fractionCell,
+        ...memberCells,
       ],
       footer: undefined,
     };

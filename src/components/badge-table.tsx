@@ -18,6 +18,10 @@ export interface ColumnHeader {
   sortField?: string;
   /** When first selected via header click, sort descending rather than ascending */
   sortDefaultDescending?: boolean;
+  /** If true, the header label is rendered at a steep angle (~75°). */
+  vertical?: boolean;
+  /** Group name — columns sharing the same group get a spanning header label above them. */
+  group?: string;
 }
 
 // ─── Row ──────────────────────────────────────────────────────────────────────
@@ -46,6 +50,8 @@ export interface BadgeTableSection {
   /** Optional label rendered as a full-width header above the section's rows. */
   label?: string;
   rows: BadgeTableRow[];
+  /** If true, the section starts collapsed. */
+  defaultCollapsed?: boolean;
 }
 
 // ─── Table ────────────────────────────────────────────────────────────────────
@@ -78,6 +84,24 @@ const SUBGRID_STYLE: React.CSSProperties = {
 };
 
 const FULL_SPAN_STYLE: React.CSSProperties = { gridColumn: "1 / -1" };
+
+/**
+ * Returns a map from column index → group label for the first column of
+ * each group. Used to render spanning group labels inline within the
+ * header row (only on the first column of each group).
+ */
+function buildGroupSpans(columns: ColumnHeader[]): Map<number, string> {
+  const spans = new Map<number, string>();
+  let lastGroup: string | undefined;
+  for (let columnIdx = 0; columnIdx < columns.length; columnIdx++) {
+    const group = columns[columnIdx].group;
+    if (group && group !== lastGroup) {
+      spans.set(columnIdx, group);
+    }
+    lastGroup = group;
+  }
+  return spans;
+}
 
 export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, onSortChange }: BadgeTableProps) {
   const gridTemplateColumns = columns.map((column) => column.width).join(" ");
@@ -113,8 +137,14 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
   const resolvedSections: BadgeTableSection[] = sections ?? (rows ? [{ rows }] : []);
   const totalRows = resolvedSections.reduce((sum, section) => sum + section.rows.length, 0);
 
-  // Track which labeled sections are collapsed. Keyed by section index.
-  const [collapsedSections, setCollapsedSections] = useState<Set<number>>(() => new Set());
+  // Track which labeled sections are collapsed. Seeded from defaultCollapsed.
+  const [collapsedSections, setCollapsedSections] = useState<Set<number>>(() => {
+    const initial = new Set<number>();
+    for (let sectionIdx = 0; sectionIdx < resolvedSections.length; sectionIdx++) {
+      if (resolvedSections[sectionIdx].defaultCollapsed) initial.add(sectionIdx);
+    }
+    return initial;
+  });
 
   function toggleSection(index: number) {
     setCollapsedSections((prev) => {
@@ -130,42 +160,62 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
       <div className="grid" style={{ gridTemplateColumns }}>
         {/* Column header row */}
         <div
-          className="grid items-start gap-2 border-b border-border bg-card px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted"
+          className="grid items-center gap-2 border-b border-border bg-card px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted"
           style={SUBGRID_STYLE}
         >
           {columns.map((column, index) => {
-            const isSortable = !!column.sortField && !!onSortChange;
-            const isPrimary = isSortable && sortCriteria?.[0]?.field === column.sortField;
-            const isAnyActive = isSortable && sortCriteria?.some((c) => c.field === column.sortField);
-            const isAscending = sortCriteria?.find((c) => c.field === column.sortField)?.ascending;
+              const isSortable = !!column.sortField && !!onSortChange;
+              const isPrimary = isSortable && sortCriteria?.[0]?.field === column.sortField;
+              const isAnyActive = isSortable && sortCriteria?.some((c) => c.field === column.sortField);
+              const isAscending = sortCriteria?.find((c) => c.field === column.sortField)?.ascending;
 
-            const baseHeaderClass = "whitespace-pre-line min-w-0 leading-tight";
+              const baseHeaderClass = "whitespace-pre-line min-w-0 leading-tight";
 
-            if (isSortable) {
+              if (isSortable) {
+                return (
+                  <button
+                    key={index}
+                    type="button"
+                    title={column.tooltip}
+                    onClick={() => handleHeaderSort(column)}
+                    className={`${baseHeaderClass} hover:text-foreground transition-colors ${
+                      column.align === "center" ? "text-center" : column.align === "right" ? "text-right" : "text-left"
+                    } ${isAnyActive ? "text-foreground" : ""}`}
+                  >
+                    {column.label}
+                    {isPrimary && (
+                      <span className="ml-0.5">{isAscending ? "↑" : "↓"}</span>
+                    )}
+                  </button>
+                );
+              }
+
+              if (column.vertical) {
+                return (
+                  <span
+                    key={index}
+                    title={column.tooltip ?? column.label}
+                    className="self-end text-center normal-case tracking-normal text-[11px]"
+                    style={{
+                      writingMode: "vertical-rl",
+                      transform: "rotate(195deg) translateX(-7px)",
+                      maxHeight: "4rem",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      textTransform: "none",
+                    }}
+                  >
+                    {column.label}
+                  </span>
+                );
+              }
+
               return (
-                <button
-                  key={index}
-                  type="button"
-                  title={column.tooltip}
-                  onClick={() => handleHeaderSort(column)}
-                  className={`${baseHeaderClass} hover:text-foreground transition-colors ${
-                    column.align === "center" ? "text-center" : column.align === "right" ? "text-right" : "text-left"
-                  } ${isAnyActive ? "text-foreground" : ""}`}
-                >
+                <span key={index} title={column.tooltip} className={`${baseHeaderClass} ${alignClass(column.align) ?? ""}`}>
                   {column.label}
-                  {isPrimary && (
-                    <span className="ml-0.5">{isAscending ? "↑" : "↓"}</span>
-                  )}
-                </button>
+                </span>
               );
-            }
-
-            return (
-              <span key={index} title={column.tooltip} className={`${baseHeaderClass} ${alignClass(column.align) ?? ""}`}>
-                {column.label}
-              </span>
-            );
-          })}
+            })}
         </div>
 
         {/* Sections */}

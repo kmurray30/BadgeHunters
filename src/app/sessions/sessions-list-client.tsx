@@ -80,7 +80,9 @@ export function SessionsListClient({ activeSessions, pastSessions, todayString }
                     {session.title ?? session.dateDisplay}
                     <span className="text-xs font-normal text-muted"> &mdash; {session.createdByDisplayName}</span>
                   </p>
-                  {session.dateStringLA > todayString ? (
+                  {session.needsReview ? (
+                    <span className="shrink-0 rounded-full bg-warning/20 px-3 py-0.5 text-xs font-medium text-warning">Pending Review</span>
+                  ) : session.dateStringLA > todayString ? (
                     <span className="shrink-0 rounded-full bg-blue-500/20 px-3 py-0.5 text-xs font-medium text-blue-400">Future</span>
                   ) : (
                     <span className="shrink-0 rounded-full bg-success/20 px-3 py-0.5 text-xs font-medium text-success">Active</span>
@@ -142,10 +144,8 @@ export function SessionsListClient({ activeSessions, pastSessions, todayString }
                     {session.title ?? session.dateDisplay}
                     <span className="text-xs font-normal text-muted"> &mdash; {session.createdByDisplayName}</span>
                   </p>
-                  <span className={`shrink-0 rounded-full px-3 py-0.5 text-xs font-medium ${
-                    session.needsReview ? "bg-warning/20 text-warning" : "bg-border text-muted"
-                  }`}>
-                    {session.needsReview ? "Pending Review" : "Closed"}
+                  <span className="shrink-0 rounded-full bg-border px-3 py-0.5 text-xs font-medium text-muted">
+                    Closed
                   </span>
                 </div>
                 <div className="mt-1 flex items-center justify-between gap-2">

@@ -47,6 +47,12 @@ enum SessionStatus {
 enum ScoreSource {
   scrape
   manual
+  test_override
+}
+
+enum NotificationType {
+  session_added
+  session_review
 }
 
 enum ReactionType {
@@ -102,6 +108,7 @@ model User {
   sessionAcks         SessionUserAcknowledgement[]
   feedbackPosts       FeedbackPost[]
   feedbackReactions   FeedbackReaction[]
+  notifications       Notification[]
 
   @@map("users")
 }
@@ -238,6 +245,7 @@ model Session {
   selections     SessionBadgeSelection[]
   completions    SessionBadgeCompletion[]
   acknowledgements SessionUserAcknowledgement[]
+  notifications    Notification[]
 
   @@map("sessions")
 }
@@ -319,6 +327,21 @@ model SessionUserAcknowledgement {
 
   @@unique([sessionId, userId])
   @@map("session_user_acknowledgements")
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  userId      String           @map("user_id")
+  type        NotificationType
+  sessionId   String?          @map("session_id")
+  readAt      DateTime?        @map("read_at")
+  dismissedAt DateTime?        @map("dismissed_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
 }
 
 model FeedbackPost {

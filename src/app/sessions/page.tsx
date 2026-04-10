@@ -74,15 +74,40 @@ export default async function SessionsPage() {
   }
 
   const todayString = new Intl.DateTimeFormat("en-CA", { timeZone: "UTC" }).format(new Date());
-  const activeSessions = sessions.filter((session) => session.status === "active");
-  const pastSessions = sessions.filter((session) => session.status !== "active");
+  const activeSessions = sessions.filter((session) => {
+    const isMember = session.members.some((member) => member.user.id === user.id);
+    const userAck = session.acknowledgements[0];
+    const userNeedsReview = userAck?.needsReview ?? true;
+
+    if (session.status === "active") return true;
+
+    if (session.status === "completed_pending_ack") {
+      // Members who have already reviewed see it in history; others see it as active
+      return !isMember || userNeedsReview;
+    }
+    return false;
+  });
+  const pastSessions = sessions.filter((session) => !activeSessions.includes(session));
 
   function toListItem(session: typeof sessions[number]) {
+    const userAck = session.acknowledgements[0];
+    const isPastDate = Date.now() > new Date(session.expiresAt).getTime();
+    const dateLA = sessionDateStringLA(session.sessionDateLocal);
+    const isFuture = dateLA > todayString;
+
+    const isMember = session.members.some((member) => member.user.id === user.id);
+
+    // "Effectively in review" only applies to members
+    const effectivelyInReview = isMember && (
+      session.status === "completed_pending_ack" ||
+      (session.status === "active" && isPastDate && !isFuture)
+    );
+
     return {
       id: session.id,
       title: session.title,
       dateDisplay: formatSessionDate(session.sessionDateLocal, "short"),
-      dateStringLA: sessionDateStringLA(session.sessionDateLocal),
+      dateStringLA: dateLA,
       status: session.status,
       createdByDisplayName: getDisplayName(session.createdBy),
       members: session.members.map((member) => ({
@@ -95,8 +120,8 @@ export default async function SessionsPage() {
         displayName: ghost.displayName,
       })),
       selectionCount: session._count.selections,
-      needsReview: session.status === "completed_pending_ack" && (session.acknowledgements[0]?.needsReview ?? false),
-      isMember: session.members.some((member) => member.user.id === user.id),
+      needsReview: effectivelyInReview && (userAck?.needsReview ?? true),
+      isMember,
     };
   }
 
