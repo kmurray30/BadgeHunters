@@ -24,11 +24,12 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 
 const YOUR_BADGES_COLUMNS: ColumnHeader[] = [
   { label: "#", width: "1.5rem", align: "right" },
-  { label: "Name", width: "minmax(0,12rem)" },
+  { label: "Name", width: "minmax(0,12rem)", sortField: "name" },
   { label: "Description", width: "minmax(0,1fr)" },
-  { label: "Difficulty", width: "5rem", align: "right" },
-  { label: "Players", width: "4rem", align: "right" },
-  { label: "Need", width: "4rem", align: "right" },
+  { label: "Difficulty", width: "5rem", align: "right", sortField: "difficulty" },
+  { label: "Players", width: "4rem", align: "right", sortField: "players" },
+  { label: "Need", width: "4rem", align: "right", sortField: "need", sortDefaultDescending: true },
+  { label: "To Do", width: "3.5rem", align: "center", sortField: "todo", sortDefaultDescending: true },
 ];
 
 const GROUP_BADGES_COLUMNS: ColumnHeader[] = [
@@ -95,6 +96,7 @@ interface BadgeData {
   communityVotes: string[];
   currentUserPlayerCount: string | null;
   communityPlayerCountVotes: string[];
+  isTodoByCurrentUser: boolean;
 }
 
 interface AvailableUser {
@@ -121,8 +123,8 @@ const DIFFICULTY_MAP: Record<string, number> = { easy: 1, medium: 2, hard: 3, im
 
 const SESSION_SORT_FIELDS: SortField[] = [
   { value: "need", label: "Need (others)" },
+  { value: "todo", label: "To Do" },
   { value: "difficulty", label: "Difficulty" },
-  { value: "number", label: "Badge #" },
   { value: "name", label: "Name" },
   { value: "players", label: "Player count" },
 ];
@@ -303,8 +305,8 @@ export function SessionDetailClient({
   const [yourBadgesFilters, setYourBadgesFilters] = usePersistedState<ActiveFilter[]>("bh:session:your-badges:filters", []);
   const [yourBadgesSortCriteria, setYourBadgesSortCriteria] = usePersistedState<SortCriterion[]>("bh:session:your-badges:sort", [
     { field: "need", ascending: false },
+    { field: "todo", ascending: false },
     { field: "difficulty", ascending: true },
-    { field: "number", ascending: true },
   ]);
 
   const displayPartySize = session.members.length + session.ghostMembers.length;
@@ -396,14 +398,14 @@ export function SessionDetailClient({
         let comparison = 0;
         switch (criterion.field) {
           case "need": comparison = badgeA.totalUncompletedCount - badgeB.totalUncompletedCount; break;
+          case "todo": comparison = (badgeA.isTodoByCurrentUser ? 1 : 0) - (badgeB.isTodoByCurrentUser ? 1 : 0); break;
           case "difficulty": comparison = badgeA.difficultySortKey - badgeB.difficultySortKey; break;
-          case "number": comparison = badgeA.badgeNumber - badgeB.badgeNumber; break;
           case "name": comparison = badgeA.name.localeCompare(badgeB.name); break;
           case "players": comparison = (resolvePlayerCount(badgeA) as { bucket: string }).bucket.localeCompare(resolvePlayerCount(badgeB).bucket); break;
         }
         if (comparison !== 0) return criterion.ascending ? comparison : -comparison;
       }
-      return 0;
+      return badgeA.badgeNumber - badgeB.badgeNumber;
     });
 
     return list;
@@ -754,6 +756,8 @@ export function SessionDetailClient({
 
           <BadgeTable
             columns={YOUR_BADGES_COLUMNS}
+            sortCriteria={yourBadgesSortCriteria}
+            onSortChange={setYourBadgesSortCriteria}
             sections={(() => {
               const buildRow = (badge: typeof yourBadgesList[number]): BadgeTableRow => {
                 const isSelected = userSelectedBadgeIds.has(badge.id);
@@ -790,12 +794,14 @@ export function SessionDetailClient({
                     <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
                     <span className={`min-w-0 text-center text-[11px] ${resolvePlayerCount(badge).color}`}>{resolvePlayerCount(badge).label}</span>,
                     <span className="min-w-0 text-center text-[11px] text-success">{badge.totalUncompletedCount}/{memberCount}</span>,
+                    <span
+                      className={`min-w-0 flex items-center justify-center text-[13px] ${badge.isTodoByCurrentUser ? "text-amber-400" : "text-border"}`}
+                      title={badge.isTodoByCurrentUser ? "On your To Do list" : "Not on your To Do list"}
+                    >
+                      ★
+                    </span>,
                   ],
-                  footer: blurb ? (
-                    <div className="bg-purple-500/5 px-3 py-1 text-[10px] text-purple-400 border-t border-purple-500/10">
-                      {blurb}
-                    </div>
-                  ) : undefined,
+                  footer: undefined,
                 };
               };
               const perVisit = yourBadgesList.filter((badge) => badge.isPerVisit);
@@ -942,11 +948,7 @@ function buildGroupBadgeRows(
           )}
         </div>,
       ],
-      footer: blurb ? (
-        <div className="bg-purple-500/5 px-3 py-1 text-[10px] text-purple-400 border-t border-purple-500/10">
-          {blurb}
-        </div>
-      ) : undefined,
+      footer: undefined,
     };
   });
 }

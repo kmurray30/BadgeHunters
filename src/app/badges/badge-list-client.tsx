@@ -1,6 +1,6 @@
 "use client";
 
-import { toggleBadgeCompletion } from "@/app/actions/badges";
+import { toggleBadgeCompletion, toggleBadgeTodo } from "@/app/actions/badges";
 import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type ColumnHeader } from "@/components/badge-table";
 import { MultiFilter, type ActiveFilter, type FilterDefinition } from "@/components/multi-filter";
 import { usePersistedState } from "@/hooks/use-persisted-state";
@@ -25,6 +25,7 @@ interface BadgeData {
   isPerVisit: boolean;
   isMetaBadge: boolean;
   completedByCurrentUser: boolean;
+  isTodoByCurrentUser: boolean;
   currentUserDifficulty: string | null;
   currentUserPlayerCount: string | null;
   communityPlayerCountVotes: string[];
@@ -50,17 +51,19 @@ const DIFFICULTY_OPTIONS: { value: string; label: string; color: string }[] = [
 
 const BADGE_TABLE_COLUMNS: ColumnHeader[] = [
   { label: "#", width: "1.5rem", align: "right" },
-  { label: "Name", width: "minmax(0,12rem)" },
+  { label: "Name", width: "minmax(0,12rem)", sortField: "name" },
   { label: "Description", width: "minmax(0,1fr)" },
-  { label: "Difficulty", width: "5rem", align: "right" },
-  { label: "Players", width: "4rem", align: "right" },
-  { label: "Done", width: "3.5rem", align: "center" },
+  { label: "Difficulty", width: "5rem", align: "right", sortField: "difficulty" },
+  { label: "Players", width: "4rem", align: "right", sortField: "players" },
+  { label: "To Do", width: "3.5rem", align: "center", sortField: "todo", sortDefaultDescending: true },
+  { label: "Done", width: "3.5rem", align: "center", sortField: "done" },
 ];
 
 const SORT_FIELDS: SortField[] = [
+  { value: "todo", label: "To Do" },
+  { value: "done", label: "Done" },
   { value: "difficulty", label: "Difficulty" },
   { value: "name", label: "Name" },
-  { value: "number", label: "Badge #", tooltip: "The order in which the badges appear in the Activate terminal" },
   { value: "completions", label: "Completions" },
   { value: "players", label: "Player count" },
 ];
@@ -155,6 +158,7 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
     { key: "completion", value: "not_completed" },
   ]);
   const [sortCriteria, setSortCriteria] = usePersistedState<SortCriterion[]>("bh:badges:sort", [
+    { field: "todo", ascending: false },
     { field: "difficulty", ascending: true },
   ]);
 
@@ -164,18 +168,17 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
     return Array.from(roomSet).sort();
   }, [badges]);
 
-  const allGames = useMemo(() => {
-    const gameSet = new Set<string>();
-    badges.forEach((badge) => badge.games.forEach((game) => gameSet.add(game)));
-    return Array.from(gameSet).sort();
-  }, [badges]);
-
   const filterDefinitions = useMemo<FilterDefinition[]>(() => {
     const defs: FilterDefinition[] = [
       { key: "completion", label: "Completion", options: [
         { value: "all", label: "All" },
         { value: "not_completed", label: "Not completed" },
         { value: "completed", label: "Completed" },
+      ]},
+      { key: "todo", label: "To Do", options: [
+        { value: "all", label: "All" },
+        { value: "todo", label: "To Do only" },
+        { value: "not_todo", label: "Not To Do" },
       ]},
       { key: "difficulty", label: "Difficulty", options: [
         { value: "all", label: "Any difficulty" },
@@ -198,26 +201,20 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
         ...allRooms.map((room) => ({ value: room, label: room })),
       ]});
     }
-    if (allGames.length > 0) {
-      defs.push({ key: "game", label: "Game", options: [
-        { value: "all", label: "Any game" },
-        ...allGames.map((game) => ({ value: game, label: game })),
-      ]});
-    }
     if (allUsers.length > 0) {
       defs.push(
         { key: "completedBy", label: "Completed by", options: [
           { value: "all", label: "Anyone" },
           ...allUsers.map((appUser) => ({ value: appUser.id, label: appUser.displayName })),
         ]},
-        { key: "notDoneBy", label: "Not done by", options: [
+        { key: "notDoneBy", label: "Not completed by", options: [
           { value: "all", label: "Anyone" },
           ...allUsers.map((appUser) => ({ value: appUser.id, label: appUser.displayName })),
         ]},
       );
     }
     return defs;
-  }, [allRooms, allGames, allUsers]);
+  }, [allRooms, allUsers]);
 
   function getFilterVal(key: string): string {
     return activeFilters.find((filter) => filter.key === key)?.value ?? "all";
@@ -230,17 +227,19 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
       case "difficulty": return getDifficultyDisplay(badgeA).sortKey - getDifficultyDisplay(badgeB).sortKey;
       case "completions": return badgeA.totalCompletions - badgeB.totalCompletions;
       case "players": return getPlayerCountDisplay(badgeA).sortKey - getPlayerCountDisplay(badgeB).sortKey;
+      case "todo": return (badgeA.isTodoByCurrentUser ? 1 : 0) - (badgeB.isTodoByCurrentUser ? 1 : 0);
+      case "done": return (badgeA.completedByCurrentUser ? 1 : 0) - (badgeB.completedByCurrentUser ? 1 : 0);
       default: return 0;
     }
   }
 
   const filteredAndSortedBadges = useMemo(() => {
     const completionVal = getFilterVal("completion");
+    const todoVal = getFilterVal("todo");
     const difficultyVal = getFilterVal("difficulty");
     const playersVal = getFilterVal("players");
     const typeVal = getFilterVal("type");
     const roomVal = getFilterVal("room");
-    const gameVal = getFilterVal("game");
     const completedByVal = getFilterVal("completedBy");
     const notDoneByVal = getFilterVal("notDoneBy");
 
@@ -255,6 +254,8 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
       }
       if (completionVal === "completed" && !badge.completedByCurrentUser) return false;
       if (completionVal === "not_completed" && badge.completedByCurrentUser) return false;
+      if (todoVal === "todo" && !badge.isTodoByCurrentUser) return false;
+      if (todoVal === "not_todo" && badge.isTodoByCurrentUser) return false;
       if (difficultyVal !== "all") {
         const displayed = getDifficultyDisplay(badge);
         const diffOption = DIFFICULTY_OPTIONS.find((difficultyOpt) => difficultyOpt.value === difficultyVal);
@@ -264,7 +265,6 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
       if (typeVal === "per_visit" && !badge.isPerVisit) return false;
       if (typeVal === "normal" && badge.isPerVisit) return false;
       if (roomVal !== "all" && !badge.rooms.includes(roomVal)) return false;
-      if (gameVal !== "all" && !badge.games.includes(gameVal)) return false;
       if (completedByVal !== "all" && !badge.completedByUsers.some((completedUser) => completedUser.id === completedByVal)) return false;
       if (notDoneByVal !== "all" && badge.completedByUsers.some((completedUser) => completedUser.id === notDoneByVal)) return false;
       return true;
@@ -275,7 +275,7 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
         const comparison = compareBadges(badgeA, badgeB, criterion.field);
         if (comparison !== 0) return criterion.ascending ? comparison : -comparison;
       }
-      return 0;
+      return badgeA.badgeNumber - badgeB.badgeNumber;
     });
 
     return filtered;
@@ -288,7 +288,7 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
       {/* Header */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Badges</h1>
+          <h1 className="text-2xl font-bold text-foreground">My Badges</h1>
           <p className="text-sm text-muted">
             {completionCount} / {badges.length} completed
           </p>
@@ -317,6 +317,8 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
 
       <BadgeTable
         columns={BADGE_TABLE_COLUMNS}
+        sortCriteria={sortCriteria}
+        onSortChange={setSortCriteria}
         rows={filteredAndSortedBadges.map((badge): BadgeTableRow => {
           const difficultyDisplay = getDifficultyDisplay(badge);
           const playerCount = getPlayerCountDisplay(badge);
@@ -325,7 +327,9 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
             href: `/badges/${badge.id}`,
             className: badge.completedByCurrentUser
               ? "bg-completed hover:bg-completed-hover"
-              : "hover:bg-card-hover",
+              : badge.isTodoByCurrentUser
+                ? "bg-selection hover:bg-selection-hover"
+                : "hover:bg-card-hover",
             cells: [
               <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{badge.badgeNumber}</span>,
               <div className="flex items-center gap-1.5 min-w-0">
@@ -346,6 +350,15 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
               <span className={`min-w-0 text-center text-[11px] ${playerCount.color}`}>
                 {playerCount.label}
               </span>,
+              <BadgeCheckbox
+                checked={badge.isTodoByCurrentUser}
+                title={badge.completedByCurrentUser ? "Already completed — can't mark To Do" : badge.isTodoByCurrentUser ? "Remove from To Do" : "Mark as To Do"}
+                onClick={() => toggleBadgeTodo(badge.id)}
+                preventLinkNavigation
+                disabled={badge.completedByCurrentUser}
+                checkedClassName="border-amber-500 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
+                crossWhenDisabled
+              />,
               <BadgeCheckbox
                 checked={badge.completedByCurrentUser}
                 title={badge.completedByCurrentUser ? "Mark incomplete" : "Mark complete"}

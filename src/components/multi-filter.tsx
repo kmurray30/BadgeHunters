@@ -107,14 +107,16 @@ export function MultiFilter({ definitions, activeFilters, onChange, searchValue,
               const currentValue = getFilterValue(definition.key);
               const isActive = currentValue !== (definition.inactiveValue ?? "all");
               return (
-                <CustomSelect
-                  key={definition.key}
-                  options={definition.options}
-                  value={currentValue}
-                  onChange={(newValue) => setFilterValue(definition.key, newValue)}
-                  highlighted={isActive}
-                  compact
-                />
+                <div key={definition.key} className="flex flex-col gap-0.5">
+                  <span className="px-1 text-[9px] font-semibold uppercase tracking-wide text-muted">{definition.label}</span>
+                  <CustomSelect
+                    options={definition.options}
+                    value={currentValue}
+                    onChange={(newValue) => setFilterValue(definition.key, newValue)}
+                    highlighted={isActive}
+                    compact
+                  />
+                </div>
               );
             })}
             {activeFilters.length > 0 && (

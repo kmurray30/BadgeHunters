@@ -160,6 +160,7 @@ model BadgeUserStatus {
   badgeId                 String            @map("badge_id")
   isCompleted             Boolean           @default(false) @map("is_completed")
   completedAt             DateTime?         @map("completed_at")
+  isTodo                  Boolean           @default(false) @map("is_todo")
   personalDifficulty      Difficulty?       @map("personal_difficulty")
   idealPlayerCountBucket  PlayerCountBucket? @map("ideal_player_count_bucket")
   personalNotesSummary    String?           @map("personal_notes_summary") @db.Text

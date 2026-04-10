@@ -18,6 +18,8 @@ export async function toggleBadgeCompletion(badgeId: string) {
       data: {
         isCompleted: !existing.isCompleted,
         completedAt: !existing.isCompleted ? new Date() : null,
+        // Completing a badge clears the todo flag — no need to track it anymore.
+        isTodo: existing.isCompleted ? existing.isTodo : false,
       },
     });
   } else {
@@ -30,6 +32,26 @@ export async function toggleBadgeCompletion(badgeId: string) {
       },
     });
   }
+
+  revalidatePath("/badges");
+  revalidatePath(`/badges/${badgeId}`);
+}
+
+export async function toggleBadgeTodo(badgeId: string) {
+  const user = await requireUser();
+
+  const existing = await prisma.badgeUserStatus.findUnique({
+    where: { userId_badgeId: { userId: user.id, badgeId } },
+  });
+
+  // Completed badges can't be marked as todo — ignore silently.
+  if (existing?.isCompleted) return;
+
+  await prisma.badgeUserStatus.upsert({
+    where: { userId_badgeId: { userId: user.id, badgeId } },
+    create: { userId: user.id, badgeId, isTodo: true },
+    update: { isTodo: !existing?.isTodo },
+  });
 
   revalidatePath("/badges");
   revalidatePath(`/badges/${badgeId}`);
@@ -113,6 +135,7 @@ export async function superuserToggleBadgeCompletion(
       data: {
         isCompleted: !existing.isCompleted,
         completedAt: !existing.isCompleted ? new Date() : null,
+        isTodo: existing.isCompleted ? existing.isTodo : false,
       },
     });
   } else {

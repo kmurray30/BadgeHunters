@@ -24,7 +24,7 @@ export async function NavBar() {
                 href="/badges"
                 className="text-sm text-muted hover:text-foreground transition-colors"
               >
-                Badges
+                My Badges
               </Link>
               <Link
                 href="/sessions"

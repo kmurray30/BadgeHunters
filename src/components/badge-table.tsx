@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import React, { useState } from "react";
+import type { SortCriterion } from "./multi-sort";
 
 // ─── Column header ────────────────────────────────────────────────────────────
 
@@ -13,6 +14,10 @@ export interface ColumnHeader {
   align?: "left" | "center" | "right";
   /** CSS grid track value, e.g. "minmax(0,1fr)", "5rem", "auto" */
   width: string;
+  /** If set, clicking this column header will sort by this field via onSortChange */
+  sortField?: string;
+  /** When first selected via header click, sort descending rather than ascending */
+  sortDefaultDescending?: boolean;
 }
 
 // ─── Row ──────────────────────────────────────────────────────────────────────
@@ -60,6 +65,10 @@ interface BadgeTableProps {
   /** Grouped rows with optional section headings. Shares the same grid. */
   sections?: BadgeTableSection[];
   emptyState?: React.ReactNode;
+  /** Current sort state. When provided together with onSortChange, column headers with sortField become clickable. */
+  sortCriteria?: SortCriterion[];
+  /** Called when user clicks a sortable column header. Parent owns sort state and row ordering. */
+  onSortChange?: (criteria: SortCriterion[]) => void;
 }
 
 const SUBGRID_STYLE: React.CSSProperties = {
@@ -70,11 +79,35 @@ const SUBGRID_STYLE: React.CSSProperties = {
 
 const FULL_SPAN_STYLE: React.CSSProperties = { gridColumn: "1 / -1" };
 
-export function BadgeTable({ columns, rows, sections, emptyState }: BadgeTableProps) {
+export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, onSortChange }: BadgeTableProps) {
   const gridTemplateColumns = columns.map((column) => column.width).join(" ");
 
   const alignClass = (align: ColumnHeader["align"]) =>
     align === "center" ? "text-center" : align === "right" ? "text-right" : undefined;
+
+  function handleHeaderSort(column: ColumnHeader) {
+    if (!column.sortField || !onSortChange) return;
+    const field = column.sortField;
+    const currentCriteria = sortCriteria ?? [];
+    const isPrimary = currentCriteria[0]?.field === field;
+    const defaultAscending = !(column.sortDefaultDescending ?? false);
+
+    if (!isPrimary) {
+      // State 1: not primary → make primary with default direction, keep others
+      const withoutField = currentCriteria.filter((c) => c.field !== field);
+      onSortChange([{ field, ascending: defaultAscending }, ...withoutField]);
+    } else {
+      const currentAscending = currentCriteria[0].ascending;
+      if (currentAscending === defaultAscending) {
+        // State 2: primary at default direction → flip to opposite direction
+        onSortChange(currentCriteria.map((c, i) => i === 0 ? { ...c, ascending: !currentAscending } : c));
+      } else {
+        // State 3: primary at opposite direction → remove entirely
+        const withoutField = currentCriteria.filter((c) => c.field !== field);
+        onSortChange(withoutField);
+      }
+    }
+  }
 
   // Normalise to sections. If flat `rows` is provided, wrap it as a single section.
   const resolvedSections: BadgeTableSection[] = sections ?? (rows ? [{ rows }] : []);
@@ -97,14 +130,42 @@ export function BadgeTable({ columns, rows, sections, emptyState }: BadgeTablePr
       <div className="grid" style={{ gridTemplateColumns }}>
         {/* Column header row */}
         <div
-          className="grid items-center gap-2 border-b border-border bg-card px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted"
+          className="grid items-start gap-2 border-b border-border bg-card px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted"
           style={SUBGRID_STYLE}
         >
-          {columns.map((column, index) => (
-            <span key={index} title={column.tooltip} className={alignClass(column.align)}>
-              {column.label}
-            </span>
-          ))}
+          {columns.map((column, index) => {
+            const isSortable = !!column.sortField && !!onSortChange;
+            const isPrimary = isSortable && sortCriteria?.[0]?.field === column.sortField;
+            const isAnyActive = isSortable && sortCriteria?.some((c) => c.field === column.sortField);
+            const isAscending = sortCriteria?.find((c) => c.field === column.sortField)?.ascending;
+
+            const baseHeaderClass = "whitespace-pre-line min-w-0 leading-tight";
+
+            if (isSortable) {
+              return (
+                <button
+                  key={index}
+                  type="button"
+                  title={column.tooltip}
+                  onClick={() => handleHeaderSort(column)}
+                  className={`${baseHeaderClass} hover:text-foreground transition-colors ${
+                    column.align === "center" ? "text-center" : column.align === "right" ? "text-right" : "text-left"
+                  } ${isAnyActive ? "text-foreground" : ""}`}
+                >
+                  {column.label}
+                  {isPrimary && (
+                    <span className="ml-0.5">{isAscending ? "↑" : "↓"}</span>
+                  )}
+                </button>
+              );
+            }
+
+            return (
+              <span key={index} title={column.tooltip} className={`${baseHeaderClass} ${alignClass(column.align) ?? ""}`}>
+                {column.label}
+              </span>
+            );
+          })}
         </div>
 
         {/* Sections */}
@@ -219,6 +280,10 @@ interface BadgeCheckboxProps {
   onClick: () => void;
   /** Wraps in a div that calls e.preventDefault() — prevents Link row navigation when clicking the checkbox */
   preventLinkNavigation?: boolean;
+  /** Override Tailwind classes for the checked state (e.g. amber for "To Do") */
+  checkedClassName?: string;
+  /** When true (and disabled), show an × instead of a checkmark — used to signal "locked out" */
+  crossWhenDisabled?: boolean;
 }
 
 export function BadgeCheckbox({
@@ -227,7 +292,10 @@ export function BadgeCheckbox({
   title,
   onClick,
   preventLinkNavigation,
+  checkedClassName = "border-success bg-success/20 text-success hover:bg-success/30",
+  crossWhenDisabled = false,
 }: BadgeCheckboxProps) {
+  const showCross = crossWhenDisabled && disabled;
   const button = (
     <button
       type="button"
@@ -236,19 +304,19 @@ export function BadgeCheckbox({
       title={title}
       className={`flex h-6 w-6 items-center justify-center rounded border transition-colors ${
         checked
-          ? "border-success bg-success/20 text-success hover:bg-success/30"
+          ? checkedClassName
           : "border-border bg-background text-transparent hover:border-muted hover:text-muted"
       } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
     >
-      <svg
-        className="h-3.5 w-3.5"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        strokeWidth={3}
-      >
-        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-      </svg>
+      {showCross ? (
+        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      ) : (
+        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      )}
     </button>
   );
 

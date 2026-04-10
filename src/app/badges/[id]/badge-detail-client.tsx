@@ -223,19 +223,7 @@ export function BadgeDetailClient({
           </div>
         )}
 
-        {/* Meta rules */}
-        {metaRules.length > 0 && (
-          <div className="mt-4 rounded-lg border border-purple-500/20 bg-purple-500/5 p-3">
-            <p className="text-xs font-semibold text-purple-400">Meta badge rules:</p>
-            {metaRules.map((rule) => (
-              <p key={rule.id} className="mt-1 text-xs text-muted">
-                {rule.ruleType === "day_of_month" && "Day-of-month requirement"}
-                {rule.ruleType === "time_window" && `Time window: ${(rule.rulePayloadJson as { start?: string }).start} – ${(rule.rulePayloadJson as { end?: string }).end}`}
-                {rule.ruleType === "unique_rank_colors" && `Requires ${(rule.rulePayloadJson as { min_distinct_colors?: number }).min_distinct_colors} distinct rank colors`}
-              </p>
-            ))}
-          </div>
-        )}
+        {/* Meta rules — hidden from UI for now */}
       </div>
 
       {/* Difficulty + player count — one line each */}
@@ -292,9 +280,12 @@ export function BadgeDetailClient({
           <div className="mt-3 space-y-2">
             {completedByUsers.map((completedUser) => (
               <div key={completedUser.id} className="flex items-center justify-between">
-                <span className={`text-sm ${completedUser.id === currentUserId ? "text-success font-medium" : "text-foreground"}`}>
+                <Link
+                  href={`/players/${completedUser.id}`}
+                  className={`text-sm hover:underline transition-colors ${completedUser.id === currentUserId ? "text-success font-medium" : "text-foreground hover:text-accent"}`}
+                >
                   {completedUser.displayName}
-                </span>
+                </Link>
                 {completedUser.personalDifficulty && completedUser.personalDifficulty !== "unknown" && (
                   <span className="text-xs text-muted">Rated: {completedUser.personalDifficulty}</span>
                 )}

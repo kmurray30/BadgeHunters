@@ -83,6 +83,7 @@ export default async function SessionDetailPage({ params }: Props) {
         select: {
           userId: true,
           isCompleted: true,
+          isTodo: true,
           personalDifficulty: true,
           idealPlayerCountBucket: true,
         },
@@ -200,6 +201,9 @@ export default async function SessionDetailPage({ params }: Props) {
     memberCompletions: badge.userStatuses
       .filter((status) => status.isCompleted)
       .map((status) => status.userId),
+    isTodoByCurrentUser: badge.userStatuses.some(
+      (status) => status.userId === user.id && status.isTodo
+    ),
     communityVotes: badge.userStatuses
       .map((status) => status.personalDifficulty)
       .filter(Boolean) as string[],

@@ -3,10 +3,10 @@ import { requireUser } from "@/lib/session-helpers";
 import { isolationFilter } from "@/lib/isolation";
 import { getRankColor, RANK_COLOR_HEX } from "@/lib/rank";
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { RankPopup } from "@/components/rank-popup";
 import { BackButton } from "@/components/back-button";
 import { parseBackFromQuery } from "@/lib/back-navigation";
+import { PlayerBadgesClient } from "./player-badges-client";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -34,15 +34,28 @@ export default async function PlayerDetailPage({ params, searchParams }: Props) 
 
   const completedBadges = await prisma.badgeUserStatus.findMany({
     where: { userId: player.id, isCompleted: true },
-    orderBy: { completedAt: "desc" },
+    orderBy: { badgeId: "asc" },
     include: {
       badge: {
         select: {
           id: true,
           badgeNumber: true,
           name: true,
+          description: true,
           defaultDifficulty: true,
+          playerCountBucket: true,
           isPerVisit: true,
+          isMetaBadge: true,
+          userStatuses: {
+            where: { user: isolation },
+            select: {
+              userId: true,
+              isCompleted: true,
+              isTodo: true,
+              personalDifficulty: true,
+              idealPlayerCountBucket: true,
+            },
+          },
         },
       },
     },
@@ -120,34 +133,37 @@ export default async function PlayerDetailPage({ params, searchParams }: Props) 
         <h2 className="mb-3 text-sm font-semibold text-foreground">
           Completed Badges ({completedCount})
         </h2>
-        {completedCount === 0 ? (
-          <p className="text-sm text-muted">No badges completed yet.</p>
-        ) : (
-          <div className="rounded-lg border border-border divide-y divide-border">
-            {completedBadges.map((status) => (
-              <Link
-                key={status.id}
-                href={`/badges/${status.badge.id}`}
-                className="flex items-center justify-between px-3 py-2 text-sm hover:bg-card-hover transition-colors"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="shrink-0 text-[10px] font-mono text-muted tabular-nums">
-                    {status.badge.badgeNumber}
-                  </span>
-                  <span className="truncate text-foreground">{status.badge.name}</span>
-                  {status.badge.isPerVisit && (
-                    <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] text-accent">visit</span>
-                  )}
-                </div>
-                {status.completedAt && (
-                  <span className="shrink-0 text-[10px] text-muted">
-                    {new Date(status.completedAt).toLocaleDateString()}
-                  </span>
-                )}
-              </Link>
-            ))}
-          </div>
-        )}
+        <PlayerBadgesClient
+          isOwnProfile={currentUser.id === player.id}
+          badges={completedBadges.map((status) => {
+            const currentUserStatus = status.badge.userStatuses.find((s) => s.userId === currentUser.id);
+            const playerStatus = status.badge.userStatuses.find((s) => s.userId === player.id);
+            return {
+              id: status.id,
+              badgeId: status.badge.id,
+              badgeName: status.badge.name,
+              badgeNumber: status.badge.badgeNumber,
+              description: status.badge.description,
+              isPerVisit: status.badge.isPerVisit,
+              isMetaBadge: status.badge.isMetaBadge,
+              completedAt: status.completedAt?.toISOString() ?? null,
+              defaultDifficulty: status.badge.defaultDifficulty,
+              playerCountBucket: status.badge.playerCountBucket,
+              playerDifficulty: playerStatus?.personalDifficulty ?? null,
+              playerPlayerCount: playerStatus?.idealPlayerCountBucket ?? null,
+              currentUserDifficulty: currentUserStatus?.personalDifficulty ?? null,
+              currentUserPlayerCount: currentUserStatus?.idealPlayerCountBucket ?? null,
+              communityDifficultyVotes: status.badge.userStatuses
+                .map((s) => s.personalDifficulty)
+                .filter(Boolean) as string[],
+              communityPlayerCountVotes: status.badge.userStatuses
+                .map((s) => s.idealPlayerCountBucket)
+                .filter(Boolean) as string[],
+              doneByCurrentUser: currentUserStatus?.isCompleted ?? false,
+              todoByCurrentUser: currentUserStatus?.isTodo ?? false,
+            };
+          })}
+        />
       </div>
     </div>
   );

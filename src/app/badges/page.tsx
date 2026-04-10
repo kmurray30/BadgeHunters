@@ -18,6 +18,7 @@ export default async function BadgesPage() {
         select: {
           userId: true,
           isCompleted: true,
+          isTodo: true,
           personalDifficulty: true,
           idealPlayerCountBucket: true,
           user: {
@@ -59,6 +60,9 @@ export default async function BadgesPage() {
     isMetaBadge: badge.isMetaBadge,
     completedByCurrentUser: badge.userStatuses.some(
       (status) => status.userId === user.id && status.isCompleted
+    ),
+    isTodoByCurrentUser: badge.userStatuses.some(
+      (status) => status.userId === user.id && status.isTodo
     ),
     currentUserDifficulty:
       badge.userStatuses.find((status) => status.userId === user.id)
