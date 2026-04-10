@@ -14,7 +14,7 @@ import {
     toggleSessionBadgeCompletion,
 } from "@/app/actions/sessions";
 import { BackButton } from "@/components/back-button";
-import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type ColumnHeader } from "@/components/badge-table";
+import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type BadgeTableSection, type ColumnHeader } from "@/components/badge-table";
 import { MultiFilter, type ActiveFilter, type FilterDefinition } from "@/components/multi-filter";
 import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
 import { usePersistedState } from "@/hooks/use-persisted-state";
@@ -23,22 +23,23 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 
 const YOUR_BADGES_COLUMNS: ColumnHeader[] = [
-  { label: "", width: "auto" },
-  { label: "Name", width: "auto" },
+  { label: "#", width: "1.5rem", align: "right" },
+  { label: "Name", width: "minmax(0,12rem)" },
   { label: "Description", width: "minmax(0,1fr)" },
-  { label: "Difficulty", width: "5rem", align: "center" },
-  { label: "Players", width: "4rem", align: "center" },
-  { label: "Need", width: "4rem", align: "center" },
+  { label: "Difficulty", width: "5rem", align: "right" },
+  { label: "Players", width: "4rem", align: "right" },
+  { label: "Need", width: "4rem", align: "right" },
 ];
 
 const GROUP_BADGES_COLUMNS: ColumnHeader[] = [
-  { label: "", width: "auto" },
-  { label: "Name", width: "auto" },
+  { label: "#", width: "1.5rem", align: "right" },
+  { label: "Name", width: "minmax(0,12rem)" },
   { label: "Description", width: "minmax(0,1fr)" },
-  { label: "Difficulty", width: "5rem", align: "center" },
-  { label: "Players", width: "4rem", align: "center" },
-  { label: "Votes", width: "4rem", align: "center" },
+  { label: "Difficulty", width: "5rem", align: "right" },
+  { label: "Players", width: "4rem", align: "right" },
+  { label: "Votes", width: "4rem", align: "right" },
   { label: "Done", width: "3rem", align: "center", tooltip: "Mark as completed" },
+  { label: "Status", width: "auto", tooltip: "Who selected or completed this badge this session" },
 ];
 
 interface SessionMember {
@@ -111,6 +112,7 @@ interface Props {
   metaRuleBlurbs: Record<string, string>;
   todayString: string;
   sessionCompletedBadgeIds: string[];
+  allSessionCompletions: { userId: string; badgeId: string }[];
 }
 
 type TabMode = "your_badges" | "group_badges";
@@ -203,6 +205,7 @@ export function SessionDetailClient({
   metaRuleBlurbs,
   todayString,
   sessionCompletedBadgeIds,
+  allSessionCompletions,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -244,6 +247,17 @@ export function SessionDetailClient({
   const [sessionCompletedSet, setSessionCompletedSet] = useState(
     () => new Set(sessionCompletedBadgeIds)
   );
+
+  // badgeId → Set<userId> lookup for ALL members' session completions.
+  // The current user's entry is overridden by sessionCompletedSet for optimistic accuracy.
+  const sessionCompletionsByBadge = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const { userId, badgeId } of allSessionCompletions) {
+      if (!map.has(badgeId)) map.set(badgeId, new Set());
+      map.get(badgeId)!.add(userId);
+    }
+    return map;
+  }, [allSessionCompletions]);
 
   // When the user unchecks a Done box, we prompt whether to also un-complete persistently.
   const [uncompletConfirm, setUncompletConfirm] = useState<{ badgeId: string; badgeName: string } | null>(null);
@@ -294,9 +308,8 @@ export function SessionDetailClient({
   ]);
 
   const displayPartySize = session.members.length + session.ghostMembers.length;
-  const otherRealMemberIds = session.members
-    .filter((member) => member.id !== currentUserId)
-    .map((member) => member.id);
+  const allRealMemberIds = session.members.map((member) => member.id);
+  const otherRealMemberIds = allRealMemberIds.filter((memberId) => memberId !== currentUserId);
 
   function handleAction(action: () => Promise<void>) {
     startTransition(async () => {
@@ -350,11 +363,11 @@ export function SessionDetailClient({
 
     let list = allBadges
       .map((badge) => {
-        const otherUncompletedCount = otherRealMemberIds.filter(
+        const totalUncompletedCount = allRealMemberIds.filter(
           (memberId) => !badge.memberCompletions.includes(memberId)
         ).length;
         const difficultySortKey = DIFFICULTY_MAP[badge.defaultDifficulty] ?? 99;
-        return { ...badge, otherUncompletedCount, difficultySortKey };
+        return { ...badge, totalUncompletedCount, difficultySortKey };
       });
 
     if (yourBadgesSearch) {
@@ -382,7 +395,7 @@ export function SessionDetailClient({
       for (const criterion of yourBadgesSortCriteria) {
         let comparison = 0;
         switch (criterion.field) {
-          case "need": comparison = badgeA.otherUncompletedCount - badgeB.otherUncompletedCount; break;
+          case "need": comparison = badgeA.totalUncompletedCount - badgeB.totalUncompletedCount; break;
           case "difficulty": comparison = badgeA.difficultySortKey - badgeB.difficultySortKey; break;
           case "number": comparison = badgeA.badgeNumber - badgeB.badgeNumber; break;
           case "name": comparison = badgeA.name.localeCompare(badgeB.name); break;
@@ -394,7 +407,7 @@ export function SessionDetailClient({
     });
 
     return list;
-  }, [allBadges, currentUserId, otherRealMemberIds, viewOnlyMode, yourBadgesSearch, yourBadgesFilters, yourBadgesSortCriteria, userSelectedBadgeIds]);
+  }, [allBadges, currentUserId, allRealMemberIds, viewOnlyMode, yourBadgesSearch, yourBadgesFilters, yourBadgesSortCriteria, userSelectedBadgeIds]);
 
 
   const badgeLookup = useMemo(() => {
@@ -457,12 +470,12 @@ export function SessionDetailClient({
       {showJoinPrompt && (
         <div className="rounded-xl border border-accent/30 bg-accent/5 p-6 text-center">
           <p className="text-sm text-foreground">
-            {isPastDate
+            {session.status !== "active"
               ? "You weren't in this session."
               : "You're not a member of this session."}
           </p>
           <div className="mt-3 flex justify-center gap-3">
-            {!isPastDate && (
+            {session.status === "active" && (
               <button
                 onClick={handleJoinSession}
                 disabled={isPending}
@@ -741,51 +754,57 @@ export function SessionDetailClient({
 
           <BadgeTable
             columns={YOUR_BADGES_COLUMNS}
-            rows={yourBadgesList.map((badge): BadgeTableRow => {
-              const isSelected = userSelectedBadgeIds.has(badge.id);
-              const isSessionCompleted = sessionCompletedSet.has(badge.id);
-              const diffInfo = DIFFICULTY_LABELS[badge.defaultDifficulty] ?? DIFFICULTY_LABELS.unknown;
-              const blurb = metaRuleBlurbs[badge.id];
-              // Green = completed in this session. Blue = selected. Green takes priority.
-              // suppressHover strips the hover variant so the list doesn't flash after reorder.
-              const rowClassName = isSessionCompleted
-                ? "bg-completed hover:bg-completed-hover"
-                : isSelected
-                  ? (suppressHover ? "bg-selection" : "bg-selection hover:bg-selection-hover")
-                  : "hover:bg-card-hover";
-              return {
-                key: badge.id,
-                className: rowClassName,
-                onMouseDown: () => handleBadgeSelect(badge.id),
-                cells: [
-                  <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{badge.badgeNumber}</span>,
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    <span className="min-w-0 truncate text-sm font-medium text-foreground">{badge.name}</span>
-                    <Link
-                      href={`/badges/${badge.id}`}
-                      onClick={(event) => event.stopPropagation()}
-                      className="shrink-0 text-muted hover:text-accent transition-colors"
-                      title="Badge info"
-                    >
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </Link>
-                    {badge.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>}
-                    {badge.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
-                  </div>,
-                  <span className="block min-w-0 truncate text-xs text-muted">{badge.description}</span>,
-                  <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
-                  <span className={`min-w-0 text-center text-[11px] ${resolvePlayerCount(badge).color}`}>{resolvePlayerCount(badge).label}</span>,
-                  <span className="min-w-0 text-center text-[11px] text-success">{badge.otherUncompletedCount}/{memberCount - 1}</span>,
-                ],
-                footer: blurb ? (
-                  <div className="bg-purple-500/5 px-3 py-1 text-[10px] text-purple-400 border-t border-purple-500/10">
-                    {blurb}
-                  </div>
-                ) : undefined,
+            sections={(() => {
+              const buildRow = (badge: typeof yourBadgesList[number]): BadgeTableRow => {
+                const isSelected = userSelectedBadgeIds.has(badge.id);
+                const isSessionCompleted = sessionCompletedSet.has(badge.id);
+                const diffInfo = DIFFICULTY_LABELS[badge.defaultDifficulty] ?? DIFFICULTY_LABELS.unknown;
+                const blurb = metaRuleBlurbs[badge.id];
+                const rowClassName = isSessionCompleted
+                  ? "bg-completed hover:bg-completed-hover"
+                  : isSelected
+                    ? (suppressHover ? "bg-selection" : "bg-selection hover:bg-selection-hover")
+                    : "hover:bg-card-hover";
+                return {
+                  key: badge.id,
+                  className: rowClassName,
+                  onMouseDown: () => handleBadgeSelect(badge.id),
+                  cells: [
+                    <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{badge.badgeNumber}</span>,
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="min-w-0 truncate text-sm font-medium text-foreground">{badge.name}</span>
+                      <Link
+                        href={`/badges/${badge.id}`}
+                        onClick={(event) => event.stopPropagation()}
+                        className="shrink-0 text-muted hover:text-accent transition-colors"
+                        title="Badge info"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </Link>
+                      {badge.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>}
+                      {badge.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
+                    </div>,
+                    <span className="block min-w-0 truncate text-xs text-muted">{badge.description}</span>,
+                    <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
+                    <span className={`min-w-0 text-center text-[11px] ${resolvePlayerCount(badge).color}`}>{resolvePlayerCount(badge).label}</span>,
+                    <span className="min-w-0 text-center text-[11px] text-success">{badge.totalUncompletedCount}/{memberCount}</span>,
+                  ],
+                  footer: blurb ? (
+                    <div className="bg-purple-500/5 px-3 py-1 text-[10px] text-purple-400 border-t border-purple-500/10">
+                      {blurb}
+                    </div>
+                  ) : undefined,
+                };
               };
-            })}
+              const perVisit = yourBadgesList.filter((badge) => badge.isPerVisit);
+              const standard = yourBadgesList.filter((badge) => !badge.isPerVisit);
+              return [
+                ...(perVisit.length > 0 ? [{ label: "Per-Visit Badges", rows: perVisit.map(buildRow) }] : []),
+                ...(standard.length > 0 ? [{ label: "Standard Badges", rows: standard.map(buildRow) }] : []),
+              ];
+            })()}
             emptyState={
               <div className="py-8 text-center text-muted">
                 <p className="text-sm">No badges match your filters.</p>
@@ -804,26 +823,17 @@ export function SessionDetailClient({
               {!viewOnlyMode && <p className="mt-1 text-sm text-muted">Use the button above to select badges for this session.</p>}
             </div>
           ) : (
-            <>
-              {groupPerVisit.length > 0 && (
-                <div>
-                  <h3 className="mb-2 text-xs font-semibold text-accent uppercase tracking-wide">Per-Visit Badges</h3>
-                  <BadgeTable
-                    columns={GROUP_BADGES_COLUMNS}
-                    rows={buildGroupBadgeRows(groupPerVisit, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, sessionCompletedSet, canEdit, handleSessionCompletion)}
-                  />
-                </div>
-              )}
-              {groupNormal.length > 0 && (
-                <div>
-                  <h3 className="mb-2 text-xs font-semibold text-foreground uppercase tracking-wide">Standard Badges</h3>
-                  <BadgeTable
-                    columns={GROUP_BADGES_COLUMNS}
-                    rows={buildGroupBadgeRows(groupNormal, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, sessionCompletedSet, canEdit, handleSessionCompletion)}
-                  />
-                </div>
-              )}
-            </>
+            <BadgeTable
+              columns={GROUP_BADGES_COLUMNS}
+              sections={[
+                ...(groupPerVisit.length > 0
+                  ? [{ label: "Per-Visit Badges", rows: buildGroupBadgeRows(groupPerVisit, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, sessionCompletedSet, canEdit, handleSessionCompletion, sessionCompletionsByBadge, session.members) } satisfies BadgeTableSection]
+                  : []),
+                ...(groupNormal.length > 0
+                  ? [{ label: "Standard Badges", rows: buildGroupBadgeRows(groupNormal, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, sessionCompletedSet, canEdit, handleSessionCompletion, sessionCompletionsByBadge, session.members) } satisfies BadgeTableSection]
+                  : []),
+              ]}
+            />
           )}
         </div>
       )}
@@ -842,6 +852,8 @@ function buildGroupBadgeRows(
   sessionCompletedSet: Set<string>,
   canEdit: boolean,
   onSessionCompletion: (badgeId: string, badgeName: string) => void,
+  sessionCompletionsByBadge: Map<string, Set<string>>,
+  members: { id: string; displayName: string }[],
 ): BadgeTableRow[] {
   return entries.map((entry) => {
     const fullBadge = badgeLookup.get(entry.selection.badgeId);
@@ -859,6 +871,41 @@ function buildGroupBadgeRows(
       : isUserSelected
         ? "bg-selection hover:bg-selection-hover"
         : "hover:bg-card-hover";
+
+    // Build per-player status chips.
+    // Server-side completions, with the current user overridden by optimistic sessionCompletedSet.
+    const serverCompletedIds = sessionCompletionsByBadge.get(entry.selection.badgeId) ?? new Set<string>();
+    const selectorIds = new Set(entry.selectors.map((selector) => selector.id));
+
+    // Collect all user IDs that should appear: selectors + anyone who completed it in-session.
+    const relevantIds = new Set<string>([...selectorIds]);
+    for (const uid of serverCompletedIds) relevantIds.add(uid);
+    // Apply optimistic current-user override.
+    if (isSessionCompleted) relevantIds.add(currentUserId);
+
+    // Build display name lookup from members list (selectors already have displayName).
+    const memberNameById = new Map(members.map((member) => [member.id, member.displayName]));
+    for (const selector of entry.selectors) memberNameById.set(selector.id, selector.displayName);
+
+    const playerStatusChips = Array.from(relevantIds).map((uid) => {
+      // Current user's completion state comes from optimistic sessionCompletedSet.
+      const completed = uid === currentUserId
+        ? sessionCompletedSet.has(entry.selection.badgeId)
+        : serverCompletedIds.has(uid);
+      const name = memberNameById.get(uid) ?? "Unknown";
+      return (
+        <span
+          key={uid}
+          className={`inline-flex items-center gap-0.5 text-[11px] font-medium ${
+            completed ? "text-success" : "text-accent"
+          }`}
+          title={completed ? `${name} completed in this session` : `${name} selected this badge`}
+        >
+          {name}
+          {completed ? " ✓" : " ◐"}
+        </span>
+      );
+    });
 
     return {
       key: entry.selection.badgeId,
@@ -889,6 +936,11 @@ function buildGroupBadgeRows(
           title={!canEdit ? "Session is closed" : isSessionCompleted ? "Completed this session — click to undo" : "Mark completed in this session"}
           onClick={() => onSessionCompletion(entry.selection.badgeId, entry.selection.badgeName)}
         />,
+        <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-0.5">
+          {playerStatusChips.length > 0 ? playerStatusChips : (
+            <span className="text-[11px] text-muted">—</span>
+          )}
+        </div>,
       ],
       footer: blurb ? (
         <div className="bg-purple-500/5 px-3 py-1 text-[10px] text-purple-400 border-t border-purple-500/10">

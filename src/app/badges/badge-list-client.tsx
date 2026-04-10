@@ -49,11 +49,11 @@ const DIFFICULTY_OPTIONS: { value: string; label: string; color: string }[] = [
 ];
 
 const BADGE_TABLE_COLUMNS: ColumnHeader[] = [
-  { label: "", width: "auto" },
-  { label: "Name", width: "auto" },
+  { label: "#", width: "1.5rem", align: "right" },
+  { label: "Name", width: "minmax(0,12rem)" },
   { label: "Description", width: "minmax(0,1fr)" },
-  { label: "Difficulty", width: "5rem", align: "center" },
-  { label: "Players", width: "4rem", align: "center" },
+  { label: "Difficulty", width: "5rem", align: "right" },
+  { label: "Players", width: "4rem", align: "right" },
   { label: "Done", width: "3.5rem", align: "center" },
 ];
 

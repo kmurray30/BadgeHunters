@@ -65,6 +65,12 @@ export default async function SessionDetailPage({ params }: Props) {
     select: { badgeId: true },
   });
 
+  // Fetch completions for ALL session members so the group table can show per-player status.
+  const allSessionCompletions = await prisma.sessionBadgeCompletion.findMany({
+    where: { sessionId: id, userId: { in: memberIds } },
+    select: { userId: true, badgeId: true },
+  });
+
   const allBadges = await prisma.badge.findMany({
     where: { active: true },
     orderBy: { badgeNumber: "asc" },
@@ -222,6 +228,7 @@ export default async function SessionDetailPage({ params }: Props) {
         metaRuleBlurbs={metaRuleBlurbs}
         todayString={todayString}
         sessionCompletedBadgeIds={sessionCompletions.map((completion) => completion.badgeId)}
+        allSessionCompletions={allSessionCompletions}
       />
     </div>
   );
