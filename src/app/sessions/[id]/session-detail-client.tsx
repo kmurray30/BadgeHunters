@@ -5,6 +5,7 @@ import {
     addSessionMember,
     cancelMyReview,
     completeMyReview,
+    dismissSessionReviewNotification,
     joinSession,
     removeGhostMember,
     removeSessionMember,
@@ -252,6 +253,14 @@ export function SessionDetailClient({
     session.status === "closed" || (inReviewMode && myReviewDone);
   const effectivelyActive = (session.status === "active" && !inReviewMode) || isEditing;
   const canEdit = !personallyDone || isEditing;
+
+  // Auto-dismiss session_review notification when user is already viewing the session
+  // in review mode — no need for a bell icon nudge when they're already here.
+  useEffect(() => {
+    if (inReviewMode) {
+      dismissSessionReviewNotification(session.id);
+    }
+  }, [inReviewMode, session.id]);
 
   // Badge selection tab: available during active phase and during edit mode
   const showYourBadges = initialIsMember && (

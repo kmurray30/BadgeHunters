@@ -241,8 +241,7 @@ export async function completeMyReview(sessionId: string) {
   const user = await requireUser();
 
   const session = await prisma.session.findUnique({ where: { id: sessionId } });
-  if (!session) throw new Error("Session not found");
-  if (session.status === "closed") throw new Error("Session is already closed");
+  if (!session || session.status === "closed") return;
 
   // If still active, transition to completed_pending_ack
   if (session.status === "active") {
@@ -354,57 +353,49 @@ export async function cancelMyReview(sessionId: string) {
 }
 
 /**
- * Global reopen: reverts session to active and resets ALL acknowledgements.
- * Used for current-day "Re-open" — past-day editing is client-side only.
- */
-/**
- * Personal re-open: resets only the caller's ack. If the session is `closed`,
- * it transitions to `completed_pending_ack`. If all members have now
- * uncompleted, reverts all the way to `active`.
+ * Re-open: resets ALL members' acks and transitions straight to `active`.
+ * This is a full reset — everyone goes back to the badge-selection phase.
+ * Silently no-ops if session is already active or doesn't exist (stale tab).
  */
 export async function reopenSession(sessionId: string) {
   const user = await requireUser();
 
   const session = await prisma.session.findUnique({ where: { id: sessionId } });
   if (!session || (session.status !== "completed_pending_ack" && session.status !== "closed")) {
-    throw new Error("Session is not in a completed or closed state");
+    return;
   }
 
-  // Reset only the caller's ack
-  await prisma.sessionUserAcknowledgement.update({
-    where: { sessionId_userId: { sessionId, userId: user.id } },
+  // Reset ALL members' acks — avoids dead zone where someone has
+  // needsReview: false in an active session (no button to click)
+  await prisma.sessionUserAcknowledgement.updateMany({
+    where: { sessionId },
     data: { needsReview: true, acknowledgedAt: null },
   });
 
-  // Delete this user's review notification
+  await prisma.session.update({
+    where: { id: sessionId },
+    data: { status: "active", completedAt: null, completedByUserId: null },
+  });
+
   await prisma.notification.deleteMany({
-    where: { sessionId, userId: user.id, type: "session_review" },
+    where: { sessionId, type: "session_review" },
   });
-
-  // If session was closed, at least one person now needs review → completed_pending_ack
-  if (session.status === "closed") {
-    await prisma.session.update({
-      where: { id: sessionId },
-      data: { status: "completed_pending_ack" },
-    });
-  }
-
-  // If ALL members are now uncompleted, revert to active
-  const doneCount = await prisma.sessionUserAcknowledgement.count({
-    where: { sessionId, needsReview: false },
-  });
-  if (doneCount === 0) {
-    await prisma.session.update({
-      where: { id: sessionId },
-      data: { status: "active", completedAt: null, completedByUserId: null },
-    });
-    await prisma.notification.deleteMany({
-      where: { sessionId, type: "session_review" },
-    });
-  }
 
   revalidatePath(`/sessions/${sessionId}`);
   revalidatePath("/sessions");
+}
+
+/**
+ * Auto-dismiss the caller's session_review notification for a given session.
+ * Called when the user views a session that's in review mode — the notification
+ * is redundant once they're already looking at it.
+ */
+export async function dismissSessionReviewNotification(sessionId: string) {
+  const user = await requireUser();
+  await prisma.notification.deleteMany({
+    where: { sessionId, userId: user.id, type: "session_review" },
+  });
+  revalidatePath(`/sessions/${sessionId}`);
 }
 
 /**

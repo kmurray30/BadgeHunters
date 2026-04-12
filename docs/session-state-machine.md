@@ -70,6 +70,7 @@ A session is created with status `active`. All members get an ack row with
 - That user's ack is updated (`needsReview: false, acknowledgedAt: now()`).
 - That user's review notification is deleted.
 - Other members who still need review and don't already have a notification get one.
+- Silently no-ops if session is already `closed` or doesn't exist (stale tab).
 
 ### 4. All Members Completed → `completed_pending_ack` to `closed`
 
@@ -95,26 +96,38 @@ and the date has NOT passed.
 - Navigating away and returning will show the review mode again (dismiss is
   not persisted).
 
-### 6. Re-open (personal undo)
+### 6. Re-open (full reset)
 
-**Trigger:** A member clicks "Re-open" on a session where they are personally
-done. Available for both `completed_pending_ack` (user already completed) and
-`closed` sessions.
+**Trigger:** A member clicks "Re-open" on a session in `completed_pending_ack`
+or `closed` state.
 
 **Restriction:** Only allowed when the session date has **NOT** passed
 (`Date.now() <= expiresAt`). Past-date sessions show "Edit" instead.
 
 **What happens:**
-- Only the caller's ack is reset to `needsReview: true, acknowledgedAt: null`.
-- The caller's review notification is deleted.
-- If session was `closed`, it transitions to `completed_pending_ack` (since at
-  least the caller now needs review).
-- Other users are NOT affected — their ack state and notifications are untouched.
-- **Edge case:** If ALL users have now uncompleted (all `needsReview: true`), the
-  session reverts to `active`, and `completedAt`/`completedByUserId` are cleared.
-  All remaining review notifications are cleaned up.
+- ALL members' acks are reset to `needsReview: true, acknowledgedAt: null`.
+- Session transitions to `active`, `completedAt`/`completedByUserId` cleared.
+- All `session_review` notifications for this session are cleaned up.
+- Silently no-ops if session is already `active` or doesn't exist (stale tab).
 
-### 7. Edit Mode (client-side only, anyone)
+**Why reset all acks?** If only the caller's ack were reset and the session
+went to `active`, other members with `needsReview: false` would land in a
+dead zone — no "Review" button (they're done) and no "Re-open" button
+(session isn't in a completed/closed state). Resetting everyone avoids this.
+
+### 7. Auto-dismiss Review Notification
+
+**Trigger:** Automatic — when a user views a session page that's in review mode
+(`inReviewMode` is true on the client).
+
+**What happens:**
+- The client calls `dismissSessionReviewNotification(sessionId)`.
+- Deletes only the viewer's `session_review` notification for that session.
+- Other users' notifications are untouched.
+- Prevents the redundant scenario where a user is already reviewing and still
+  sees a bell notification telling them to review.
+
+### 8. Edit Mode (client-side only, anyone)
 
 **Trigger:** The "Edit" button on past-date sessions. Available to anyone
 (members and non-members).
@@ -178,7 +191,7 @@ A session is "future" when `sessionDateLA > today` and status is `active`.
 | Review (click button)         | Client-side only              | None                                                    |
 | Cancel Review                 | Client-side only (dismiss)    | None                                                    |
 | Complete Session              | Ack → done, notification rm   | Session → `completed_pending_ack` (if active), others who still need review are notified (unless last → session closes) |
-| Re-open                       | Ack → reset                   | `closed` → `completed_pending_ack`, `completed_pending_ack` unchanged. Other acks untouched. (If all uncomplete → `active`.) |
+| Re-open                       | ALL acks → reset               | Always → `active`. All completion metadata cleared, all review notifications deleted. |
 | Leave Session                 | Removed from session          | Ack deleted, notifications deleted for that user        |
 | Added to Session              | Ack created (`needsReview`)   | `session_added` notification sent to added user         |
 
@@ -189,7 +202,7 @@ A session is "future" when `sessionDateLA > today` and status is `active`.
 | Type             | Created when                                       | Deleted when                                                          |
 |------------------|----------------------------------------------------|-----------------------------------------------------------------------|
 | `session_added`  | User is added to a session (not self-join)         | User is removed from session                                          |
-| `session_review` | Someone completes their session (sent to others who still need review) | User completes own review, session reverts to `active`, session closes |
+| `session_review` | Someone completes their session (sent to others who still need review) | User completes own review, user views session in review mode (auto-dismiss), someone re-opens session, session closes |
 
 ---
 
