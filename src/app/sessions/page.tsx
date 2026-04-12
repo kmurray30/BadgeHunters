@@ -78,12 +78,29 @@ export default async function SessionsPage() {
     const isMember = session.members.some((member) => member.user.id === user.id);
     const userAck = session.acknowledgements[0];
     const userNeedsReview = userAck?.needsReview ?? true;
+    const isPastDate = Date.now() > new Date(session.expiresAt).getTime();
 
-    if (session.status === "active") return true;
+    if (session.status === "active") {
+      if (isPastDate) {
+        if (!isMember) {
+          // Non-members see past-date active sessions as "Closed" → history
+          return false;
+        }
+        if (!userNeedsReview) {
+          // Member already completed review on a past-date active session → history
+          return false;
+        }
+      }
+      return true;
+    }
 
     if (session.status === "completed_pending_ack") {
-      // Members who have already reviewed see it in history; others see it as active
-      return !isMember || userNeedsReview;
+      if (!isMember) {
+        // Non-members see completed_pending_ack as "Active" unless past-date
+        return !isPastDate;
+      }
+      // Members who have already reviewed see it in history
+      return userNeedsReview;
     }
     return false;
   });

@@ -25,18 +25,22 @@ state** stored in `SessionUserAcknowledgement`.
 
 ---
 
-## Two-Step Review Flow
+## Review Flow
 
-The review process is intentionally split into two steps:
+The review process has two phases: entering review mode (client-side) and
+completing the session (server-side).
 
-1. **Start Review** (`startReview`) — Any member clicks "Review For Completion."
-   This transitions the session from `active` → `completed_pending_ack` and
-   notifies other members. The triggering user is NOT automatically marked as
-   done — they still need to confirm.
+1. **Enter Review Mode** (client-side only) — Any member clicks "Review." This
+   is purely a UI state change (`isReviewing = true`). No server state changes.
+   The session is still `active`. The member sees completion checkboxes and a
+   "Complete Session" button. They can also "Cancel Review" to go back.
 
-2. **Complete My Review** (`completeMyReview`) — Each member clicks "Complete My
-   Review" after checking off their badge completions. This marks that user's
-   ack as done. When all members have completed, the session auto-closes.
+2. **Complete Session** (`completeMyReview`) — The member clicks "Complete Session"
+   after checking off their badge completions. This:
+   - If session is still `active`, transitions to `completed_pending_ack`.
+   - Marks that user's ack as done.
+   - Notifies other members who still need to review (skips already-done members).
+   - When all members have completed, the session auto-closes.
 
 ---
 
@@ -47,24 +51,25 @@ The review process is intentionally split into two steps:
 A session is created with status `active`. All members get an ack row with
 `needsReview: true, acknowledgedAt: null`.
 
-### 2. Start Review → `active` to `completed_pending_ack`
+### 2. Enter Review Mode (client-side only)
 
-**Trigger:** Any member clicks "Review For Completion".
-
-**What happens:**
-- Session status transitions from `active` → `completed_pending_ack`.
-- `Session.completedAt` and `Session.completedByUserId` are set.
-- All *other* members receive a `session_review` notification.
-- The triggering user's ack is NOT changed — they still need to complete step 2.
-
-### 3. Complete My Review (per-user)
-
-**Trigger:** A member clicks "Complete My Review" while in `completed_pending_ack`.
+**Trigger:** Any member clicks "Review".
 
 **What happens:**
+- No server changes. Client-side `isReviewing` state toggles on.
+- UI shows review prompt, completion checkboxes, and "Complete Session" button.
+- Member can click "Cancel Review" to go back to active mode.
+
+### 3. Complete Session (per-user)
+
+**Trigger:** A member clicks "Complete Session".
+
+**What happens:**
+- If session is still `active`, transitions to `completed_pending_ack`
+  (`Session.completedAt` and `Session.completedByUserId` set).
 - That user's ack is updated (`needsReview: false, acknowledgedAt: now()`).
 - That user's review notification is deleted.
-- No new notifications are created for others.
+- Other members who still need review and don't already have a notification get one.
 
 ### 4. All Members Completed → `completed_pending_ack` to `closed`
 
@@ -75,32 +80,39 @@ A session is created with status `active`. All members get an ack row with
 - If none remain → session status becomes `closed`.
 - Any remaining review notifications are cleaned up.
 
-### 5. User Cancels Their Own Review (Undo)
+### 5. Dismiss Review (client-side only)
 
-**Trigger:** A member clicks "Undo My Review".
+**Trigger:** A member clicks "Cancel Review" while in server-pushed review mode
+(i.e., someone else completed and the session is `completed_pending_ack`).
+
+**Restriction:** Only available when user has **NOT** completed their own review
+and the date has NOT passed.
+
+**What happens:**
+- No server changes. Client-side `dismissedReview` state toggles on.
+- The review UI is hidden — the session appears in its pre-review state.
+- The "Review" button reappears so the user can re-enter review mode later.
+- Navigating away and returning will show the review mode again (dismiss is
+  not persisted).
+
+### 6. Re-open (personal undo)
+
+**Trigger:** A member clicks "Re-open" on a session where they are personally
+done. Available for both `completed_pending_ack` (user already completed) and
+`closed` sessions.
 
 **Restriction:** Only allowed when the session date has **NOT** passed
-(`Date.now() <= expiresAt`). Once the date passes, reviews cannot be undone.
+(`Date.now() <= expiresAt`). Past-date sessions show "Edit" instead.
 
 **What happens:**
-- Only that user's ack is reset to `needsReview: true, acknowledgedAt: null`.
-- That user's review notification is deleted.
+- Only the caller's ack is reset to `needsReview: true, acknowledgedAt: null`.
+- The caller's review notification is deleted.
+- If session was `closed`, it transitions to `completed_pending_ack` (since at
+  least the caller now needs review).
 - Other users are NOT affected — their ack state and notifications are untouched.
-- **Edge case:** If ALL users have now cancelled (all `needsReview: true`), the
-  session reverts from `completed_pending_ack` → `active`, and
-  `completedAt`/`completedByUserId` are cleared. All remaining review
-  notifications are cleaned up.
-
-### 6. Reopen (admin/superuser escape hatch)
-
-**Trigger:** The "Re-open" button (only available for members on current-day
-sessions that are `completed_pending_ack` or `closed`).
-
-**What happens:**
-- Session status → `active`.
-- `completedAt` and `completedByUserId` are cleared.
-- ALL member acks are reset to `needsReview: true, acknowledgedAt: null`.
-- All `session_review` notifications are deleted.
+- **Edge case:** If ALL users have now uncompleted (all `needsReview: true`), the
+  session reverts to `active`, and `completedAt`/`completedByUserId` are cleared.
+  All remaining review notifications are cleaned up.
 
 ### 7. Edit Mode (client-side only, anyone)
 
@@ -126,25 +138,25 @@ When a session is still `active` but the date has passed (`Date.now() > expiresA
 - **For members:** The UI treats it as **effectively in review**, even though the
   global status is still `active`.
   - Members see the review prompt: "The session date has passed. Review your badge
-    completions and complete your review."
-  - The "Complete My Review" button is available.
+    completions and complete your session."
+  - The "Complete Session" button is available.
   - The "Undo My Review" button is **NOT** available (date has passed).
-  - Once anyone completes, the normal `active` → `completed_pending_ack` transition
-    fires and notifications go out to others.
+  - Once anyone completes, the `active` → `completed_pending_ack` transition
+    fires and notifications go out to others who still need review.
 - **For non-members:** The UI shows "Closed" — they don't see review workflow details.
 
 ### Future Sessions
 
 A session is "future" when `sessionDateLA > today` and status is `active`.
-- The "Review For Completion" button is hidden.
+- The "Review" button is hidden.
 - Members can select badges but cannot start the review.
 
 ### Cancel Restrictions
 
-| Condition                 | Can cancel own review? |
-|---------------------------|------------------------|
-| Date NOT passed           | Yes                    |
-| Date passed               | No                     |
+| Condition                 | Can re-open? |
+|---------------------------|--------------|
+| Date NOT passed           | Yes          |
+| Date passed               | No (Edit)    |
 
 ---
 
@@ -163,10 +175,10 @@ A session is "future" when `sessionDateLA > today` and status is `active`.
 
 | Action                        | Effect on the acting user     | Effect on other users                                   |
 |-------------------------------|-------------------------------|---------------------------------------------------------|
-| Review For Completion         | None (ack unchanged)          | Session → `completed_pending_ack`, notifications sent   |
-| Complete My Review            | Ack → done, notification rm   | None (unless last → session closes)                     |
-| Undo My Review                | Ack → reset                   | None (unless all cancel → session reverts to `active`)  |
-| Reopen Session                | All acks reset                | All acks reset, all review notifications removed        |
+| Review (click button)         | Client-side only              | None                                                    |
+| Cancel Review                 | Client-side only (dismiss)    | None                                                    |
+| Complete Session              | Ack → done, notification rm   | Session → `completed_pending_ack` (if active), others who still need review are notified (unless last → session closes) |
+| Re-open                       | Ack → reset                   | `closed` → `completed_pending_ack`, `completed_pending_ack` unchanged. Other acks untouched. (If all uncomplete → `active`.) |
 | Leave Session                 | Removed from session          | Ack deleted, notifications deleted for that user        |
 | Added to Session              | Ack created (`needsReview`)   | `session_added` notification sent to added user         |
 
@@ -177,7 +189,7 @@ A session is "future" when `sessionDateLA > today` and status is `active`.
 | Type             | Created when                                       | Deleted when                                                          |
 |------------------|----------------------------------------------------|-----------------------------------------------------------------------|
 | `session_added`  | User is added to a session (not self-join)         | User is removed from session                                          |
-| `session_review` | Someone starts review (sent to other members)      | User completes own review, session reverts to `active`, session closes |
+| `session_review` | Someone completes their session (sent to others who still need review) | User completes own review, session reverts to `active`, session closes |
 
 ---
 
@@ -190,7 +202,7 @@ still happening or done.
 | Viewer     | Status shown                                                              |
 |------------|---------------------------------------------------------------------------|
 | Non-member | "Active" (if not `closed` and not past-date) or "Closed" (otherwise)     |
-| Member     | Full granularity: Active, Future, Review Pending, Closed                  |
+| Member     | Full granularity: Active, Future, Reviewing, Closed                       |
 
 Non-members can still enter **Edit mode** on past-date sessions to help correct
 badge completions.
@@ -203,12 +215,13 @@ badge completions.
 
 | Global Status             | User's `needsReview` | Date Passed? | Buttons Available                          |
 |---------------------------|----------------------|--------------|--------------------------------------------|
-| `active`                  | `true`               | No           | "Review For Completion"                    |
-| `active`                  | `true`               | Yes          | "Complete My Review" (implicit review)     |
+| `active`                  | `true`               | No           | "Review" (client-side toggle)              |
+| `active`                  | `true`               | Yes          | "Complete Session" (implicit review)       |
 | `active` (future)         | `true`               | No           | None (badge selection only)                |
-| `completed_pending_ack`   | `true`               | —            | "Complete My Review"                       |
-| `completed_pending_ack`   | `false`              | No           | "Undo My Review"                           |
-| `completed_pending_ack`   | `false`              | Yes          | Locked — no undo, "Edit" available         |
+| `completed_pending_ack`   | `true`               | No           | "Complete Session", "Cancel Review"        |
+| `completed_pending_ack`   | `true`               | Yes          | "Complete Session" (no cancel)             |
+| `completed_pending_ack`   | `false`              | No           | "Re-open"                                  |
+| `completed_pending_ack`   | `false`              | Yes          | "Edit"                                     |
 | `closed`                  | —                    | No           | "Re-open"                                  |
 | `closed`                  | —                    | Yes          | "Edit"                                     |
 

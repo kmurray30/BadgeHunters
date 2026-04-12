@@ -9,7 +9,6 @@ import {
     removeGhostMember,
     removeSessionMember,
     reopenSession,
-    startReview,
     toggleBadgeSelection,
 } from "@/app/actions/sessions";
 import { toggleBadgeCompletion } from "@/app/actions/badges";
@@ -236,18 +235,27 @@ export function SessionDetailClient({
     (session.status === "active" && isPastDate && !isFuture)
   );
 
+  // Temporary client-side edit/review mode
+  const [isEditing, setIsEditing] = useState(false);
+  const [isReviewing, setIsReviewing] = useState(false);
+  // Allows dismissing server-side review mode without changing server state
+  const [dismissedReview, setDismissedReview] = useState(false);
+
+  // Combined review mode: server-side review state OR client-side "Review" button,
+  // but suppressible via dismissedReview (only when user hasn't completed yet)
+  const inReviewMode =
+    (effectivelyInReview && !(dismissedReview && !myReviewDone)) ||
+    (isReviewing && initialIsMember);
+
   // User is personally done when: session is closed, OR they've completed their review
   const personallyDone =
-    session.status === "closed" || (effectivelyInReview && myReviewDone);
-
-  // Temporary client-side edit mode for closed/done sessions.
-  const [isEditing, setIsEditing] = useState(false);
-  const effectivelyActive = (session.status === "active" && !effectivelyInReview) || isEditing;
+    session.status === "closed" || (inReviewMode && myReviewDone);
+  const effectivelyActive = (session.status === "active" && !inReviewMode) || isEditing;
   const canEdit = !personallyDone || isEditing;
 
   // Badge selection tab: available during active phase and during edit mode
   const showYourBadges = initialIsMember && (
-    (session.status === "active" && !effectivelyInReview && !personallyDone) || isEditing
+    (session.status === "active" && !inReviewMode && !personallyDone) || isEditing
   );
 
   const [activeTab, setActiveTab] = usePersistedState<TabMode>("bh:session:tab", showYourBadges ? "your_badges" : "group_badges");
@@ -514,13 +522,13 @@ export function SessionDetailClient({
               // Members see the full granularity
               const label = isEditing ? "Editing"
                 : personallyDone ? "Closed"
-                : effectivelyInReview ? "Review Pending"
+                : inReviewMode ? "Reviewing"
                 : isFuture ? "Future"
                 : session.status === "active" ? "Active"
                 : "Closed";
               const colorClass = isEditing ? "bg-accent/20 text-accent"
                 : personallyDone ? "bg-border text-muted"
-                : effectivelyInReview ? "bg-warning/20 text-warning"
+                : inReviewMode ? "bg-warning/20 text-warning"
                 : isFuture ? "bg-blue-500/20 text-blue-400"
                 : session.status === "active" ? "bg-success/20 text-success"
                 : "bg-border text-muted";
@@ -585,31 +593,46 @@ export function SessionDetailClient({
             </>
           )}
 
-          {/* Step 1: "Review For Completion" — active session, not future, triggers review mode */}
-          {session.status === "active" && !effectivelyInReview && !isFuture && !viewOnlyMode && initialIsMember && (
+          {/* "Review" — enters review mode (or re-enters after dismissing) */}
+          {!inReviewMode && !isFuture && !viewOnlyMode && initialIsMember && !personallyDone && !myReviewDone && (
             <button
-              onClick={() => handleAction(() => startReview(session.id))}
-              disabled={isPending}
-              className="ml-auto inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-highlight to-pink-500 px-6 py-2.5 text-sm font-bold text-white shadow-[0_0_14px_rgba(217,70,239,0.25)] transition-all hover:shadow-[0_0_20px_rgba(217,70,239,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+              onClick={() => { setIsReviewing(true); setDismissedReview(false); }}
+              className="ml-auto inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-highlight to-pink-500 px-6 py-2.5 text-sm font-bold text-white shadow-[0_0_14px_rgba(217,70,239,0.25)] transition-all hover:shadow-[0_0_20px_rgba(217,70,239,0.4)] hover:scale-[1.02] active:scale-[0.98]"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              {isPending ? "Starting Review..." : "Review For Completion"}
+              Review
             </button>
           )}
 
-          {/* Step 2: "Complete My Review" — in review mode, user hasn't completed yet */}
-          {effectivelyInReview && !myReviewDone && !viewOnlyMode && (
+          {/* "Complete Session" — commits review, transitions session, notifies others */}
+          {inReviewMode && !myReviewDone && !viewOnlyMode && (
             <button
-              onClick={() => handleAction(() => completeMyReview(session.id))}
+              onClick={() => handleAction(async () => {
+                await completeMyReview(session.id);
+                setIsReviewing(false);
+              })}
               disabled={isPending}
               className="ml-auto inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-highlight to-pink-500 px-6 py-2.5 text-sm font-bold text-white shadow-[0_0_14px_rgba(217,70,239,0.25)] transition-all hover:shadow-[0_0_20px_rgba(217,70,239,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
-              {isPending ? "Completing..." : "Complete My Review"}
+              {isPending ? "Completing..." : "Complete Session"}
+            </button>
+          )}
+
+          {/* Cancel review — works for both self-initiated and server-pushed review */}
+          {inReviewMode && !myReviewDone && !isPastDate && !viewOnlyMode && (
+            <button
+              onClick={() => {
+                setIsReviewing(false);
+                setDismissedReview(true);
+              }}
+              className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-5 py-2.5 text-sm font-medium text-muted hover:text-foreground hover:border-foreground/30 transition-colors"
+            >
+              Cancel Review
             </button>
           )}
 
@@ -629,7 +652,7 @@ export function SessionDetailClient({
           {/* Closed/done: "Re-open" (current day, member only) or "Edit" (anyone) */}
           {personallyDone && !isEditing && !viewOnlyMode && (
             <>
-              {/* Re-open is member-only, current-day only */}
+              {/* Re-open is member-only, current-day only, for closed or completed_pending_ack where user is done */}
               {initialIsMember && !isPastDate && (
                 <button
                   onClick={() => handleAction(() => reopenSession(session.id))}
@@ -710,30 +733,19 @@ export function SessionDetailClient({
 
         
 
-        {/* Review prompt — shown when session is in review (or past-date active) and user hasn't completed yet */}
-        {effectivelyInReview && !myReviewDone && !viewOnlyMode && (
+        {/* Review prompt — shown when in review mode and user hasn't completed yet */}
+        {inReviewMode && !myReviewDone && !viewOnlyMode && (
           <div className="mt-4 rounded-lg border border-warning/30 bg-warning/5 p-3">
             <p className="text-sm text-warning">
               {session.status === "completed_pending_ack" && session.completedBy
-                ? `${session.completedBy.displayName} started the review. Check off your badge completions and complete yours.`
-                : "The session date has passed. Review your badge completions and complete your review."}
+                ? `${session.completedBy.displayName} completed their session. Check off your badge completions and complete yours.`
+                : isReviewing
+                  ? "Review your badge completions below, then click Complete Session when ready."
+                  : "The session date has passed. Review your badge completions and complete your session."}
             </p>
           </div>
         )}
 
-        {/* Cancel my review — only allowed when user has completed AND date has NOT passed */}
-        {effectivelyInReview && myReviewDone && !isPastDate && !viewOnlyMode && (
-          <div className="mt-4 rounded-lg border border-accent/20 bg-accent/5 p-3 flex items-center justify-between">
-            <p className="text-xs text-accent">You have completed your review.</p>
-            <button
-              onClick={() => handleAction(() => cancelMyReview(session.id))}
-              disabled={isPending}
-              className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-2 text-xs font-medium text-danger hover:bg-danger/20 hover:border-danger/50 transition-colors disabled:opacity-50"
-            >
-              Undo My Review
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Instruction box with animated switch button */}
