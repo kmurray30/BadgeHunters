@@ -73,7 +73,8 @@ export function SessionsListClient({ activeSessions, pastSessions, todayString }
               <Link
                 key={session.id}
                 href={`/sessions/${session.id}`}
-                className="block rounded-xl border border-accent/30 bg-card px-4 py-2.5 hover:bg-card-hover transition-colors"
+                className="block rounded-xl border bg-card px-4 py-2.5 hover:bg-card-hover transition-colors"
+                style={{ borderColor: session.isMember ? "rgba(34,197,94,0.4)" : "rgba(99,102,241,0.3)" }}
               >
                 <div className="flex items-center justify-between gap-2">
                   <p className="min-w-0 truncate font-medium text-foreground">
@@ -137,7 +138,8 @@ export function SessionsListClient({ activeSessions, pastSessions, todayString }
               <Link
                 key={session.id}
                 href={`/sessions/${session.id}`}
-                className="block rounded-xl border border-border bg-card px-4 py-2.5 hover:bg-card-hover transition-colors"
+                className="block rounded-xl border bg-card px-4 py-2.5 hover:bg-card-hover transition-colors"
+                style={{ borderColor: session.isMember ? "rgba(34,197,94,0.4)" : "var(--border)" }}
               >
                 <div className="flex items-center justify-between gap-2">
                   <p className="min-w-0 truncate text-sm font-medium text-foreground">

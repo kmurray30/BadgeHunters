@@ -172,7 +172,10 @@ export function NotificationCenter({ notifications }: NotificationCenterProps) {
         </div>
 
         {isOpen && (
-          <div className="absolute right-0 top-full mt-1 w-80 rounded-xl border border-border bg-card shadow-xl overflow-hidden">
+          <div
+            className="absolute right-0 top-full mt-1 rounded-xl border border-border bg-card shadow-xl overflow-hidden"
+            style={{ width: 320, maxWidth: "calc(100vw - 1rem)" }}
+          >
             <div className="border-b border-border px-4 py-2.5">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted">Notifications</p>
             </div>
