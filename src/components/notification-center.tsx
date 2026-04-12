@@ -145,20 +145,31 @@ export function NotificationCenter({ notifications }: NotificationCenterProps) {
 
       {/* Bell icon + dropdown */}
       <div className="relative" ref={dropdownRef}>
-        <button
-          onClick={handleBellClick}
-          className="relative flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:text-foreground hover:bg-card-hover transition-colors"
-          title="Notifications"
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-          </svg>
+        <div className="relative inline-flex h-8 w-8">
+          <button
+            onClick={handleBellClick}
+            className="flex h-full w-full items-center justify-center rounded-lg text-muted hover:text-foreground hover:bg-card-hover transition-colors"
+            title="Notifications"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+          </button>
           {unreadCount > 0 && (
-            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-0.5 text-[9px] font-bold text-white">
+            <span
+              className="pointer-events-none flex items-center justify-center"
+              style={{
+                position: "absolute", top: -6, right: -6,
+                height: 18, minWidth: 18, paddingInline: 4,
+                borderRadius: 9999, backgroundColor: "#dc2626",
+                fontSize: 10, fontWeight: 700, color: "#fff",
+                lineHeight: 1,
+              }}
+            >
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
-        </button>
+        </div>
 
         {isOpen && (
           <div className="absolute right-0 top-full mt-1 w-80 rounded-xl border border-border bg-card shadow-xl overflow-hidden">
