@@ -17,6 +17,7 @@ import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type BadgeTableSection, 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MultiFilter, type ActiveFilter, type FilterDefinition } from "@/components/multi-filter";
 import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
+import { NotificationPopup } from "@/components/notification-popup";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -169,6 +170,78 @@ const DIFFICULTY_LABELS: Record<string, { label: string; color: string }> = {
   impossible: { label: "Impossible?", color: "text-red-400" },
   unknown: { label: "???", color: "text-muted" },
 };
+
+// Badge recommendations: conditions the app can detect from session state.
+// Each rule returns a reason string if the condition is met, or null if not.
+interface BadgeRecommendation {
+  badgeNumber: number;
+  reason: string;
+  badge: BadgeData;
+}
+
+function detectBadgeRecommendations(
+  allBadges: BadgeData[],
+  currentUserId: string,
+  members: SessionMember[],
+  ghostMemberCount: number,
+  sessionDateISO: string,
+): BadgeRecommendation[] {
+  const partySize = members.length + ghostMemberCount;
+  const sessionDate = new Date(sessionDateISO);
+  const now = new Date();
+  const currentHour = now.getHours();
+
+  // Check if the session date is the last day of its month
+  const lastDayOfMonth = new Date(sessionDate.getUTCFullYear(), sessionDate.getUTCMonth() + 1, 0).getUTCDate();
+  const isLastDayOfMonth = sessionDate.getUTCDate() === lastDayOfMonth;
+
+  // Count distinct non-null rank colors among real members
+  const distinctRankColors = new Set(
+    members.map((member) => member.rankColor).filter(Boolean)
+  );
+
+  const rules: { badgeNumber: number; condition: boolean; reason: string }[] = [
+    {
+      badgeNumber: 18, // CHASING RAINBOWS
+      condition: distinctRankColors.size >= 5,
+      reason: `Your group has ${distinctRankColors.size} different rank colors — perfect for this badge!`,
+    },
+    {
+      badgeNumber: 53, // MONTHLY HIGH SCORER
+      condition: isLastDayOfMonth,
+      reason: "Today is the last day of the month — this badge requires setting a monthly high score on the last day!",
+    },
+    {
+      badgeNumber: 34, // EARLY BIRD
+      condition: currentHour < 11,
+      reason: "It's before 11 AM — you can earn this by winning a game right now!",
+    },
+    {
+      badgeNumber: 55, // NIGHT OWL
+      condition: currentHour >= 23 || currentHour < 3,
+      reason: "It's after 11 PM — you can earn this by winning a game right now!",
+    },
+    {
+      badgeNumber: 52, // KEENER
+      condition: true, // always relevant as a strategy reminder
+      reason: "Remember: be the first to sign in for every game this visit!",
+    },
+  ];
+
+  const badgesByNumber = new Map(allBadges.map((badge) => [badge.badgeNumber, badge]));
+  const recommendations: BadgeRecommendation[] = [];
+
+  for (const rule of rules) {
+    if (!rule.condition) continue;
+    const badge = badgesByNumber.get(rule.badgeNumber);
+    if (!badge) continue;
+    // Only recommend if the current user hasn't completed it
+    if (badge.memberCompletions.includes(currentUserId)) continue;
+    recommendations.push({ badgeNumber: rule.badgeNumber, reason: rule.reason, badge });
+  }
+
+  return recommendations;
+}
 
 function playerCountLabel(bucket: string): string {
   if (bucket === "lte_3") return "≤3";
@@ -419,7 +492,7 @@ export function SessionDetailClient({
     const difficultyVal = yourBadgesFilters.find((filter) => filter.key === "difficulty")?.value ?? "all";
     const playersVal = yourBadgesFilters.find((filter) => filter.key === "players")?.value ?? "all";
     const typeVal = yourBadgesFilters.find((filter) => filter.key === "type")?.value ?? "all";
-    const completionVal = yourBadgesFilters.find((filter) => filter.key === "completion")?.value ?? "uncompleted";
+    const completionVal = yourBadgesFilters.find((filter) => filter.key === "completion")?.value ?? "all";
 
     if (completionVal === "uncompleted") list = list.filter((badge) => !badge.memberCompletions.includes(currentUserId));
     else if (completionVal === "completed") list = list.filter((badge) => badge.memberCompletions.includes(currentUserId));
@@ -489,8 +562,65 @@ export function SessionDetailClient({
     });
   }, [session.members, currentUserId]);
 
+  // Badge recommendations: detect conditions and show popup for badges the user hasn't completed
+  const recommendations = useMemo(() => detectBadgeRecommendations(
+    allBadges, currentUserId, session.members, session.ghostMembers.length, session.sessionDateLocal,
+  ), [allBadges, currentUserId, session.members, session.ghostMembers.length, session.sessionDateLocal]);
+
+  // Persist dismissals per session so popups don't reappear on every navigation
+  const [dismissedRecommendations, setDismissedRecommendations] = usePersistedState<number[]>(
+    `bh:session:${session.id}:dismissed-recs`, []
+  );
+
+  const pendingRecommendations = recommendations.filter(
+    (rec) => !dismissedRecommendations.includes(rec.badgeNumber)
+      && !userSelectedBadgeIds.has(rec.badge.id)
+  );
+  const currentRecommendation = initialIsMember && effectivelyActive && !viewOnlyMode
+    ? pendingRecommendations[0] ?? null
+    : null;
+
+  function dismissRecommendation(badgeNumber: number) {
+    setDismissedRecommendations((prev) => [...prev, badgeNumber]);
+  }
+
+  function handleSelectRecommendedBadge(recommendation: BadgeRecommendation) {
+    dismissRecommendation(recommendation.badgeNumber);
+    if (!userSelectedBadgeIds.has(recommendation.badge.id)) {
+      toggleBadgeSelection(session.id, recommendation.badge.id);
+    }
+  }
+
   return (
     <div className="space-y-6">
+      {/* Badge recommendation popup */}
+      {currentRecommendation && (
+        <NotificationPopup
+          icon={
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456Z" />
+            </svg>
+          }
+          title={`Badge Recommendation: ${currentRecommendation.badge.name}`}
+          description={currentRecommendation.reason}
+          actions={[
+            {
+              label: userSelectedBadgeIds.has(currentRecommendation.badge.id)
+                ? "Already Selected!"
+                : "Add to Session",
+              onClick: () => handleSelectRecommendedBadge(currentRecommendation),
+              variant: "primary",
+            },
+            {
+              label: "Dismiss",
+              onClick: () => dismissRecommendation(currentRecommendation.badgeNumber),
+              variant: "muted",
+            },
+          ]}
+          onClose={() => dismissRecommendation(currentRecommendation.badgeNumber)}
+        />
+      )}
+
       {/* Leave session confirmation dialog */}
       {showLeaveConfirm && (
         <ConfirmDialog

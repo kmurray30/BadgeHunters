@@ -1,103 +1,103 @@
-﻿Number,Name,Description
-1,10 FOR 10,Win ten different level 10 games in a row
-2,15S IN 15S,Complete each wave of 15 Green level 6 in exactly 15 seconds.
-3,2 FAST 2 SEE,Complete Numbers level 2 without the eye going off
-4,2 FAST 2 SEE 2,Complete Words level 10 without the eye going off
-5,2 FOR 2,Win two different level 2 games in a row
-6,3 FOR 3,Win three different level 3 games in a row
-7,4 FOR 4,Win four different level 4 games in a row
-8,5 FOR 5,Win five different level 5 games in a row
-9,6 FOR 6,Win six different level 6 games in a row
-10,7 FOR 7,Win seven different level 7 games in a row
-11,8 FOR 8,Win eight different level 8 games in a row
-12,9 FOR 9,Win nine different level 9 games in a row
-13,ACTIV8,Score exactly 8888 points in any one level
-14,ACTIVATED,Beat all game levels
-15,ADRENALINE JUNKIE,"Lose 4 lives before scoring a point, and then beat Zap level 8""H"
-16,BEST OF BOTH WORLDS,Play an equal number of cooperative and competitive games for one visit
-17,CALL JENNY,"Jenny, Jenny, who can I turn to?"
-18,CHASING RAINBOWS,Play a game with a group of 5 players who are all different rank colors
-19,COMPLETIONIST,Play every game in the facility once
-20,DAILY HIGH SCORER,Get 3 Daily High Scores in a row after 9pm
-21,DÉJÀ VU,Win the same level 1 twice in a row
-22,DEJA VU 2.0,Win the same level 2 twice in a row
-23,DEJA VU 3.0,Win the same level 3 twice in a row
-24,DEJA VU 4.0,Win the same level 4 twice in a row
-25,DEJA VU 5.0,Win the same level 5 twice in a row
-26,DEJA VU 6.0,Win the same level 6 twice in a row
-27,DEJA VU 7.0,Win the same level 7 twice in a row
-28,DEJA VU 8.0,Win the same level 8 twice in a row
-29,DEJA VU 9.0,Win the same level 9 twice in a row
-30,DEJA VU MASTER,Win the same level 10 twice in a row
-31,DIRECTION INSPECTION 1.0,Complete 15 Green level 4 by only sinking green baskets left to right
-32,DIRECTION INSPECTION 2.0,Complete Gems level 9 by pressing the target buttons from left to right
-33,DIRECTION INSPECTION 3.0,Complete Bullet Train level 9 by getting all targets in clockwise order
-34,EARLY BIRD,Win a game before 11 AM
-35,EASTER EGG BARRAGE,Don Quixote would find the egg and win the level
-36,EASTER EGG FLIP,"Find the egg, win the level"
-37,EASTER EGG MEGA GRID,"Find the egg, win the level"
-38,EASTER EGG NUMBERS,"Level the win, egg the find."
-39,EASTER EGG STATUES,"Find the egg, win the level"
-40,EASTER EGG STOPWATCH,"Find the egg, win the level"
-41,EASTER EGG TRIVIAL,"Find the egg, win the level"
-42,EASTER EGG WORDS,"Find the egg, win the level"
-43,EQUAL PARTNERS,Complete Barrage level 8 by using each active basket the same number of times
-44,EXPANDING HORIZONS,Play with 10 different people.
-45,FAST FEET,Complete Bop level 7 while each player steps on the tiles an additional 100 times
-46,FIRESTORM,Complete Mines level 8 without pressing the green button more than once
-47,FRIENDLY ENEMIES,Play 25 competitive mode games
-48,GO FOR GOLD,Qualify for a tournament
-49,HALFWAY MARK,Beat half of all game levels
-50,HANDS THEN FEET,Complete Mega Grid level 8 hitting all of the buttons before stepping on the blue tiles
-51,HEATING UP,Win 50 competitive mode games
-52,KEENER,Be the first player in your group to sign in for every game for an entire visit
-53,MONTHLY HIGH SCORER,Set a monthly high score on the last day of the month CIH •
-54,MY OWN COMPETITION,Beat your personal high score in 25 levels
-55,NIGHT OWL,Win a game after 11 PM
-56,NO STONE UNTURNED,Complete Grid level 3 and step on every tile in the room
-57,OLD SCHOOL,Earn 30 bonus lives in Labyrinth level 3.
-58,OMNIPOTENCE,Play only level 10s for an entire visit
-59,ONE AND DONE 2.0,Complete Spellinator level 4 without using the same letter more than once
-60,ONE BY ONE,Complete Defuse level 5 with 3 players by only completing one target at a time
-61,OUT FOR BLOOD,Only play competitive mode games for one visit
-62,PERFECT PAIRS,Win level 1 of Link in less than 10 seconds.
-63,PHOTOBOMB,Take a photo in the photo room
-64,PICTURE PERFECT,Take a photo within 60 seconds of completing a level without losing a life
-65,POP QUIZ,Solve each question of Trivial level 1 in less than 10 seconds IH
-66,PRACTICE MAKES PERFECT,Beat your personal high score in 100 levels
-67,RIDDLE 1.0,"With the sign all lit up, search the screen for the cup."
-68,RIDDLE 2.0,"Looking for stars while taking a break, look no further and click the mistake."
-69,RIDDLE 3.0,"Mary had a little lamb, little lamb, little lamb. Mary had a little lamb, its fleece was white as snow."
-70,RIDDLE 4.0,"Within one second of signing into a game, exit the score checker and this badge you will claim."
-71,RIDDLE 5.0,"When the timer starts to run, in the first stage of level one, go tick tock around the clock, giving all the buttons a knock."
-72,RIDDLE 6.0,"Winning Activate level 7s can cause lots of stress, now do it back to back in all games that start with S."
-73,SAFETY SECOND,Complete Order Up level 8 without stepping on a green tile.
-74,SCATTERBRAINED,Never play the same game back to back for one visit.
-75,SHOWING OFF,Complete Barrage level 8 and sink 10 baskets on an unused net
-76,SIZE MATTERS,Complete Jigsaw level 5 by stepping on the solution pieces from smallest to largest
-77,SNAKE ISLAND,Keep five players alive in Tails for 60 seconds.
-78,SNIPER 1.0,Complete Terminal level 5 without missing a single throw.
-79,SNIPER 2.0,Complete Dartmouth level 10 without missing a single throw
-80,SOCIAL BUTTERFLY,Play with 25 different people.
-81,STARTING A RIVALRY,Win 25 competitive mode games
-82,THE GAUNTLET,Beat levels 1 through 10 of a single game in a row without losing
-83,THE GAUNTLET PLUS,Beat levels 1 through 10 in a row without repeating a game and without losing a life.
-84,THE GRAND TOUR,Win a level from every room in a row without losing a life.
-85,THE MARATHON,"Beat Relay level 5, Mega Relay level 5 and Laser Relay level 5 in a row."
-86,THE ULTIMATE WINNER,Win 100 competitive mode games
-87,THUMB WAR,Score exactly 1234 points in any one level
-88,TIPTOEING,Complete Zones level 5 without stepping on any wrong colours
-89,TOTAL RECALL,Complete Flip level 6 without revealing a target more than twice
-90,TOTAL RECALL 2.0,Complete Sequence level 6 without revealing a number more than twice
-91,TOTAL RECALL 3.0,Complete Link level 8 without making a mistake
-92,UNTOUCHABLE,Win level 1 of Mega Grid without losing a life
-93,UNTOUCHABLE 2.0,Win level 2 of Maze without losing a life
-94,UNTOUCHABLE 3.0,Win level 4 of Order Up without losing a life
-95,UNTOUCHABLE 4.0,Win level 5 of Wormholes without losing a life
-96,UNTOUCHABLE 5.0,Win level 6 of Gauntiet without losing a life
-97,UNTOUCHABLE 6.0,Win level 7 of Mega Zones without losing a life
-98,UNTOUCHABLE 7.0,Win level 8 of Defuse without losing a life
-99,UNTOUCHABLE 8.0,Win level 9 of Asteroids without losing a life
-100,UNTOUCHABLE MASTER,Win level 10 of Relay without losing a life
-101,UP TO DATE,Sign up for the Activate Newsletter from the website or from the
-102,WIN/LOSS,Win twice as many games as you lose in one visit
+﻿Number,Name,Description,Completed,Room,Game,# ppl,Tags,Difficulty,Duration
+1,10 FOR 10,Win ten different level 10 games in a row,,TBD,TBD,,,Impossible?,Partial Day
+2,15S IN 15S,Complete each wave of 15 Green level 6 in exactly 15 seconds.,Kyle,Hoops,15 Green,,,Medium,Quick
+3,2 FAST 2 SEE,Complete Numbers level 2 without the eye going off,,Hide,Numbers,5,,Hard,Quick
+4,2 FAST 2 SEE 2,Complete Words level 10 without the eye going off,,Hide,Words,5,,Impossible?,Quick
+5,2 FOR 2,Win two different level 2 games in a row,,N/A,N/A,,,Easy,Quick
+6,3 FOR 3,Win three different level 3 games in a row,,N/A,N/A,,,Easy,Quick
+7,4 FOR 4,Win four different level 4 games in a row,,N/A,N/A,,,Easy,Quick
+8,5 FOR 5,Win five different level 5 games in a row,,N/A,N/A,,,Easy,Partial Day
+9,6 FOR 6,Win six different level 6 games in a row,,TBD,TBD,,,Medium,Partial Day
+10,7 FOR 7,Win seven different level 7 games in a row,,"Grid, Hoops, Laser, Mega Grid, Press","15 Green, Barrage, Grid, Mega Grid, Statues, Train, Zap",,,Medium,Partial Day
+11,8 FOR 8,Win eight different level 8 games in a row,,TBD,TBD,,,Hard,Partial Day
+12,9 FOR 9,Win nine different level 9 games in a row,,TBD,TBD,,,Impossible?,Partial Day
+13,ACTIV8,Score exactly 8888 points in any one level,,TBD,TBD,,,Hard,Quick
+14,ACTIVATED,Beat all game levels,,N/A,N/A,,,Impossible?,Multi-day
+15,ADRENALINE JUNKIE,"Lose 4 lives before scoring a point, and then beat Zap level 8""H",,Laser,Zap,5,,Hard,Quick
+16,BEST OF BOTH WORLDS,Play an equal number of cooperative and competitive games for one visit,,N/A,N/A,,"Competitive, Per-visit",Easy,Meta
+17,CALL JENNY,"Jenny, Jenny, who can I turn to?",,TBD,TBD,,???,???,Meta
+18,CHASING RAINBOWS,Play a game with a group of 5 players who are all different rank colors,,N/A,N/A,5,"Per-visit, Score",Hard,Meta
+19,COMPLETIONIST,Play every game in the facility once,,N/A,N/A,,,Easy,Multi-day
+20,DAILY HIGH SCORER,Get 3 Daily High Scores in a row after 9pm,Kyle,N/A,N/A,,,Easy,Meta
+21,DÉJÀ VU,Win the same level 1 twice in a row,,N/A,N/A,,,Easy,Quick
+22,DEJA VU 2.0,Win the same level 2 twice in a row,Kyle,N/A,N/A,,,Easy,Quick
+23,DEJA VU 3.0,Win the same level 3 twice in a row,,N/A,N/A,,,Easy,Quick
+24,DEJA VU 4.0,Win the same level 4 twice in a row,,N/A,N/A,,,Easy,Quick
+25,DEJA VU 5.0,Win the same level 5 twice in a row,,N/A,N/A,,,Easy,Quick
+26,DEJA VU 6.0,Win the same level 6 twice in a row,,N/A,N/A,,,Easy,Quick
+27,DEJA VU 7.0,Win the same level 7 twice in a row,,N/A,N/A,,,Easy,Quick
+28,DEJA VU 8.0,Win the same level 8 twice in a row,,N/A,N/A,,,Easy,Quick
+29,DEJA VU 9.0,Win the same level 9 twice in a row,,N/A,N/A,,,Easy,Quick
+30,DEJA VU MASTER,Win the same level 10 twice in a row,,N/A,N/A,,,Medium,Quick
+31,DIRECTION INSPECTION 1.0,Complete 15 Green level 4 by only sinking green baskets left to right,Kyle,Hoops,15 Green,,,Easy,Quick
+32,DIRECTION INSPECTION 2.0,Complete Gems level 9 by pressing the target buttons from left to right,,,Gems,,,???,Quick
+33,DIRECTION INSPECTION 3.0,Complete Bullet Train level 9 by getting all targets in clockwise order,,,Bullet Train,,,???,Quick
+34,EARLY BIRD,Win a game before 11 AM,,N/A,N/A,,Per-visit,Easy,Meta
+35,EASTER EGG BARRAGE,Don Quixote would find the egg and win the level,,Hoops,Barrage,,???,???,Quick
+36,EASTER EGG FLIP,"Find the egg, win the level",,,Flip,,???,???,Quick
+37,EASTER EGG MEGA GRID,"Find the egg, win the level",,Mega Grid,Mega Grid,,???,???,Quick
+38,EASTER EGG NUMBERS,"Level the win, egg the find.",,Hide,Numbers,,???,???,Quick
+39,EASTER EGG STATUES,"Find the egg, win the level",,Mega Grid,Statues,,???,???,Quick
+40,EASTER EGG STOPWATCH,"Find the egg, win the level",,,Stopwatch,,???,???,Quick
+41,EASTER EGG TRIVIAL,"Find the egg, win the level",,,Trivial,,???,???,Quick
+42,EASTER EGG WORDS,"Find the egg, win the level",,Hide,Words,,???,???,Quick
+43,EQUAL PARTNERS,Complete Barrage level 8 by using each active basket the same number of times,,Hoops,Barrage,5,,Medium,Quick
+44,EXPANDING HORIZONS,Play with 10 different people.,Kyle,N/A,N/A,,,Medium,Meta
+45,FAST FEET,Complete Bop level 7 while each player steps on the tiles an additional 100 times,,,Bop,,,???,Quick
+46,FIRESTORM,Complete Mines level 8 without pressing the green button more than once,,,Mines,,,???,Quick
+47,FRIENDLY ENEMIES,Play 25 competitive mode games,,N/A,N/A,,Competitive,Easy,All day
+48,GO FOR GOLD,Qualify for a tournament,,N/A,N/A,,Score,Medium,Meta
+49,HALFWAY MARK,Beat half of all game levels,,N/A,N/A,,,Easy,Multi-day
+50,HANDS THEN FEET,Complete Mega Grid level 8 hitting all of the buttons before stepping on the blue tiles,,Mega Grid,Mega Grid,,,???,Quick
+51,HEATING UP,Win 50 competitive mode games,,N/A,N/A,,Competitive,Medium,Multi-day
+52,KEENER,Be the first player in your group to sign in for every game for an entire visit,,N/A,N/A,,Per-visit,Easy,Meta
+53,MONTHLY HIGH SCORER,Set a monthly high score on the last day of the month,,N/A,N/A,,"Per-visit, Score",Medium,Meta
+54,MY OWN COMPETITION,Beat your personal high score in 25 levels,,N/A,N/A,,Score,Medium,Multi-day
+55,NIGHT OWL,Win a game after 11 PM,,N/A,N/A,,Per-visit,Easy,Meta
+56,NO STONE UNTURNED,Complete Grid level 3 and step on every tile in the room,,Grid,Grid,5,,???,Quick
+57,OLD SCHOOL,Earn 30 bonus lives in Labyrinth level 3.,,,Labyrinth,,,???,Quick
+58,OMNIPOTENCE,Play only level 10s for an entire visit,,N/A,N/A,,Per-visit,Easy,Meta
+59,ONE AND DONE 2.0,Complete Spellinator level 4 without using the same letter more than once,,Hide,Spellinator,,,???,Quick
+60,ONE BY ONE,Complete Defuse level 5 with 3 players by only completing one target at a time,,,Defuse,,,???,Quick
+61,OUT FOR BLOOD,Only play competitive mode games for one visit,,N/A,N/A,,Per-visit,Easy,Meta
+62,PERFECT PAIRS,Win level 1 of Link in less than 10 seconds.,,,Link,,,???,Quick
+63,PHOTOBOMB,Take a photo in the photo room,,Photo Room,Photo Room,,,Easy,Meta
+64,PICTURE PERFECT,Take a photo within 60 seconds of completing a level without losing a life,,Photo Room,Photo Room,,,Easy,Meta
+65,POP QUIZ,Solve each question of Trivial level 1 in less than 10 seconds,,,Trivial,,,???,Quick
+66,PRACTICE MAKES PERFECT,Beat your personal high score in 100 levels,,N/A,N/A,,Score,Hard,Multi-day
+67,RIDDLE 1.0,"With the sign all lit up, search the screen for the cup.",,N/A,N/A,,???,???,Meta
+68,RIDDLE 2.0,"Looking for stars while taking a break, look no further and click the mistake.",,N/A,N/A,,???,???,Meta
+69,RIDDLE 3.0,"Mary had a little lamb, little lamb, little lamb. Mary had a little lamb, its fleece was white as snow.",,N/A,N/A,,???,???,Meta
+70,RIDDLE 4.0,"Within one second of signing into a game, exit the score checker and this badge you will claim.",,N/A,N/A,,???,???,Meta
+71,RIDDLE 5.0,"When the timer starts to run, in the first stage of level one, go tick tock around the clock, giving all the buttons a knock.",,N/A,N/A,,???,???,Meta
+72,RIDDLE 6.0,"Winning Activate level 7s can cause lots of stress, now do it back to back in all games that start with S.",,N/A,N/A,,???,???,Meta
+73,SAFETY SECOND,Complete Order Up level 8 without stepping on a green tile.,,,Order Up,,,???,Quick
+74,SCATTERBRAINED,Never play the same game back to back for one visit.,,N/A,N/A,,Per-visit,Easy,Meta
+75,SHOWING OFF,Complete Barrage level 8 and sink 10 baskets on an unused net,Kyle,Hoops,Barrage,,,Medium,Quick
+76,SIZE MATTERS,Complete Jigsaw level 5 by stepping on the solution pieces from smallest to largest,,,Jigsaw,,,???,Quick
+77,SNAKE ISLAND,Keep five players alive in Tails for 60 seconds.,,,Tails,5,,???,Quick
+78,SNIPER 1.0,Complete Terminal level 5 without missing a single throw.,,,Terminal,,,???,Quick
+79,SNIPER 2.0,Complete Dartmouth level 10 without missing a single throw,,,Dartmouth,,,???,Quick
+80,SOCIAL BUTTERFLY,Play with 25 different people.,,N/A,N/A,,,Hard,Meta
+81,STARTING A RIVALRY,Win 25 competitive mode games,,N/A,N/A,,Competitive,Easy,Multi-day
+82,THE GAUNTLET,Beat levels 1 through 10 of a single game in a row without losing,,Grid,Zones,3,,Medium,Partial Day
+83,THE GAUNTLET PLUS,Beat levels 1 through 10 in a row without repeating a game and without losing a life.,,TBD,TBD,,,Hard,Partial Day
+84,THE GRAND TOUR,Win a level from every room in a row without losing a life.,,TBD,TBD,,,Medium,Partial Day
+85,THE MARATHON,"Beat Relay level 5, Mega Relay level 5 and Laser Relay level 5 in a row.",,,"Laser Relay, Mega Relay, Relay",,,Medium,Quick
+86,THE ULTIMATE WINNER,Win 100 competitive mode games,,N/A,N/A,,Competitive,Hard,Multi-day
+87,THUMB WAR,Score exactly 1234 points in any one level,,TBD,TBD,,,Medium,Quick
+88,TIPTOEING,Complete Zones level 5 without stepping on any wrong colours,,Grid,Zones,,,???,Quick
+89,TOTAL RECALL,Complete Flip level 6 without revealing a target more than twice,,,Flip,,,???,
+90,TOTAL RECALL 2.0,Complete Sequence level 6 without revealing a number more than twice,,,Sequence,,,???,
+91,TOTAL RECALL 3.0,Complete Link level 8 without making a mistake,,,Link,,,???,
+92,UNTOUCHABLE,Win level 1 of Mega Grid without losing a life,,,Mega Grid,,,Easy,
+93,UNTOUCHABLE 2.0,Win level 2 of Maze without losing a life,,,Maze,,,Easy,
+94,UNTOUCHABLE 4.0,Win level 4 of Order Up without losing a life,,,Order Up,,,Medium,
+95,UNTOUCHABLE 5.0,Win level 5 of Wormholes without losing a life,,,Wormholes,,,???,
+96,UNTOUCHABLE 6.0,Win level 6 of Gauntiet without losing a life,,,Gauntlet,,,???,
+97,UNTOUCHABLE 7.0,Win level 7 of Mega Zones without losing a life,Kyle,,Mega Zones,,,???,
+98,UNTOUCHABLE 8.0,Win level 8 of Defuse without losing a life,,,Defuse,,,???,
+99,UNTOUCHABLE 9.0,Win level 9 of Asteroids without losing a life,,,Asteroids,,,???,
+100,UNTOUCHABLE MASTER,Win level 10 of Relay without losing a life,,,Relay,,,???,
+101,UP TO DATE,Sign up for the Activate Newsletter from the website or from the,Kyle,N/A,N/A,,,Easy,Meta
+102,WIN/LOSS,Win twice as many games as you lose in one visit,Kyle,N/A,N/A,,Per-visit,Easy,All day

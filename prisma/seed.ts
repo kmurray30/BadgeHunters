@@ -58,8 +58,8 @@ function inferBadgeData(badgeNumber: number, name: string, description: string):
     descLower.includes("for an entire visit") ||
     descLower.includes("for a visit") ||
     descLower.includes("in one visit") ||
-    // Specific per-visit badges by number:
-    [16, 52, 58, 61, 74, 102].includes(badgeNumber);
+    // Specific per-visit badges by number (from Tags column in badges.csv):
+    [16, 18, 34, 52, 53, 55, 58, 61, 74, 102].includes(badgeNumber);
 
   // --- Infer meta badge ---
   // Meta badges are time-sensitive, context-sensitive, or require specific party composition
@@ -191,15 +191,17 @@ async function main() {
     });
 
     if (existing) {
-      // Only update name/description from CSV. All other fields (difficulty,
-      // player count, duration, etc.) are admin-curated and should not
-      // be overwritten by the seed. Tags are force-cleared because
-      // badges.csv has no tags — any existing ones are stale seed artifacts.
+      // Update name/description from CSV plus per-visit/meta flags which are
+      // inferred from stable badge numbers, not admin-curated.
+      // Other fields (difficulty, player count, duration, etc.) are
+      // admin-curated and should not be overwritten by the seed.
       await prisma.badge.update({
         where: { badgeNumber },
         data: {
           name: record.Name,
           description: record.Description,
+          isPerVisit: inferred.isPerVisit,
+          isMetaBadge: inferred.isMetaBadge,
           tags: [],
         },
       });
