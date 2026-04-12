@@ -486,13 +486,19 @@ export async function updateSessionDate(sessionId: string, newDateString: string
 
   await requireUser();
 
-  const [year, month, day] = newDateString.split("-").map(Number);
-  const newSessionDate = new Date(year, month - 1, day);
+  const parts = newDateString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!parts) throw new Error("Invalid date format — expected YYYY-MM-DD");
 
-  // Recalculate expiry: 6am the day after session date
-  const newExpiresAt = new Date(newSessionDate);
-  newExpiresAt.setDate(newExpiresAt.getDate() + 1);
-  newExpiresAt.setHours(6, 0, 0, 0);
+  const year = Number(parts[1]);
+  const month = Number(parts[2]);
+  const day = Number(parts[3]);
+
+  // Use UTC to match Prisma @db.Date behavior (date-only, no timezone shift)
+  const newSessionDate = new Date(Date.UTC(year, month - 1, day));
+  if (isNaN(newSessionDate.getTime())) throw new Error("Invalid date");
+
+  // Recalculate expiry: 6am the day after session date (local time)
+  const newExpiresAt = new Date(year, month - 1, day + 1, 6, 0, 0, 0);
 
   await prisma.session.update({
     where: { id: sessionId },
