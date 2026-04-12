@@ -4,6 +4,7 @@ import {
   addGhostMember,
   addSessionMember,
   completeMyReview,
+  deleteSession,
   dismissSessionReviewNotification,
   joinSession,
   removeGhostMember,
@@ -11,6 +12,7 @@ import {
   reopenSession,
   toggleBadgeSelection,
   toggleSessionBadgeCompletion,
+  updateSessionDate,
 } from "@/app/actions/sessions";
 import { BackButton } from "@/components/back-button";
 import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type BadgeTableSection, type ColumnHeader } from "@/components/badge-table";
@@ -126,6 +128,7 @@ interface Props {
   availableUsersForAdd: AvailableUser[];
   metaRuleBlurbs: Record<string, string>;
   todayString: string;
+  isAdminMode: boolean;
 }
 
 type TabMode = "your_badges" | "group_badges";
@@ -293,6 +296,7 @@ export function SessionDetailClient({
   availableUsersForAdd,
   metaRuleBlurbs,
   todayString,
+  isAdminMode,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -355,6 +359,13 @@ export function SessionDetailClient({
   const [showAddMember, setShowAddMember] = useState(false);
   const [ghostNameInput, setGhostNameInput] = useState("");
   const [editingParty, setEditingParty] = useState(false);
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editingDate, setEditingDate] = useState(false);
+  const [newDateValue, setNewDateValue] = useState(session.sessionDateLA);
+
+  const canDeleteSession = isAdminMode || session.createdBy.id === currentUserId;
+  const canEditDate = isAdminMode;
 
   const [pendingUncompleteBadgeId, setPendingUncompleteBadgeId] = useState<string | null>(null);
 
@@ -425,6 +436,27 @@ export function SessionDetailClient({
 
   function handleViewOnly() {
     setShowJoinPrompt(false);
+  }
+
+  function confirmDeleteSession() {
+    setShowDeleteConfirm(false);
+    startTransition(async () => {
+      await deleteSession(session.id);
+      router.push("/sessions");
+      router.refresh();
+    });
+  }
+
+  function handleSaveDate() {
+    if (newDateValue === session.sessionDateLA) {
+      setEditingDate(false);
+      return;
+    }
+    startTransition(async () => {
+      await updateSessionDate(session.id, newDateValue);
+      setEditingDate(false);
+      router.refresh();
+    });
   }
 
   function handleAddMember(userId: string) {
@@ -621,6 +653,18 @@ export function SessionDetailClient({
         />
       )}
 
+      {/* Delete session confirmation dialog */}
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          title="Delete this session?"
+          description="This will permanently delete the session and all its data (selections, completions, members). This cannot be undone."
+          onClose={() => setShowDeleteConfirm(false)}
+          actions={[
+            { label: "Yes, delete session", onClick: confirmDeleteSession, variant: "danger" },
+            { label: "Cancel", onClick: () => setShowDeleteConfirm(false), variant: "muted" },
+          ]}
+        />
+      )}
       {/* Leave session confirmation dialog */}
       {showLeaveConfirm && (
         <ConfirmDialog
@@ -681,7 +725,44 @@ export function SessionDetailClient({
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-xl font-bold text-foreground">
-              {session.title ?? session.sessionDateDisplay}
+              {editingDate ? (
+                <span className="inline-flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={newDateValue}
+                    onChange={(event) => setNewDateValue(event.target.value)}
+                    className="rounded-lg border border-border bg-background px-2 py-1 text-base text-foreground focus:border-accent focus:outline-none"
+                  />
+                  <button
+                    onClick={handleSaveDate}
+                    disabled={isPending}
+                    className="rounded-lg bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+                  >
+                    {isPending ? "Saving..." : "Save"}
+                  </button>
+                  <button
+                    onClick={() => { setEditingDate(false); setNewDateValue(session.sessionDateLA); }}
+                    className="text-xs text-muted hover:text-foreground transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </span>
+              ) : (
+                <>
+                  {session.title ?? session.sessionDateDisplay}
+                  {canEditDate && (
+                    <button
+                      onClick={() => setEditingDate(true)}
+                      className="ml-2 inline-flex items-center text-muted hover:text-accent transition-colors"
+                      title="Edit session date (admin)"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Z" />
+                      </svg>
+                    </button>
+                  )}
+                </>
+              )}
               {" "}
               <span className="text-sm font-normal text-muted">(Created by {session.createdBy.displayName})</span>
             </h1>
@@ -689,6 +770,17 @@ export function SessionDetailClient({
           <div className="flex items-center gap-2">
             {viewOnlyMode && !showJoinPrompt && (
               <span className="rounded-full bg-border px-3 py-1 text-xs font-medium text-muted">Viewing</span>
+            )}
+            {canDeleteSession && (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="rounded-full border border-danger/30 px-2.5 py-1 text-xs text-danger/60 hover:text-danger hover:bg-danger/10 transition-colors"
+                title="Delete session"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
             )}
             {(() => {
               // Non-members see a simplified view: Active or Closed

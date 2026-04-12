@@ -19,6 +19,9 @@ export async function POST() {
   response.cookies.set("authjs.csrf-token", "", { maxAge: 0, path: "/" });
   response.cookies.set("__Host-authjs.csrf-token", "", { maxAge: 0, path: "/" });
 
+  // Clear admin mode cookie so it doesn't outlive the session
+  response.cookies.set("admin_mode", "", { maxAge: 0, path: "/" });
+
   return response;
 }
 

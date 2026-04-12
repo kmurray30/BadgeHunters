@@ -15,12 +15,25 @@ interface TestUser {
   createdAt: string;
 }
 
+interface RealUser {
+  id: string;
+  displayName: string;
+  activatePlayerName: string | null;
+  realName: string | null;
+  role: string;
+  currentScore: number;
+  rankColor: string | null;
+  badgesCompleted: number;
+  createdAt: string;
+}
+
 export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean }) {
   const [adminMode, setAdminMode] = useState(initialAdminMode);
   const [adminPassword, setAdminPassword] = useState("");
   const [adminError, setAdminError] = useState("");
   const [showAdminEntry, setShowAdminEntry] = useState(false);
   const [testUsers, setTestUsers] = useState<TestUser[]>([]);
+  const [realUsers, setRealUsers] = useState<RealUser[]>([]);
   const [newTestUserName, setNewTestUserName] = useState("");
   const [testUserError, setTestUserError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -32,6 +45,7 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
   useEffect(() => {
     if (adminMode) {
       fetchTestUsers();
+      fetchRealUsers();
     }
   }, [adminMode]);
 
@@ -40,6 +54,14 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
     if (response.ok) {
       const data = await response.json();
       setTestUsers(data.testUsers);
+    }
+  }
+
+  async function fetchRealUsers() {
+    const response = await fetch("/api/admin/real-users");
+    if (response.ok) {
+      const data = await response.json();
+      setRealUsers(data.users);
     }
   }
 
@@ -72,6 +94,7 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
     await fetch("/api/admin/deactivate", { method: "POST" });
     setAdminMode(false);
     setTestUsers([]);
+    setRealUsers([]);
   }
 
   async function searchActivate(query: string) {
@@ -151,10 +174,11 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
     }
   }
 
-  async function handleTestLogin(userId: string) {
+  /** Log in as any user via the admin-login endpoint */
+  async function handleAdminLogin(userId: string) {
     setIsLoading(true);
     try {
-      const response = await fetch("/api/admin/test-login", {
+      const response = await fetch("/api/admin/admin-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId }),
@@ -165,7 +189,7 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
         router.refresh();
       }
     } catch {
-      setTestUserError("Failed to log in as test user");
+      setTestUserError("Failed to log in as user");
     } finally {
       setIsLoading(false);
     }
@@ -173,7 +197,7 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
 
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4">
-      <div className="w-full max-w-md space-y-8">
+      <div className={`w-full ${adminMode ? "max-w-4xl" : "max-w-md"} space-y-8`}>
         <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">
             Badge Hunters
@@ -292,60 +316,113 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
                 )}
               </div>
 
-              {/* Test user list */}
-              {testUsers.length > 0 && (
+              {/* Two-column user list: Real Users | Test Users */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Real Users column */}
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-muted">
-                    Log in as Test User
+                    Real Users ({realUsers.length})
                   </label>
-                  <div className="max-h-64 space-y-1 overflow-y-auto">
-                    {testUsers.map((testUser) => (
-                      <div
-                        key={testUser.id}
-                        className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-card-hover transition-colors"
-                      >
+                  <div className="max-h-80 space-y-1 overflow-y-auto">
+                    {realUsers.length === 0 ? (
+                      <p className="py-4 text-center text-xs text-muted">No real users yet</p>
+                    ) : (
+                      realUsers.map((realUser) => (
                         <button
-                          onClick={() => handleTestLogin(testUser.id)}
+                          key={realUser.id}
+                          onClick={() => handleAdminLogin(realUser.id)}
                           disabled={isLoading}
-                          className="flex flex-1 items-center justify-between min-w-0 disabled:opacity-50"
+                          className="flex w-full items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-card-hover transition-colors disabled:opacity-50"
                         >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="truncate text-foreground">
-                              {testUser.activatePlayerName || testUser.realName}
-                            </span>
-                            {testUser.rankColor && (
-                              <span className="shrink-0 text-[10px] text-muted">
-                                {testUser.rankColor}
+                          <div className="flex flex-1 items-center justify-between min-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="truncate text-foreground">
+                                {realUser.displayName}
                               </span>
-                            )}
-                            {testUser.badgesCompleted > 0 && (
-                              <span className="shrink-0 text-[10px] text-muted">
-                                {testUser.badgesCompleted} badges
-                              </span>
-                            )}
+                              {realUser.rankColor && (
+                                <span className="shrink-0 text-[10px] text-muted">
+                                  {realUser.rankColor}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              {realUser.badgesCompleted > 0 && (
+                                <span className="shrink-0 text-[10px] text-muted">
+                                  {realUser.badgesCompleted}
+                                </span>
+                              )}
+                              {realUser.role === "superuser" && (
+                                <span className="shrink-0 rounded bg-accent/20 px-1 py-0.5 text-[9px] font-bold text-accent">
+                                  SU
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <span className="shrink-0 rounded bg-warning/20 px-1.5 py-0.5 text-[10px] font-bold text-warning">
-                            TEST
-                          </span>
                         </button>
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleDeleteTestUser(testUser.id);
-                          }}
-                          disabled={isLoading}
-                          className="shrink-0 rounded p-1.5 text-danger/60 hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
-                          title="Delete test user"
-                        >
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
-              )}
+
+                {/* Test Users column */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted">
+                    Test Users ({testUsers.length})
+                  </label>
+                  <div className="max-h-80 space-y-1 overflow-y-auto">
+                    {testUsers.length === 0 ? (
+                      <p className="py-4 text-center text-xs text-muted">No test users yet — create one above</p>
+                    ) : (
+                      testUsers.map((testUser) => (
+                        <div
+                          key={testUser.id}
+                          className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-card-hover transition-colors"
+                        >
+                          <button
+                            onClick={() => handleAdminLogin(testUser.id)}
+                            disabled={isLoading}
+                            className="flex flex-1 items-center justify-between min-w-0 disabled:opacity-50"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="truncate text-foreground">
+                                {testUser.activatePlayerName || testUser.realName}
+                              </span>
+                              {testUser.rankColor && (
+                                <span className="shrink-0 text-[10px] text-muted">
+                                  {testUser.rankColor}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              {testUser.badgesCompleted > 0 && (
+                                <span className="shrink-0 text-[10px] text-muted">
+                                  {testUser.badgesCompleted}
+                                </span>
+                              )}
+                              <span className="shrink-0 rounded bg-warning/20 px-1 py-0.5 text-[9px] font-bold text-warning">
+                                TEST
+                              </span>
+                            </div>
+                          </button>
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleDeleteTestUser(testUser.id);
+                            }}
+                            disabled={isLoading}
+                            className="shrink-0 rounded p-1.5 text-danger/60 hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
+                            title="Delete test user"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           ) : showAdminEntry ? (
             <div className="space-y-3">

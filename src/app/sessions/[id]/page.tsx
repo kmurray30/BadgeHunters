@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session-helpers";
 import { isolationFilter } from "@/lib/isolation";
 import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
 import { SessionDetailClient } from "./session-detail-client";
 
 interface Props {
@@ -12,6 +13,8 @@ export default async function SessionDetailPage({ params }: Props) {
   const { id } = await params;
   const user = await requireUser();
   const isolation = isolationFilter(user);
+  const cookieStore = await cookies();
+  const isAdminMode = cookieStore.get("admin_mode")?.value === "active";
 
   const session = await prisma.session.findUnique({
     where: { id },
@@ -217,6 +220,7 @@ export default async function SessionDetailPage({ params }: Props) {
         availableUsersForAdd={serializedAvailableUsers}
         metaRuleBlurbs={metaRuleBlurbs}
         todayString={todayString}
+        isAdminMode={isAdminMode}
       />
     </div>
   );

@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session-helpers";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 
 /**
  * Create a new session. Expires at 6am PST/PDT the day after the session date.
@@ -443,4 +444,64 @@ export async function toggleSessionBadgeCompletion(
   revalidatePath(`/sessions/${sessionId}`);
   revalidatePath("/badges");
   revalidatePath(`/badges/${badgeId}`);
+}
+
+/**
+ * Delete a session and all related data. Allowed for:
+ * - Admin mode users (cookie-based)
+ * - The session creator
+ */
+export async function deleteSession(sessionId: string) {
+  const user = await requireUser();
+  const cookieStore = await cookies();
+  const isAdminMode = cookieStore.get("admin_mode")?.value === "active";
+
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    select: { createdByUserId: true },
+  });
+  if (!session) throw new Error("Session not found");
+
+  const isCreator = session.createdByUserId === user.id;
+  if (!isCreator && !isAdminMode) {
+    throw new Error("Only the session creator or an admin can delete a session");
+  }
+
+  // Prisma cascade handles most child records (members, ghosts, selections,
+  // completions, acknowledgements, notifications) because they have onDelete: Cascade.
+  await prisma.session.delete({ where: { id: sessionId } });
+
+  revalidatePath("/sessions");
+}
+
+/**
+ * Update a session's date and recalculate expiry. Admin-only.
+ */
+export async function updateSessionDate(sessionId: string, newDateString: string) {
+  const cookieStore = await cookies();
+  const isAdminMode = cookieStore.get("admin_mode")?.value === "active";
+  if (!isAdminMode) {
+    throw new Error("Only admins can edit session dates");
+  }
+
+  await requireUser();
+
+  const [year, month, day] = newDateString.split("-").map(Number);
+  const newSessionDate = new Date(year, month - 1, day);
+
+  // Recalculate expiry: 6am the day after session date
+  const newExpiresAt = new Date(newSessionDate);
+  newExpiresAt.setDate(newExpiresAt.getDate() + 1);
+  newExpiresAt.setHours(6, 0, 0, 0);
+
+  await prisma.session.update({
+    where: { id: sessionId },
+    data: {
+      sessionDateLocal: newSessionDate,
+      expiresAt: newExpiresAt,
+    },
+  });
+
+  revalidatePath(`/sessions/${sessionId}`);
+  revalidatePath("/sessions");
 }
