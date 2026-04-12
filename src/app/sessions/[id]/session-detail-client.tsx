@@ -28,7 +28,7 @@ const YOUR_BADGES_COLUMNS: ColumnHeader[] = [
   { label: "Description", width: "minmax(0,1fr)" },
   { label: "Difficulty", width: "5rem", align: "right", sortField: "difficulty" },
   { label: "# Players", width: "4rem", align: "right", sortField: "players" },
-  { label: "Group", width: "4rem", align: "right", sortField: "need", sortDefaultDescending: true },
+  { label: "Group %", width: "5rem", align: "right", sortField: "need" },
 ];
 
 function buildGroupBadgeColumns(members: { id: string; displayName: string }[], currentUserId: string): ColumnHeader[] {
@@ -43,7 +43,7 @@ function buildGroupBadgeColumns(members: { id: string; displayName: string }[], 
     { label: "Description", width: "minmax(0,1fr)" },
     { label: "Difficulty", width: "5rem", align: "right" },
     { label: "# Players", width: "4rem", align: "right" },
-    { label: "Group", width: "2.5rem", align: "center", vertical: true },
+    { label: "Group %", width: "3.5rem", align: "center", vertical: true },
     ...sorted.map((member) => ({
       label: member.id === currentUserId ? "You" : member.displayName.slice(0, 4),
       width: "2rem",
@@ -132,7 +132,7 @@ type TabMode = "your_badges" | "group_badges";
 const DIFFICULTY_MAP: Record<string, number> = { easy: 1, medium: 2, hard: 3, impossible: 4 };
 
 const SESSION_SORT_FIELDS: SortField[] = [
-  { value: "need", label: "Group" },
+  { value: "need", label: "Group %" },
   { value: "difficulty", label: "Difficulty" },
   { value: "name", label: "Name" },
   { value: "players", label: "Player count" },
@@ -327,7 +327,7 @@ export function SessionDetailClient({
   const [yourBadgesSearch, setYourBadgesSearch] = usePersistedState("bh:session:your-badges:search", "");
   const [yourBadgesFilters, setYourBadgesFilters] = usePersistedState<ActiveFilter[]>("bh:session:your-badges:filters", [{ key: "completion", value: "uncompleted" }]);
   const [yourBadgesSortCriteria, setYourBadgesSortCriteria] = usePersistedState<SortCriterion[]>("bh:session:your-badges:sort", [
-    { field: "need", ascending: false },
+    { field: "need", ascending: true },
     { field: "difficulty", ascending: true },
   ]);
 
@@ -899,7 +899,7 @@ export function SessionDetailClient({
                     <span className="block min-w-0 truncate text-xs text-muted">{badge.description}</span>,
                     <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
                     <span className={`min-w-0 text-center text-[11px] ${resolvePlayerCount(badge).color}`}>{resolvePlayerCount(badge).label}</span>,
-                    <span className="min-w-0 text-center text-[11px] text-success">{badge.totalUncompletedCount}/{memberCount}</span>,
+                    <span className="min-w-0 text-center text-[11px] text-success">{memberCount > 0 ? Math.round((badge.totalUncompletedCount / memberCount) * 100) : 0}%</span>,
                   ],
                   footer: undefined,
                 };
@@ -978,9 +978,11 @@ function buildGroupBadgeRows(
         : "hover:bg-card-hover";
 
     const completedCount = members.filter((member) => persistentCompletions.has(member.id)).length;
+    const needCount = members.length - completedCount;
+    const needPercent = members.length > 0 ? Math.round((needCount / members.length) * 100) : 0;
     const fractionCell = (
-      <span className={`text-[11px] tabular-nums ${completedCount === members.length ? "text-success font-semibold" : "text-muted"}`}>
-        {completedCount}/{members.length}
+      <span className={`text-[11px] tabular-nums ${needPercent === 0 ? "text-success font-semibold" : "text-muted"}`}>
+        {needPercent}%
       </span>
     );
 
