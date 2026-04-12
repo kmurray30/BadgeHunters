@@ -20,7 +20,7 @@ interface BadgeData {
   rooms: string[];
   games: string[];
   playerCountBucket: string;
-  tags: string[];
+
   defaultDifficulty: string;
   isPerVisit: boolean;
   isMetaBadge: boolean;
@@ -45,7 +45,7 @@ const DIFFICULTY_OPTIONS: { value: string; label: string; color: string }[] = [
   { value: "easy", label: "Easy", color: "text-green-400" },
   { value: "medium", label: "Medium", color: "text-yellow-400" },
   { value: "hard", label: "Hard", color: "text-orange-400" },
-  { value: "impossible", label: "Impossible", color: "text-red-400" },
+  { value: "impossible", label: "Impossible?", color: "text-red-400" },
   { value: "unknown", label: "???", color: "text-muted" },
 ];
 
@@ -54,7 +54,7 @@ const BADGE_TABLE_COLUMNS: ColumnHeader[] = [
   { label: "Name", width: "minmax(0,12rem)", sortField: "name" },
   { label: "Description", width: "minmax(0,1fr)" },
   { label: "Difficulty", width: "5rem", align: "right", sortField: "difficulty" },
-  { label: "Players", width: "4rem", align: "right", sortField: "players" },
+  { label: "# Players", width: "4rem", align: "right", sortField: "players" },
   { label: "To Do", width: "3.5rem", align: "center", sortField: "todo", sortDefaultDescending: true },
   { label: "Done", width: "3.5rem", align: "center", sortField: "done" },
 ];
@@ -184,14 +184,14 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
         { value: "all", label: "Any difficulty" },
         ...DIFFICULTY_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
       ]},
-      { key: "players", label: "Players", options: [
+      { key: "players", label: "# Players", options: [
         { value: "all", label: "Any # players" },
         { value: "lte_3", label: "≤3 players" },
         { value: "gte_5", label: "5+ players" },
       ]},
       { key: "type", label: "Type", options: [
         { value: "all", label: "All types" },
-        { value: "per_visit", label: "Per-visit" },
+        { value: "per_visit", label: "Visit-specific" },
         { value: "normal", label: "Normal" },
       ]},
     ];
@@ -337,7 +337,7 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
                   {badge.name}
                 </span>
                 {badge.isPerVisit && (
-                  <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>
+                  <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit-specific</span>
                 )}
                 {badge.isMetaBadge && (
                   <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>

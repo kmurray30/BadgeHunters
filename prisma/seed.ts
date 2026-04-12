@@ -186,33 +186,41 @@ async function main() {
 
     const inferred = inferBadgeData(badgeNumber, record.Name, record.Description);
 
-    const badgeData = {
-      name: record.Name,
-      description: record.Description,
-      games: inferred.games,
-      rooms: inferred.rooms,
-      tags: inferred.tags,
-      defaultDifficulty: inferred.defaultDifficulty,
-      playerCountBucket: inferred.playerCountBucket,
-      isPerVisit: inferred.isPerVisit,
-      isMetaBadge: inferred.isMetaBadge,
-      durationLabel: null as string | null,
-      active: true,
-    };
-
     const existing = await prisma.badge.findUnique({
       where: { badgeNumber },
     });
 
     if (existing) {
+      // Only update name/description from CSV. All other fields (difficulty,
+      // player count, duration, etc.) are admin-curated and should not
+      // be overwritten by the seed. Tags are force-cleared because
+      // badges.csv has no tags — any existing ones are stale seed artifacts.
       await prisma.badge.update({
         where: { badgeNumber },
-        data: badgeData,
+        data: {
+          name: record.Name,
+          description: record.Description,
+          tags: [],
+        },
       });
       updated++;
     } else {
+      // New badge — set inferred defaults since there's nothing to preserve
       await prisma.badge.create({
-        data: { badgeNumber, ...badgeData },
+        data: {
+          badgeNumber,
+          name: record.Name,
+          description: record.Description,
+          games: inferred.games,
+          rooms: inferred.rooms,
+          tags: [],
+          defaultDifficulty: inferred.defaultDifficulty,
+          playerCountBucket: inferred.playerCountBucket,
+          isPerVisit: inferred.isPerVisit,
+          isMetaBadge: inferred.isMetaBadge,
+          durationLabel: null,
+          active: true,
+        },
       });
       created++;
     }

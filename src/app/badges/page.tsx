@@ -54,7 +54,6 @@ export default async function BadgesPage() {
     rooms: badge.rooms,
     games: badge.games,
     playerCountBucket: badge.playerCountBucket,
-    tags: badge.tags,
     defaultDifficulty: badge.defaultDifficulty,
     isPerVisit: badge.isPerVisit,
     isMetaBadge: badge.isMetaBadge,

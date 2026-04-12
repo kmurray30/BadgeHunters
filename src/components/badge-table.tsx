@@ -20,6 +20,8 @@ export interface ColumnHeader {
   sortDefaultDescending?: boolean;
   /** If true, the header label is rendered at a steep angle (~75°). */
   vertical?: boolean;
+  /** If true, the header label is rendered with bold weight. */
+  bold?: boolean;
   /** Group name — columns sharing the same group get a spanning header label above them. */
   group?: string;
 }
@@ -195,7 +197,7 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
                   <span
                     key={index}
                     title={column.tooltip ?? column.label}
-                    className="self-end text-center normal-case tracking-normal text-[11px]"
+                    className={`self-end text-center normal-case tracking-normal text-[11px] ${column.bold ? "font-bold text-foreground" : ""}`}
                     style={{
                       writingMode: "vertical-rl",
                       transform: "rotate(195deg) translateX(-7px)",

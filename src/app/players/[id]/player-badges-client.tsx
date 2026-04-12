@@ -38,7 +38,7 @@ const COLUMNS: ColumnHeader[] = [
   { label: "Name", width: "minmax(0,10rem)", sortField: "name" },
   { label: "Description", width: "minmax(6rem,1fr)" },
   { label: "Difficulty\n(Their Vote)", width: "6rem", align: "right", sortField: "difficulty" },
-  { label: "Players\n(Their Vote)", width: "5.5rem", align: "right", sortField: "players" },
+  { label: "# Players\n(Their Vote)", width: "5.5rem", align: "right", sortField: "players" },
   { label: "Completed on", width: "5.5rem", align: "right", sortField: "completedAt", sortDefaultDescending: true },
   { label: "To Do By Me", width: "4rem", align: "center", sortField: "todo", sortDefaultDescending: true },
   { label: "Done By Me", width: "3.5rem", align: "center", sortField: "done" },
@@ -49,7 +49,7 @@ const DIFFICULTY_OPTIONS = [
   { value: "easy", label: "Easy", color: "text-green-400" },
   { value: "medium", label: "Medium", color: "text-yellow-400" },
   { value: "hard", label: "Hard", color: "text-orange-400" },
-  { value: "impossible", label: "Impossible", color: "text-red-400" },
+  { value: "impossible", label: "Impossible?", color: "text-red-400" },
 ];
 const PLAYER_COUNT_SORT: Record<string, number> = { lte_3: 1, none: 2, gte_5: 3 };
 
@@ -149,7 +149,7 @@ export function PlayerBadgesClient({ badges, isOwnProfile }: Props) {
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="truncate text-sm font-medium text-foreground">{badge.badgeName}</span>
           {badge.isPerVisit && (
-            <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>
+            <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit-specific</span>
           )}
           {badge.isMetaBadge && (
             <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>

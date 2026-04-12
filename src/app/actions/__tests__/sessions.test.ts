@@ -1231,6 +1231,66 @@ describe("toggleSessionBadgeCompletion", () => {
     const badgeStatus = store.badgeStatuses.find((b) => b.userId === "user-A" && b.badgeId === "badge-1");
     expect(badgeStatus?.isCompleted).toBe(true);
   });
+
+  it("does NOT clear persistent completion when alsoUncompletePersistently is omitted (defaults false)", async () => {
+    seedSession("s1", ["user-A"]);
+    store.completions.push({ id: "comp-1", sessionId: "s1", userId: "user-A", badgeId: "badge-1" });
+    store.badgeStatuses.push({ id: "bs-1", userId: "user-A", badgeId: "badge-1", isCompleted: true, completedAt: new Date() });
+    actAs("user-A");
+    await toggleSessionBadgeCompletion("s1", "badge-1");
+    const badgeStatus = store.badgeStatuses.find((b) => b.userId === "user-A" && b.badgeId === "badge-1");
+    expect(badgeStatus?.isCompleted).toBe(true);
+  });
+
+  it("complete → uncheck without global uncomplete → re-complete preserves persistent status", async () => {
+    seedSession("s1", ["user-A"]);
+    actAs("user-A");
+
+    // Complete the badge
+    await toggleSessionBadgeCompletion("s1", "badge-1");
+    expect(store.badgeStatuses.find((b) => b.userId === "user-A" && b.badgeId === "badge-1")?.isCompleted).toBe(true);
+
+    // Uncheck session completion (decline the global uncomplete popup)
+    await toggleSessionBadgeCompletion("s1", "badge-1", false);
+    expect(store.completions.find((c) => c.sessionId === "s1" && c.badgeId === "badge-1")).toBeUndefined();
+    expect(store.badgeStatuses.find((b) => b.userId === "user-A" && b.badgeId === "badge-1")?.isCompleted).toBe(true);
+
+    // Re-complete in same session
+    await toggleSessionBadgeCompletion("s1", "badge-1");
+    expect(store.completions.find((c) => c.sessionId === "s1" && c.badgeId === "badge-1")).toBeTruthy();
+    expect(store.badgeStatuses.find((b) => b.userId === "user-A" && b.badgeId === "badge-1")?.isCompleted).toBe(true);
+  });
+
+  it("complete → uncheck WITH global uncomplete clears persistent status", async () => {
+    seedSession("s1", ["user-A"]);
+    actAs("user-A");
+
+    // Complete the badge
+    await toggleSessionBadgeCompletion("s1", "badge-1");
+    expect(store.badgeStatuses.find((b) => b.userId === "user-A" && b.badgeId === "badge-1")?.isCompleted).toBe(true);
+
+    // Uncheck with global uncomplete (user confirmed the popup)
+    await toggleSessionBadgeCompletion("s1", "badge-1", true);
+    expect(store.completions.find((c) => c.sessionId === "s1" && c.badgeId === "badge-1")).toBeUndefined();
+    expect(store.badgeStatuses.find((b) => b.userId === "user-A" && b.badgeId === "badge-1")?.isCompleted).toBe(false);
+  });
+
+  it("does NOT affect other users' completion records", async () => {
+    seedSession("s1", ["user-A", "user-B"]);
+    // Both users complete the badge
+    actAs("user-A");
+    await toggleSessionBadgeCompletion("s1", "badge-1");
+    actAs("user-B");
+    await toggleSessionBadgeCompletion("s1", "badge-1");
+
+    // User A unchecks with global uncomplete
+    actAs("user-A");
+    await toggleSessionBadgeCompletion("s1", "badge-1", true);
+
+    // User B's records are untouched
+    expect(store.completions.find((c) => c.userId === "user-B" && c.badgeId === "badge-1")).toBeTruthy();
+    expect(store.badgeStatuses.find((b) => b.userId === "user-B" && b.badgeId === "badge-1")?.isCompleted).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

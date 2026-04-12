@@ -1,18 +1,17 @@
 "use client";
 
 import {
-    addGhostMember,
-    addSessionMember,
-    cancelMyReview,
-    completeMyReview,
-    dismissSessionReviewNotification,
-    joinSession,
-    removeGhostMember,
-    removeSessionMember,
-    reopenSession,
-    toggleBadgeSelection,
+  addGhostMember,
+  addSessionMember,
+  completeMyReview,
+  dismissSessionReviewNotification,
+  joinSession,
+  removeGhostMember,
+  removeSessionMember,
+  reopenSession,
+  toggleBadgeSelection,
+  toggleSessionBadgeCompletion,
 } from "@/app/actions/sessions";
-import { toggleBadgeCompletion } from "@/app/actions/badges";
 import { BackButton } from "@/components/back-button";
 import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type BadgeTableSection, type ColumnHeader } from "@/components/badge-table";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -28,7 +27,7 @@ const YOUR_BADGES_COLUMNS: ColumnHeader[] = [
   { label: "Name", width: "minmax(0,12rem)", sortField: "name" },
   { label: "Description", width: "minmax(0,1fr)" },
   { label: "Difficulty", width: "5rem", align: "right", sortField: "difficulty" },
-  { label: "Players", width: "4rem", align: "right", sortField: "players" },
+  { label: "# Players", width: "4rem", align: "right", sortField: "players" },
   { label: "Group", width: "4rem", align: "right", sortField: "need", sortDefaultDescending: true },
 ];
 
@@ -43,13 +42,14 @@ function buildGroupBadgeColumns(members: { id: string; displayName: string }[], 
     { label: "Name", width: "minmax(0,12rem)" },
     { label: "Description", width: "minmax(0,1fr)" },
     { label: "Difficulty", width: "5rem", align: "right" },
-    { label: "Players", width: "4rem", align: "right" },
+    { label: "# Players", width: "4rem", align: "right" },
     { label: "Group", width: "2.5rem", align: "center", vertical: true },
     ...sorted.map((member) => ({
-      label: member.displayName.slice(0, 4),
+      label: member.id === currentUserId ? "You" : member.displayName.slice(0, 4),
       width: "2rem",
       align: "center" as const,
       vertical: true,
+      bold: member.id === currentUserId,
       tooltip: member.displayName,
     })),
   ];
@@ -132,7 +132,7 @@ type TabMode = "your_badges" | "group_badges";
 const DIFFICULTY_MAP: Record<string, number> = { easy: 1, medium: 2, hard: 3, impossible: 4 };
 
 const SESSION_SORT_FIELDS: SortField[] = [
-  { value: "need", label: "Group (others)" },
+  { value: "need", label: "Group" },
   { value: "difficulty", label: "Difficulty" },
   { value: "name", label: "Name" },
   { value: "players", label: "Player count" },
@@ -144,24 +144,29 @@ const SESSION_FILTER_DEFS: FilterDefinition[] = [
     { value: "easy", label: "Easy" },
     { value: "medium", label: "Medium" },
     { value: "hard", label: "Hard" },
-    { value: "impossible", label: "Impossible" },
+    { value: "impossible", label: "Impossible?" },
   ]},
-  { key: "players", label: "Players", options: [
+  { key: "players", label: "# Players", options: [
     { value: "all", label: "Any # players" },
     { value: "lte_3", label: "≤3 players" },
     { value: "gte_5", label: "5+ players" },
   ]},
   { key: "type", label: "Type", options: [
     { value: "all", label: "All types" },
-    { value: "per_visit", label: "Per-visit" },
+    { value: "per_visit", label: "Visit-specific" },
     { value: "normal", label: "Normal" },
+  ]},
+  { key: "completion", label: "Status", options: [
+    { value: "uncompleted", label: "Uncompleted" },
+    { value: "completed", label: "Completed" },
+    { value: "all", label: "All" },
   ]},
 ];
 const DIFFICULTY_LABELS: Record<string, { label: string; color: string }> = {
   easy: { label: "Easy", color: "text-green-400" },
   medium: { label: "Medium", color: "text-yellow-400" },
   hard: { label: "Hard", color: "text-orange-400" },
-  impossible: { label: "Impossible", color: "text-red-400" },
+  impossible: { label: "Impossible?", color: "text-red-400" },
   unknown: { label: "???", color: "text-muted" },
 };
 
@@ -278,10 +283,30 @@ export function SessionDetailClient({
   const [ghostNameInput, setGhostNameInput] = useState("");
   const [editingParty, setEditingParty] = useState(false);
 
+  const [pendingUncompleteBadgeId, setPendingUncompleteBadgeId] = useState<string | null>(null);
+
   function handleToggleBadgeCompletion(badgeId: string) {
     if (!canEdit) return;
+    const badge = allBadges.find((b) => b.id === badgeId);
+    const alreadyCompleted = badge?.memberCompletions.includes(currentUserId);
+
+    if (alreadyCompleted) {
+      setPendingUncompleteBadgeId(badgeId);
+      return;
+    }
+
     startTransition(async () => {
-      await toggleBadgeCompletion(badgeId);
+      await toggleSessionBadgeCompletion(session.id, badgeId);
+      router.refresh();
+    });
+  }
+
+  function confirmUncomplete(alsoGlobal: boolean) {
+    const badgeId = pendingUncompleteBadgeId;
+    setPendingUncompleteBadgeId(null);
+    if (!badgeId) return;
+    startTransition(async () => {
+      await toggleSessionBadgeCompletion(session.id, badgeId, alsoGlobal);
       router.refresh();
     });
   }
@@ -300,7 +325,7 @@ export function SessionDetailClient({
   }, [suppressHover]);
 
   const [yourBadgesSearch, setYourBadgesSearch] = usePersistedState("bh:session:your-badges:search", "");
-  const [yourBadgesFilters, setYourBadgesFilters] = usePersistedState<ActiveFilter[]>("bh:session:your-badges:filters", []);
+  const [yourBadgesFilters, setYourBadgesFilters] = usePersistedState<ActiveFilter[]>("bh:session:your-badges:filters", [{ key: "completion", value: "uncompleted" }]);
   const [yourBadgesSortCriteria, setYourBadgesSortCriteria] = usePersistedState<SortCriterion[]>("bh:session:your-badges:sort", [
     { field: "need", ascending: false },
     { field: "difficulty", ascending: true },
@@ -394,6 +419,10 @@ export function SessionDetailClient({
     const difficultyVal = yourBadgesFilters.find((filter) => filter.key === "difficulty")?.value ?? "all";
     const playersVal = yourBadgesFilters.find((filter) => filter.key === "players")?.value ?? "all";
     const typeVal = yourBadgesFilters.find((filter) => filter.key === "type")?.value ?? "all";
+    const completionVal = yourBadgesFilters.find((filter) => filter.key === "completion")?.value ?? "uncompleted";
+
+    if (completionVal === "uncompleted") list = list.filter((badge) => !badge.memberCompletions.includes(currentUserId));
+    else if (completionVal === "completed") list = list.filter((badge) => badge.memberCompletions.includes(currentUserId));
 
     if (difficultyVal !== "all") list = list.filter((badge) => badge.defaultDifficulty === difficultyVal);
     if (playersVal !== "all") list = list.filter((badge) => resolvePlayerCount(badge).bucket === playersVal);
@@ -471,6 +500,19 @@ export function SessionDetailClient({
           actions={[
             { label: "Yes, leave session", onClick: confirmLeave, variant: "danger" },
             { label: "Cancel", onClick: () => setShowLeaveConfirm(false), variant: "muted" },
+          ]}
+        />
+      )}
+      {/* Uncomplete badge confirmation dialog */}
+      {pendingUncompleteBadgeId && (
+        <ConfirmDialog
+          title="Uncomplete this badge?"
+          description="This will remove it from your session completions. Also mark it uncompleted globally?"
+          onClose={() => setPendingUncompleteBadgeId(null)}
+          actions={[
+            { label: "Yes, uncomplete globally too", onClick: () => confirmUncomplete(true), variant: "danger" },
+            { label: "No, just this session", onClick: () => confirmUncomplete(false) },
+            { label: "Cancel", onClick: () => setPendingUncompleteBadgeId(null), variant: "muted" },
           ]}
         />
       )}
@@ -851,7 +893,7 @@ export function SessionDetailClient({
                           <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </Link>
-                      {badge.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>}
+                      {badge.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit-specific</span>}
                       {badge.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
                     </div>,
                     <span className="block min-w-0 truncate text-xs text-muted">{badge.description}</span>,
@@ -865,7 +907,7 @@ export function SessionDetailClient({
               const perVisit = yourBadgesList.filter((badge) => badge.isPerVisit);
               const standard = yourBadgesList.filter((badge) => !badge.isPerVisit);
               return [
-                ...(perVisit.length > 0 ? [{ label: "Per-Visit Badges", rows: perVisit.map(buildRow) }] : []),
+                ...(perVisit.length > 0 ? [{ label: "Visit-Specific Badges", rows: perVisit.map(buildRow) }] : []),
                 ...(standard.length > 0 ? [{ label: "Standard Badges", rows: standard.map(buildRow) }] : []),
               ];
             })()}
@@ -891,7 +933,7 @@ export function SessionDetailClient({
               columns={groupBadgeColumns}
               sections={[
                 ...(groupPerVisit.length > 0
-                  ? [{ label: "Per-Visit Badges", rows: buildGroupBadgeRows(groupPerVisit, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers) } satisfies BadgeTableSection]
+                  ? [{ label: "Visit-Specific Badges", rows: buildGroupBadgeRows(groupPerVisit, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers) } satisfies BadgeTableSection]
                   : []),
                 ...(groupNormal.length > 0
                   ? [{ label: "Standard Badges", rows: buildGroupBadgeRows(groupNormal, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers) } satisfies BadgeTableSection]
@@ -991,7 +1033,7 @@ function buildGroupBadgeRows(
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </Link>
-          {entry.selection.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit</span>}
+          {entry.selection.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit-specific</span>}
           {fullBadge?.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
         </div>,
         <span className="block min-w-0 truncate text-xs text-muted">{entry.selection.badgeDescription}</span>,

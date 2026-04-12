@@ -17,7 +17,7 @@ const DIFFICULTY_OPTIONS: { value: Difficulty; label: string; color: string }[] 
   { value: "easy", label: "Easy", color: "text-green-400 bg-green-400/10" },
   { value: "medium", label: "Medium", color: "text-yellow-400 bg-yellow-400/10" },
   { value: "hard", label: "Hard", color: "text-orange-400 bg-orange-400/10" },
-  { value: "impossible", label: "Impossible", color: "text-red-400 bg-red-400/10" },
+  { value: "impossible", label: "Impossible?", color: "text-red-400 bg-red-400/10" },
 ];
 
 const REACTION_TYPES: { value: ReactionType; emoji: string }[] = [
@@ -36,9 +36,7 @@ interface BadgeInfo {
   rooms: string[];
   games: string[];
   playerCountBucket: string;
-  tags: string[];
   defaultDifficulty: string;
-  durationLabel: string | null;
   isPerVisit: boolean;
   isMetaBadge: boolean;
 }
@@ -111,7 +109,7 @@ function computeCommunityAverage(votes: string[], defaultDifficulty: string): st
 
   const mean = numericVotes.reduce((sum, value) => sum + value, 0) / numericVotes.length;
   const rounded = Math.max(1, Math.min(4, Math.round(mean)));
-  const reverseMap: Record<number, string> = { 1: "Easy", 2: "Medium", 3: "Hard", 4: "Impossible" };
+  const reverseMap: Record<number, string> = { 1: "Easy", 2: "Medium", 3: "Hard", 4: "Impossible?" };
   return reverseMap[rounded];
 }
 
@@ -192,7 +190,7 @@ export function BadgeDetailClient({
         {/* Badge metadata pills */}
         <div className="mt-4 flex flex-wrap gap-2">
           {badge.isPerVisit && (
-            <span className="rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent">Per-visit</span>
+            <span className="rounded-full bg-accent/20 px-3 py-1 text-xs font-medium text-accent">Visit-specific</span>
           )}
           {badge.isMetaBadge && (
             <span className="rounded-full bg-purple-500/20 px-3 py-1 text-xs font-medium text-purple-400">Meta badge</span>
@@ -210,18 +208,6 @@ export function BadgeDetailClient({
             <span key={game} className="rounded-full bg-border px-3 py-1 text-xs text-muted">{game}</span>
           ))}
         </div>
-
-        {/* Tags — labeled */}
-        {badge.tags.length > 0 && (
-          <div className="mt-3">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Tags</span>
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              {badge.tags.map((tag) => (
-                <span key={tag} className="rounded-full bg-border px-2.5 py-0.5 text-[11px] text-muted">{tag}</span>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Meta rules — hidden from UI for now */}
       </div>
@@ -248,7 +234,7 @@ export function BadgeDetailClient({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted w-20 shrink-0">Players</span>
+          <span className="text-xs text-muted w-20 shrink-0"># Players</span>
           <span className="text-sm text-foreground">{communityPlayerCountLabel}</span>
           <span className="text-[10px] text-muted">({playerCountVoteCount} vote{playerCountVoteCount !== 1 ? "s" : ""})</span>
           <span className="text-[10px] text-muted">·</span>
