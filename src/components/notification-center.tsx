@@ -53,6 +53,12 @@ export function NotificationCenter({ notifications }: NotificationCenterProps) {
   const [localNotifications, setLocalNotifications] = useState(notifications);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Sync with fresh server props after router.refresh() re-renders the layout
+  useEffect(() => {
+    setLocalNotifications(notifications);
+    setDismissed(new Set());
+  }, [notifications]);
+
   // Close dropdown on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
