@@ -40,6 +40,8 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
   const [activateSearchResults, setActivateSearchResults] = useState<string[]>([]);
   const [activateSearchDebug, setActivateSearchDebug] = useState<string[]>([]);
   const [isSearchingActivate, setIsSearchingActivate] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ found: boolean; playerName: string | null; score: number | null; rankColor?: string | null; error: string | null } | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -122,7 +124,7 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
     }
   }
 
-  async function handleCreateTestUser(nameOverride?: string) {
+  async function handleCreateTestUser(nameOverride?: string, syncScoreAfterCreate = false) {
     setTestUserError("");
     const nameToUse = nameOverride ?? newTestUserName;
     if (!nameToUse.trim()) {
@@ -139,8 +141,16 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
       });
 
       if (response.ok) {
+        const createdData = await response.json();
         setNewTestUserName("");
         setActivateSearchResults([]);
+        setSyncResult(null);
+
+        // If we have a sync result with a score, apply it to the newly created user
+        if (syncScoreAfterCreate && createdData.user?.id) {
+          await fetch(`/api/admin/activate-lookup?name=${encodeURIComponent(nameToUse.trim())}&userId=${createdData.user.id}`);
+        }
+
         fetchTestUsers();
       } else {
         const data = await response.json();
@@ -171,6 +181,28 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
       setTestUserError("Failed to delete test user");
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  /** Look up a player name on playactivate.com to verify it exists and get their score */
+  async function handleSyncLookup() {
+    const nameToLookup = newTestUserName.trim();
+    if (!nameToLookup) return;
+
+    setIsSyncing(true);
+    setSyncResult(null);
+    try {
+      const response = await fetch(`/api/admin/activate-lookup?name=${encodeURIComponent(nameToLookup)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSyncResult(data);
+      } else {
+        setSyncResult({ found: false, playerName: nameToLookup, score: null, error: "Lookup request failed" });
+      }
+    } catch {
+      setSyncResult({ found: false, playerName: nameToLookup, score: null, error: "Network error" });
+    } finally {
+      setIsSyncing(false);
     }
   }
 
@@ -270,12 +302,20 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
                     className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
                   />
                   <button
-                    onClick={() => searchActivate(newTestUserName)}
-                    disabled={isLoading || isSearchingActivate || newTestUserName.trim().length < 2}
-                    className="rounded-lg border border-border px-3 py-2 text-sm text-muted hover:text-foreground transition-colors disabled:opacity-50"
-                    title="Search Activate for this name"
+                    onClick={handleSyncLookup}
+                    disabled={isLoading || isSyncing || newTestUserName.trim().length < 1}
+                    className="flex items-center gap-1.5 rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-sm font-medium text-success hover:bg-success/20 transition-colors disabled:opacity-50"
+                    title="Look up this name on playactivate.com"
                   >
-                    {isSearchingActivate ? "..." : "Search"}
+                    {isSyncing ? (
+                      <>
+                        <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        <span className="whitespace-nowrap text-xs">Searching...</span>
+                      </>
+                    ) : "Sync"}
                   </button>
                   <button
                     onClick={() => handleCreateTestUser()}
@@ -285,6 +325,50 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
                     Create
                   </button>
                 </div>
+                {/* Activate sync in-progress message */}
+                {isSyncing && (
+                  <div className="flex items-center gap-2 rounded-lg border border-success/20 bg-success/5 px-3 py-2 text-xs text-success">
+                    <svg className="h-3.5 w-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span>Searching for <span className="font-semibold">&quot;{newTestUserName.trim()}&quot;</span> on playactivate.com&hellip;</span>
+                  </div>
+                )}
+                {/* Activate sync lookup result */}
+                {!isSyncing && syncResult && (
+                  <div className={`rounded-lg px-3 py-2 text-xs ${
+                    syncResult.found
+                      ? "border border-success/30 bg-success/10 text-success"
+                      : syncResult.error
+                        ? "border border-warning/30 bg-warning/10 text-warning"
+                        : "border border-border bg-card-hover text-muted"
+                  }`}>
+                    {syncResult.found ? (
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="font-semibold">{syncResult.playerName}</span>
+                          {" found — Score: "}
+                          <span className="font-bold">{syncResult.score?.toLocaleString()}</span>
+                          {syncResult.rankColor && (
+                            <span className="ml-1 text-[10px]">({syncResult.rankColor})</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleCreateTestUser(syncResult.playerName ?? undefined, true)}
+                          disabled={isLoading}
+                          className="rounded bg-success/20 px-2 py-0.5 text-[10px] font-bold text-success hover:bg-success/30 transition-colors"
+                        >
+                          Create with score
+                        </button>
+                      </div>
+                    ) : syncResult.error ? (
+                      <span>{syncResult.error}</span>
+                    ) : (
+                      <span>Player &quot;{syncResult.playerName}&quot; not found on Activate</span>
+                    )}
+                  </div>
+                )}
                 {/* Activate search results */}
                 {activateSearchResults.length > 0 && (
                   <div className="space-y-1">
