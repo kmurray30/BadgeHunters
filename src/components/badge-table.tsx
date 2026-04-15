@@ -122,15 +122,17 @@ function buildGroupSpans(columns: ColumnHeader[]): Map<number, string> {
  */
 interface StickyMeta { left: string; zIndex: number }
 
+// Must match the row's horizontal padding (px-3 = 0.75rem) so sticky
+// left offsets align with the cells' natural grid positions.
+const ROW_PADDING_LEFT = "0.75rem";
+
 function buildStickyMeta(columns: ColumnHeader[]): Map<number, StickyMeta> {
   const result = new Map<number, StickyMeta>();
-  const cumulativeParts: string[] = [];
+  const cumulativeParts: string[] = [ROW_PADDING_LEFT];
   for (let columnIdx = 0; columnIdx < columns.length; columnIdx++) {
     const stickyValue = columns[columnIdx].sticky;
     if (!stickyValue) continue;
-    const leftValue = cumulativeParts.length === 0
-      ? "0px"
-      : `calc(${cumulativeParts.join(" + ")})`;
+    const leftValue = `calc(${cumulativeParts.join(" + ")})`;
     result.set(columnIdx, {
       left: leftValue,
       zIndex: stickyValue === "behind" ? 10 : 30,
