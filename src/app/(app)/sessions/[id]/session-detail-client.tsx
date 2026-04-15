@@ -26,8 +26,8 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useOptimistic, useState, useTransition } from "react";
 
 const YOUR_BADGES_COLUMNS: ColumnHeader[] = [
-  { label: "#", width: "1.5rem", align: "right" },
-  { label: "Name", width: "8rem", sortField: "name" },
+  { label: "#", width: "1.5rem", align: "right", sticky: true },
+  { label: "Name", width: "8rem", sortField: "name", sticky: true },
   { label: "Description", width: "minmax(5rem,20rem)" },
   { label: "Difficulty", width: "5rem", align: "right", sortField: "difficulty" },
   { label: "# Players", width: "4rem", align: "right", sortField: "players" },
@@ -41,8 +41,8 @@ function buildGroupBadgeColumns(members: { id: string; displayName: string }[], 
     return 0;
   });
   return [
-    { label: "#", width: "1.5rem", align: "right" },
-    { label: "Name", width: "8rem" },
+    { label: "#", width: "1.5rem", align: "right", sticky: true },
+    { label: "Name", width: "8rem", sticky: true },
     { label: "Description", width: "minmax(5rem,20rem)" },
     { label: "Difficulty", width: "5rem", align: "right" },
     { label: "# Players", width: "4rem", align: "right" },

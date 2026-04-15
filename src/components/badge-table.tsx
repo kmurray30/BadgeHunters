@@ -3,6 +3,7 @@
 import Link from "next/link";
 import React, { useState } from "react";
 import type { SortCriterion } from "./multi-sort";
+import { usePersistedState } from "@/hooks/use-persisted-state";
 
 // ─── Column header ────────────────────────────────────────────────────────────
 
@@ -24,6 +25,8 @@ export interface ColumnHeader {
   bold?: boolean;
   /** Group name — columns sharing the same group get a spanning header label above them. */
   group?: string;
+  /** If true, this column is pinned to the left edge when the user enables column pinning. */
+  sticky?: boolean;
 }
 
 // ─── Row ──────────────────────────────────────────────────────────────────────
@@ -56,15 +59,73 @@ export interface BadgeTableSection {
   defaultCollapsed?: boolean;
 }
 
+// ─── Sticky helpers ──────────────────────────────────────────────────────────
+//
+// When pinning is active we use column-gap: 0 and bake the gap into each
+// track width so there are no transparent cracks between cells.  Sticky cells
+// get position: sticky + left + z-index. Non-sticky cells also use
+// position: sticky (without left) so that z-index resolves consistently across
+// mobile WebKit/Blink compositing layers.
+
+const GAP = "0.5rem";
+const ROW_PX = "0.75rem"; // matches px-3 on header & rows
+
+interface StickyMeta {
+  left: string;
+  zIndex: number;
+}
+
+/** Add half-gap to each side of a track width string (absorbs column-gap: 0). */
+function inflateTrackWidths(columns: ColumnHeader[]): string[] {
+  return columns.map((column, index) => {
+    const isFirst = index === 0;
+    const isLast = index === columns.length - 1;
+    const leftExtra = isFirst ? ROW_PX : `calc(${GAP} / 2)`;
+    const rightExtra = isLast ? ROW_PX : `calc(${GAP} / 2)`;
+    return addSizeToTrack(addSizeToTrack(column.width, leftExtra), rightExtra);
+  });
+}
+
+/** Wrap raw track value so it grows by `extra`. Handles minmax() & plain values. */
+function addSizeToTrack(track: string, extra: string): string {
+  const minmaxMatch = track.match(/^minmax\((.+),\s*(.+)\)$/);
+  if (minmaxMatch) {
+    return `minmax(calc(${minmaxMatch[1]} + ${extra}), calc(${minmaxMatch[2]} + ${extra}))`;
+  }
+  if (track === "auto" || track === "max-content" || track === "min-content") {
+    return track;
+  }
+  return `calc(${track} + ${extra})`;
+}
+
+/** Compute left offset and z-index for each sticky column. */
+function buildStickyMeta(columns: ColumnHeader[], inflatedWidths: string[]): (StickyMeta | null)[] {
+  const metas: (StickyMeta | null)[] = [];
+  const parts: string[] = [];
+
+  for (let index = 0; index < columns.length; index++) {
+    if (columns[index].sticky) {
+      const left = parts.length === 0 ? "0px" : `calc(${parts.join(" + ")})`;
+      metas.push({ left, zIndex: 30 });
+      parts.push(inflatedWidths[index]);
+    } else {
+      metas.push(null);
+    }
+  }
+  return metas;
+}
+
+/** Return inline padding for a cell in inflated-width mode. */
+function cellPaddingForSticky(index: number, totalColumns: number): React.CSSProperties {
+  const isFirst = index === 0;
+  const isLast = index === totalColumns - 1;
+  return {
+    paddingLeft: isFirst ? ROW_PX : `calc(${GAP} / 2)`,
+    paddingRight: isLast ? ROW_PX : `calc(${GAP} / 2)`,
+  };
+}
+
 // ─── Table ────────────────────────────────────────────────────────────────────
-//
-// Uses CSS subgrid so the header and every data row share a single set of
-// column tracks.  This means `auto` columns resolve based on the widest cell
-// across ALL rows — no more per-row misalignment.
-//
-// Supports either a flat `rows` array or multiple `sections` (with optional
-// section headings).  Both render inside the same grid so columns align
-// across sections.
 
 interface BadgeTableProps {
   columns: ColumnHeader[];
@@ -88,10 +149,35 @@ const SUBGRID_STYLE: React.CSSProperties = {
 const FULL_SPAN_STYLE: React.CSSProperties = { gridColumn: "1 / -1" };
 
 export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, onSortChange }: BadgeTableProps) {
-  const gridTemplateColumns = columns.map((column) => column.width).join(" ");
+  const hasPinnableColumns = columns.some((column) => column.sticky);
+  const [pinned, setPinned] = usePersistedState("bh:table:pinColumns", true);
+  const isPinned = hasPinnableColumns && pinned;
+
+  // Inflated widths & sticky metadata (only computed when pinned)
+  const inflatedWidths = isPinned ? inflateTrackWidths(columns) : null;
+  const stickyMeta = isPinned && inflatedWidths ? buildStickyMeta(columns, inflatedWidths) : null;
+
+  const gridTemplateColumns = isPinned && inflatedWidths
+    ? inflatedWidths.join(" ")
+    : columns.map((column) => column.width).join(" ");
+
+  const stickySubgridStyle: React.CSSProperties | undefined = isPinned
+    ? { ...SUBGRID_STYLE, columnGap: 0, paddingLeft: 0, paddingRight: 0, isolation: "isolate", zIndex: 0 }
+    : undefined;
 
   const alignClass = (align: ColumnHeader["align"]) =>
     align === "center" ? "text-center" : align === "right" ? "text-right" : undefined;
+
+  function headerCellStyle(index: number): React.CSSProperties | undefined {
+    if (!isPinned || !stickyMeta) return undefined;
+    const meta = stickyMeta[index];
+    const padding = cellPaddingForSticky(index, columns.length);
+    if (meta) {
+      return { position: "sticky", left: meta.left, zIndex: meta.zIndex, backgroundColor: "var(--card)", ...padding };
+    }
+    // Non-sticky cells also use position: sticky (without left) for consistent z-index
+    return { position: "sticky", zIndex: 20, backgroundColor: "var(--card)", ...padding };
+  }
 
   function handleHeaderSort(column: ColumnHeader) {
     if (!column.sortField || !onSortChange) return;
@@ -114,6 +200,25 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
     }
   }
 
+  const pinToggle = hasPinnableColumns ? (
+    <button
+      type="button"
+      onClick={(event) => { event.stopPropagation(); setPinned((prev) => !prev); }}
+      title={pinned ? "Unpin # and Name columns" : "Pin # and Name columns to the left"}
+      className="ml-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted hover:text-foreground transition-colors"
+    >
+      {pinned ? (
+        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+        </svg>
+      ) : (
+        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+        </svg>
+      )}
+    </button>
+  ) : null;
+
   const resolvedSections: BadgeTableSection[] = sections ?? (rows ? [{ rows }] : []);
   const totalRows = resolvedSections.reduce((sum, section) => sum + section.rows.length, 0);
 
@@ -134,6 +239,11 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
     });
   }
 
+  // Find the index of the last sticky column (where we'll show the pin toggle)
+  const lastStickyIndex = hasPinnableColumns
+    ? columns.reduce((last, column, index) => column.sticky ? index : last, -1)
+    : -1;
+
   return (
     <div className="overflow-x-auto overflow-y-hidden rounded-lg border border-border">
       <div
@@ -142,8 +252,8 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
       >
         {/* Column header row */}
         <div
-          className="grid items-center gap-2 border-b border-border bg-card px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted"
-          style={SUBGRID_STYLE}
+          className={`grid items-center border-b border-border bg-card py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted ${isPinned ? "" : "gap-2 px-3"}`}
+          style={isPinned ? { ...SUBGRID_STYLE, columnGap: 0, paddingLeft: 0, paddingRight: 0 } : SUBGRID_STYLE}
         >
           {columns.map((column, index) => {
               const isSortable = !!column.sortField && !!onSortChange;
@@ -152,23 +262,28 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
               const isAscending = sortCriteria?.find((c) => c.field === column.sortField)?.ascending;
 
               const baseHeaderClass = "whitespace-pre-line min-w-0 leading-tight";
+              const cellStyle = headerCellStyle(index);
+
+              const showPinToggle = index === lastStickyIndex;
 
               if (isSortable) {
                 return (
-                  <button
-                    key={index}
-                    type="button"
-                    title={column.tooltip}
-                    onClick={() => handleHeaderSort(column)}
-                    className={`${baseHeaderClass} hover:text-foreground transition-colors ${
-                      column.align === "center" ? "text-center" : column.align === "right" ? "text-right" : "text-left"
-                    } ${isAnyActive ? "text-foreground" : ""}`}
-                  >
-                    {column.label}
-                    {isPrimary && (
-                      <span className="ml-0.5">{isAscending ? "↑" : "↓"}</span>
-                    )}
-                  </button>
+                  <div key={index} className="flex items-center min-w-0" style={cellStyle}>
+                    <button
+                      type="button"
+                      title={column.tooltip}
+                      onClick={() => handleHeaderSort(column)}
+                      className={`${baseHeaderClass} hover:text-foreground transition-colors ${
+                        column.align === "center" ? "text-center" : column.align === "right" ? "text-right" : "text-left"
+                      } ${isAnyActive ? "text-foreground" : ""}`}
+                    >
+                      {column.label}
+                      {isPrimary && (
+                        <span className="ml-0.5">{isAscending ? "↑" : "↓"}</span>
+                      )}
+                    </button>
+                    {showPinToggle && pinToggle}
+                  </div>
                 );
               }
 
@@ -185,6 +300,7 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       textTransform: "none",
+                      ...cellStyle,
                     }}
                   >
                     {column.label}
@@ -192,8 +308,19 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
                 );
               }
 
+              if (showPinToggle) {
+                return (
+                  <div key={index} className="flex items-center min-w-0" style={cellStyle}>
+                    <span title={column.tooltip} className={`${baseHeaderClass} ${alignClass(column.align) ?? ""}`}>
+                      {column.label}
+                    </span>
+                    {pinToggle}
+                  </div>
+                );
+              }
+
               return (
-                <span key={index} title={column.tooltip} className={`${baseHeaderClass} ${alignClass(column.align) ?? ""}`}>
+                <span key={index} title={column.tooltip} className={`${baseHeaderClass} ${alignClass(column.align) ?? ""}`} style={cellStyle}>
                   {column.label}
                 </span>
               );
@@ -212,6 +339,7 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
                     type="button"
                     onClick={() => toggleSection(sectionIndex)}
                     className="flex items-center gap-1.5 bg-card px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted hover:text-foreground transition-colors cursor-pointer"
+                    style={{ position: "sticky", left: 0, width: "max-content" }}
                   >
                     <svg
                       className={`h-3 w-3 shrink-0 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
@@ -236,6 +364,9 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
                     row={row}
                     columns={columns}
                     isLastRow={isAbsolutelyLast}
+                    stickyMeta={stickyMeta}
+                    subgridStyle={stickySubgridStyle}
+                    isPinned={isPinned}
                   />
                 );
               })}
@@ -255,14 +386,31 @@ function RowWrapper({
   row,
   columns,
   isLastRow,
+  stickyMeta,
+  subgridStyle,
+  isPinned,
 }: {
   row: BadgeTableRow;
   columns: ColumnHeader[];
   isLastRow: boolean;
+  stickyMeta: (StickyMeta | null)[] | null;
+  subgridStyle: React.CSSProperties | undefined;
+  isPinned: boolean;
 }) {
   const needsBorder = row.footer || !isLastRow;
   const borderClass = needsBorder ? "border-b border-border" : "";
-  const rowClassName = `grid gap-2 px-3 py-2 transition-colors ${borderClass} ${row.className ?? "hover:bg-card-hover"}`;
+  const rowClassName = `grid py-2 transition-colors ${borderClass} ${row.className ?? "hover:bg-card-hover"} ${isPinned ? "" : "gap-2 px-3"}`;
+  const rowStyle = subgridStyle ?? SUBGRID_STYLE;
+
+  function cellStyle(index: number): React.CSSProperties | undefined {
+    if (!isPinned || !stickyMeta) return undefined;
+    const meta = stickyMeta[index];
+    const padding = cellPaddingForSticky(index, columns.length);
+    if (meta) {
+      return { position: "sticky", left: meta.left, zIndex: meta.zIndex, backgroundColor: "var(--cell-bg)", ...padding };
+    }
+    return { position: "sticky", zIndex: 20, backgroundColor: "var(--cell-bg)", ...padding };
+  }
 
   const innerCells = row.cells.map((cell, index) => {
     const align = columns[index]?.align;
@@ -271,20 +419,20 @@ function RowWrapper({
       align === "right"  ? "flex items-center justify-end min-w-0" :
                            "flex items-center min-w-0";
     return (
-      <div key={index} className={justifyClass}>
+      <div key={index} className={justifyClass} style={cellStyle(index)}>
         {cell}
       </div>
     );
   });
 
   const mainRow = row.href ? (
-    <Link href={row.href} className={rowClassName} style={SUBGRID_STYLE}>
+    <Link href={row.href} className={rowClassName} style={rowStyle}>
       {innerCells}
     </Link>
   ) : (
     <div
       className={`${rowClassName} ${row.onMouseDown ? "cursor-pointer select-none" : ""}`}
-      style={SUBGRID_STYLE}
+      style={rowStyle}
       onMouseDown={row.onMouseDown}
     >
       {innerCells}

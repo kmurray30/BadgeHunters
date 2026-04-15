@@ -76,6 +76,22 @@ button, [role="button"], a, summary {
   transform: scale(0.97);
 }
 
+/* ─── Scrollable table: opaque cell backgrounds that preserve row tints ─── */
+/* When columns are pinned, sticky cells need opaque backgrounds that match
+   the row's visual tint. Pre-mix row colors with the page background. */
+:root {
+  --cell-bg: var(--background);
+  --completed-opaque:       color-mix(in srgb, #22c55e  7%, var(--background));
+  --completed-hover-opaque: color-mix(in srgb, #22c55e 14%, var(--background));
+  --selection-opaque:       color-mix(in srgb, #3b82f6 15%, var(--background));
+  --selection-hover-opaque: color-mix(in srgb, #3b82f6 25%, var(--background));
+}
+.bg-completed                        { --cell-bg: var(--completed-opaque); }
+.bg-selection                        { --cell-bg: var(--selection-opaque); }
+.hover\:bg-completed-hover:hover     { --cell-bg: var(--completed-hover-opaque); }
+.hover\:bg-selection-hover:hover     { --cell-bg: var(--selection-hover-opaque); }
+.hover\:bg-card-hover:hover          { --cell-bg: var(--card-hover); }
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;
