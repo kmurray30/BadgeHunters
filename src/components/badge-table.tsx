@@ -90,6 +90,10 @@ const SUBGRID_STYLE: React.CSSProperties = {
   gridColumn: "1 / -1",
   display: "grid",
   gridTemplateColumns: "subgrid",
+  // Both properties force a stacking context so z-index within
+  // each row is resolved correctly (prevents "taking turns" overlap).
+  isolation: "isolate",
+  zIndex: 0,
 };
 
 const FULL_SPAN_STYLE: React.CSSProperties = { gridColumn: "1 / -1" };
@@ -195,9 +199,11 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
     if (!hasStickyCols) return undefined;
     const meta = stickyMeta.get(columnIndex);
     if (meta) {
-      return { position: "sticky", left: meta.left, zIndex: meta.zIndex, backgroundColor: "var(--card)" };
+      // Frozen (z-30) cells get a box-shadow that extends into the grid gap
+      // to the right, preventing lower-z content from peeking through the gap.
+      const gapShadow = meta.zIndex >= 30 ? "0.5rem 0 0 var(--card)" : undefined;
+      return { position: "sticky", left: meta.left, zIndex: meta.zIndex, backgroundColor: "var(--card)", boxShadow: gapShadow };
     }
-    // Non-sticky header cells need z-20 so they cover "behind" sticky columns
     return { position: "relative", zIndex: 20, backgroundColor: "var(--card)" };
   }
 
@@ -277,24 +283,26 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
           return (
             <React.Fragment key={sectionIndex}>
               {section.label && (
-                <button
-                  type="button"
-                  onClick={() => toggleSection(sectionIndex)}
-                  className="flex items-center gap-1.5 border-b border-border bg-card px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted hover:text-foreground transition-colors cursor-pointer"
-                  style={FULL_SPAN_STYLE}
-                >
-                  <svg
-                    className={`h-3 w-3 shrink-0 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2.5}
+                <div className="border-b border-border bg-card" style={FULL_SPAN_STYLE}>
+                  <button
+                    type="button"
+                    onClick={() => toggleSection(sectionIndex)}
+                    className="flex items-center gap-1.5 bg-card px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted hover:text-foreground transition-colors cursor-pointer"
+                    style={hasStickyCols ? { position: "sticky", left: 0, width: "max-content" } : undefined}
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                  {section.label}
-                  <span className="font-normal text-muted">({section.rows.length})</span>
-                </button>
+                    <svg
+                      className={`h-3 w-3 shrink-0 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                    {section.label}
+                    <span className="font-normal text-muted">({section.rows.length})</span>
+                  </button>
+                </div>
               )}
               {!isCollapsed && section.rows.map((row, rowIndex) => {
                 const isLastRowInSection = rowIndex === section.rows.length - 1;
@@ -353,9 +361,11 @@ function RowWrapper({
     } else if (meta) {
       // --cell-bg is set by the row's Tailwind class (see globals.css) so
       // sticky cells pick up the correct opaque tint for completed/selection rows.
-      cellStyle = { position: "sticky", left: meta.left, zIndex: meta.zIndex, backgroundColor: "var(--cell-bg)" };
+      // Frozen (z-30) cells extend a box-shadow into the grid gap to prevent
+      // lower-z content from peeking through.
+      const gapShadow = meta.zIndex >= 30 ? "0.5rem 0 0 var(--cell-bg)" : undefined;
+      cellStyle = { position: "sticky", left: meta.left, zIndex: meta.zIndex, backgroundColor: "var(--cell-bg)", boxShadow: gapShadow };
     } else {
-      // Non-sticky cells at z-20 cover "behind" sticky columns when scrolling
       cellStyle = { position: "relative", zIndex: 20, backgroundColor: "var(--cell-bg)" };
     }
     return (

@@ -23,7 +23,7 @@ import { NotificationPopup } from "@/components/notification-popup";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useOptimistic, useState, useTransition } from "react";
 
 const YOUR_BADGES_COLUMNS: ColumnHeader[] = [
   { label: "#", width: "1.5rem", align: "right", sticky: true },
@@ -373,17 +373,35 @@ export function SessionDetailClient({
 
   const [pendingUncompleteBadgeId, setPendingUncompleteBadgeId] = useState<string | null>(null);
 
+  // Optimistic completion: tracks which badges have been toggled by the current
+  // user before the server confirms. Resets when allBadges (server data) changes.
+  const serverCompletedBadgeIds = useMemo(() => new Set(
+    allBadges.filter((badge) => badge.memberCompletions.includes(currentUserId)).map((badge) => badge.id)
+  ), [allBadges, currentUserId]);
+
+  const [optimisticCompletedBadgeIds, applyOptimisticCompletionToggle] = useOptimistic(
+    serverCompletedBadgeIds,
+    (currentIds: Set<string>, toggledBadgeId: string) => {
+      const nextIds = new Set(currentIds);
+      if (nextIds.has(toggledBadgeId)) nextIds.delete(toggledBadgeId);
+      else nextIds.add(toggledBadgeId);
+      return nextIds;
+    }
+  );
+
+  function isCurrentUserCompleted(badgeId: string): boolean {
+    return optimisticCompletedBadgeIds.has(badgeId);
+  }
+
   function handleToggleBadgeCompletion(badgeId: string) {
     if (!canEdit) return;
-    const badge = allBadges.find((b) => b.id === badgeId);
-    const alreadyCompleted = badge?.memberCompletions.includes(currentUserId);
-
-    if (alreadyCompleted) {
+    if (isCurrentUserCompleted(badgeId)) {
       setPendingUncompleteBadgeId(badgeId);
       return;
     }
 
     startTransition(async () => {
+      applyOptimisticCompletionToggle(badgeId);
       await toggleSessionBadgeCompletion(session.id, badgeId);
       router.refresh();
     });
@@ -394,6 +412,7 @@ export function SessionDetailClient({
     setPendingUncompleteBadgeId(null);
     if (!badgeId) return;
     startTransition(async () => {
+      applyOptimisticCompletionToggle(badgeId);
       await toggleSessionBadgeCompletion(session.id, badgeId, alsoGlobal);
       router.refresh();
     });
@@ -401,10 +420,6 @@ export function SessionDetailClient({
 
   // Brief hover suppression after badge selection causes list reorder
   const [suppressHover, setSuppressHover] = useState(false);
-  const handleBadgeSelect = useCallback((badgeId: string) => {
-    setSuppressHover(true);
-    toggleBadgeSelection(session.id, badgeId);
-  }, [session.id]);
   useEffect(() => {
     if (!suppressHover) return;
     const handler = () => setSuppressHover(false);
@@ -502,9 +517,27 @@ export function SessionDetailClient({
     });
   }
 
-  const userSelectedBadgeIds = useMemo(() => new Set(
+  const serverSelectedBadgeIds = useMemo(() => new Set(
     session.selections.filter((selection) => selection.selectedBy.id === currentUserId).map((selection) => selection.badgeId)
   ), [session.selections, currentUserId]);
+
+  const [userSelectedBadgeIds, applyOptimisticSelectionToggle] = useOptimistic(
+    serverSelectedBadgeIds,
+    (currentIds: Set<string>, toggledBadgeId: string) => {
+      const nextIds = new Set(currentIds);
+      if (nextIds.has(toggledBadgeId)) nextIds.delete(toggledBadgeId);
+      else nextIds.add(toggledBadgeId);
+      return nextIds;
+    }
+  );
+
+  const handleBadgeSelect = useCallback((badgeId: string) => {
+    setSuppressHover(true);
+    startTransition(async () => {
+      applyOptimisticSelectionToggle(badgeId);
+      await toggleBadgeSelection(session.id, badgeId);
+    });
+  }, [session.id, applyOptimisticSelectionToggle, startTransition]);
 
   const yourBadgesList = useMemo(() => {
     if (viewOnlyMode) return [];
@@ -530,8 +563,8 @@ export function SessionDetailClient({
     const typeVal = yourBadgesFilters.find((filter) => filter.key === "type")?.value ?? "all";
     const completionVal = yourBadgesFilters.find((filter) => filter.key === "completion")?.value ?? "all";
 
-    if (completionVal === "uncompleted") list = list.filter((badge) => !badge.memberCompletions.includes(currentUserId));
-    else if (completionVal === "completed") list = list.filter((badge) => badge.memberCompletions.includes(currentUserId));
+    if (completionVal === "uncompleted") list = list.filter((badge) => !isCurrentUserCompleted(badge.id));
+    else if (completionVal === "completed") list = list.filter((badge) => isCurrentUserCompleted(badge.id));
 
     if (difficultyVal !== "all") list = list.filter((badge) => resolveDifficulty(badge.communityVotes) === difficultyVal);
     if (playersVal !== "all") list = list.filter((badge) => resolvePlayerCount(badge).bucket === playersVal);
@@ -577,10 +610,9 @@ export function SessionDetailClient({
     return Array.from(badgeMap.values());
   }, [session.selections]);
 
-  // Badges the current user has persistently completed go in their own section
+  // Badges the current user has completed go in their own section
   const groupCompletedByMe = groupBadges.filter((entry) => {
-    const fullBadge = badgeLookup.get(entry.selection.badgeId);
-    return fullBadge?.memberCompletions.includes(currentUserId) ?? false;
+    return isCurrentUserCompleted(entry.selection.badgeId);
   });
   const completedByMeIds = new Set(groupCompletedByMe.map((entry) => entry.selection.badgeId));
   const groupPerVisit = groupBadges.filter((entry) => entry.selection.isPerVisit && !completedByMeIds.has(entry.selection.badgeId));
@@ -1093,7 +1125,7 @@ export function SessionDetailClient({
             sections={(() => {
               const buildRow = (badge: typeof yourBadgesList[number]): BadgeTableRow => {
                 const isSelected = userSelectedBadgeIds.has(badge.id);
-                const isCompleted = badge.memberCompletions.includes(currentUserId);
+                const isCompleted = isCurrentUserCompleted(badge.id);
                 const diffInfo = DIFFICULTY_LABELS[resolveDifficulty(badge.communityVotes)] ?? DIFFICULTY_LABELS.unknown;
                 const blurb = metaRuleBlurbs[badge.id];
                 const rowClassName = isCompleted
@@ -1145,13 +1177,13 @@ export function SessionDetailClient({
               columns={groupBadgeColumns}
               sections={[
                 ...(groupPerVisit.length > 0
-                  ? [{ label: "Visit-Specific Badges", rows: buildGroupBadgeRows(groupPerVisit, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers) } satisfies BadgeTableSection]
+                  ? [{ label: "Visit-Specific Badges", rows: buildGroupBadgeRows(groupPerVisit, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds) } satisfies BadgeTableSection]
                   : []),
                 ...(groupNormal.length > 0
-                  ? [{ label: "Standard Badges", rows: buildGroupBadgeRows(groupNormal, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers) } satisfies BadgeTableSection]
+                  ? [{ label: "Standard Badges", rows: buildGroupBadgeRows(groupNormal, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds) } satisfies BadgeTableSection]
                   : []),
                 ...(groupCompletedByMe.length > 0
-                  ? [{ label: "Completed By Me", rows: buildGroupBadgeRows(groupCompletedByMe, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers) } satisfies BadgeTableSection]
+                  ? [{ label: "Completed By Me", rows: buildGroupBadgeRows(groupCompletedByMe, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds) } satisfies BadgeTableSection]
                   : []),
               ]}
             />
@@ -1173,6 +1205,7 @@ function buildGroupBadgeRows(
   canEdit: boolean,
   onToggleCompletion: (badgeId: string) => void,
   members: { id: string; displayName: string }[],
+  optimisticCompletedBadgeIds: Set<string>,
 ): BadgeTableRow[] {
   return entries.map((entry) => {
     const fullBadge = badgeLookup.get(entry.selection.badgeId);
@@ -1180,7 +1213,7 @@ function buildGroupBadgeRows(
     const diffInfo = DIFFICULTY_LABELS[diffKey] ?? DIFFICULTY_LABELS.unknown;
     const playerCountResolved = fullBadge ? resolvePlayerCount(fullBadge) : { bucket: "none", label: "Any", color: "text-muted" };
     const persistentCompletions = new Set(fullBadge?.memberCompletions ?? []);
-    const currentUserCompleted = persistentCompletions.has(currentUserId);
+    const currentUserCompleted = optimisticCompletedBadgeIds.has(entry.selection.badgeId);
 
     const isUserSelected = userSelectedBadgeIds.has(entry.selection.badgeId);
     const rowClassName = currentUserCompleted
@@ -1189,7 +1222,9 @@ function buildGroupBadgeRows(
         ? "bg-selection hover:bg-selection-hover"
         : "hover:bg-card-hover";
 
-    const completedCount = members.filter((member) => persistentCompletions.has(member.id)).length;
+    const completedCount = members.filter((member) =>
+      member.id === currentUserId ? currentUserCompleted : persistentCompletions.has(member.id)
+    ).length;
     const needCount = members.length - completedCount;
     const needPercent = members.length > 0 ? Math.round((needCount / members.length) * 100) : 0;
     const fractionCell = (
