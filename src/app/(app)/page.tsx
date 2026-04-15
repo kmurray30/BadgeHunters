@@ -2,7 +2,8 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { isolationFilter } from "@/lib/isolation";
+import { getRankColor, RANK_COLOR_HEX } from "@/lib/rank";
+import { RankPopup } from "@/components/rank-popup";
 
 export default async function Home() {
   const session = await auth();
@@ -16,8 +17,6 @@ export default async function Home() {
 
   if (!user) redirect("/login");
   if (!user.onboardingComplete) redirect("/onboarding");
-
-  const isolation = isolationFilter(user);
 
   // Your stats
   const totalBadges = await prisma.badge.count({ where: { active: true } });
@@ -38,8 +37,6 @@ export default async function Home() {
 
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
 
-  // Categorize sessions considering the new per-user review model.
-  // "Effectively in review" = explicitly completed_pending_ack OR active but past date.
   const activeSessions: typeof mySessions = [];
   const futureSessions: typeof mySessions = [];
   const pendingReviewSessions: typeof mySessions = [];
@@ -62,23 +59,7 @@ export default async function Home() {
     } else if (sessionItem.status === "active" && !effectivelyInReview) {
       activeSessions.push(sessionItem);
     }
-    // Sessions where the user has already completed their review are excluded from the landing page
   }
-
-  // Other players summary
-  const otherPlayers = await prisma.user.findMany({
-    where: { ...isolation, isActive: true, id: { not: user.id } },
-    select: {
-      id: true,
-      activatePlayerName: true,
-      realName: true,
-      displayNameMode: true,
-      currentScore: true,
-      _count: { select: { badgeStatuses: { where: { isCompleted: true } } } },
-    },
-    orderBy: { currentScore: "desc" },
-    take: 5,
-  });
 
   function getDisplayName(appUser: { displayNameMode: string; realName: string | null; activatePlayerName: string | null }) {
     return appUser.displayNameMode === "real_name"
@@ -90,52 +71,61 @@ export default async function Home() {
     ? user.realName ?? user.activatePlayerName ?? "Hunter"
     : user.activatePlayerName ?? user.realName ?? "Hunter";
 
+  const rankColor = getRankColor(user.currentScore);
+  const rankHex = RANK_COLOR_HEX[rankColor];
   const completionPct = totalBadges > 0 ? Math.round((yourCompletedCount / totalBadges) * 100) : 0;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 pt-16 pb-10">
-      {/* Hero */}
-      <div className="text-center">
+    <div className="mx-auto max-w-3xl px-4 py-6">
+      {/* Welcome */}
+      <div className="text-center mb-6">
         <h1 className="text-3xl font-bold text-foreground">Welcome back, {displayName}</h1>
         <p className="mt-2 text-sm text-muted">Track badges, plan sessions, hunt together.</p>
       </div>
 
-      {/* Your stats */}
-      <div className="mt-8 grid grid-cols-2 gap-4">
-        <div className="rounded-xl border border-border bg-card p-5 text-center">
-          <p className="text-3xl font-bold text-accent">{yourCompletedCount}</p>
-          <p className="mt-1 text-xs text-muted">Badges completed</p>
+      {/* Stats grid — Badges | Score | Rank (mirrors player page) */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="rounded-xl border border-border bg-card p-4 text-center">
+          <p className="text-2xl font-bold text-foreground">{yourCompletedCount}</p>
+          <p className="text-xs text-muted">of {totalBadges} badges ({completionPct}%)</p>
         </div>
-        <div className="rounded-xl border border-border bg-card p-5 text-center">
-          <p className="text-3xl font-bold text-foreground">{completionPct}%</p>
-          <p className="mt-1 text-xs text-muted">of {totalBadges} total</p>
+        <div className="rounded-xl border border-border bg-card p-4 text-center">
+          <p className="text-2xl font-bold text-foreground">{user.currentScore.toLocaleString()}</p>
+          <p className="text-xs text-muted">Score</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 text-center">
+          <RankPopup currentRank={rankColor} rankHex={rankHex} />
+          <p className="text-xs text-muted">Rank</p>
         </div>
       </div>
 
-      {user.currentScore !== null && (
-        <div className="mt-4 rounded-xl border border-accent/20 bg-accent/5 p-4 text-center">
-          <p className="text-xs text-muted">Your Activate score</p>
-          <p className="text-2xl font-bold text-accent">{user.currentScore.toLocaleString()}</p>
-          {user.rankColor && (
-            <p className="mt-0.5 text-xs text-muted">Rank: {user.rankColor}</p>
+      {/* Activate detail strip */}
+      {(user.leaderboardPosition || user.levelsBeat || user.coins !== null) && (
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 rounded-xl border border-border bg-card px-4 py-3 text-xs text-muted">
+          {user.leaderboardPosition && (
+            <span>Leaderboard: <span className="font-semibold text-foreground">{user.leaderboardPosition}</span></span>
           )}
-          {(user.leaderboardPosition || user.levelsBeat || user.coins !== null) && (
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-0.5 text-xs text-muted">
-              {user.leaderboardPosition && (
-                <span>Leaderboard: <span className="font-medium">{user.leaderboardPosition}</span></span>
-              )}
-              {user.levelsBeat && (
-                <span>Levels: <span className="font-medium">{user.levelsBeat}</span></span>
-              )}
-              {user.coins !== null && (
-                <span>Coins: <span className="font-medium">{user.coins}</span></span>
-              )}
-            </div>
+          {user.levelsBeat && (
+            <span>Levels Beat: <span className="font-semibold text-foreground">{user.levelsBeat}</span></span>
+          )}
+          {user.coins !== null && (
+            <span>Coins: <span className="font-semibold text-foreground">{user.coins}</span></span>
           )}
         </div>
       )}
 
-      {/* Session groups */}
+      {/* Progress bar */}
+      <p className="mt-4 text-xs text-muted">Badge progress</p>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-border">
+        <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${completionPct}%` }} />
+      </div>
+
+      {/* Last synced */}
+      <p className="mt-3 text-xs text-muted">
+        Last synced: {user.lastSyncedAt ? user.lastSyncedAt.toLocaleString() : "Never"}
+      </p>
+
+      {/* Sessions */}
       {activeSessions.length + futureSessions.length + pendingReviewSessions.length > 0 ? (
         <div className="mt-6 space-y-4">
           <SessionGroup
@@ -167,32 +157,8 @@ export default async function Home() {
           />
         </div>
       ) : (
-        <div className="mt-4 rounded-xl border border-border bg-card p-4 text-center">
+        <div className="mt-6 rounded-xl border border-border bg-card p-4 text-center">
           <p className="text-sm text-muted">No active sessions</p>
-        </div>
-      )}
-
-      {/* Other players */}
-      {otherPlayers.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-sm font-semibold text-foreground">Top Players</h2>
-          <div className="mt-3 divide-y divide-border rounded-xl border border-border bg-card">
-            {otherPlayers.map((player) => (
-              <Link
-                key={player.id}
-                href={`/players/${player.id}?from=${encodeURIComponent("/")}`}
-                className="flex items-center justify-between px-4 py-3 hover:bg-card-hover transition-colors"
-              >
-                <span className="text-sm text-foreground">{getDisplayName(player)}</span>
-                <div className="flex items-center gap-4">
-                  <span className="text-xs text-muted">{player._count.badgeStatuses} badges</span>
-                  {player.currentScore !== null && (
-                    <span className="text-xs text-accent">{player.currentScore.toLocaleString()} pts</span>
-                  )}
-                </div>
-              </Link>
-            ))}
-          </div>
         </div>
       )}
     </div>

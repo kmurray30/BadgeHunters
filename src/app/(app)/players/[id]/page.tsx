@@ -110,16 +110,16 @@ export default async function PlayerDetailPage({ params, searchParams }: Props) 
       {/* Stats */}
       <div className="mt-4 grid grid-cols-3 gap-4">
         <div className="rounded-xl border border-border bg-card p-4 text-center">
+          <p className="text-2xl font-bold text-foreground">{completedCount}</p>
+          <p className="text-xs text-muted">of {totalBadgeCount} badges ({progressPercent}%)</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 text-center">
           <p className="text-2xl font-bold text-foreground">{player.currentScore.toLocaleString()}</p>
           <p className="text-xs text-muted">Score</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 text-center">
           <RankPopup currentRank={rankColor} rankHex={rankHex} />
           <p className="text-xs text-muted">Rank</p>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-4 text-center">
-          <p className="text-2xl font-bold text-foreground">{completedCount}</p>
-          <p className="text-xs text-muted">of {totalBadgeCount} badges ({progressPercent}%)</p>
         </div>
       </div>
 
@@ -139,7 +139,8 @@ export default async function PlayerDetailPage({ params, searchParams }: Props) 
       )}
 
       {/* Progress bar */}
-      <div className="mt-4 h-2 overflow-hidden rounded-full bg-border">
+      <p className="mt-4 text-xs text-muted">Badge progress</p>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-border">
         <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${progressPercent}%` }} />
       </div>
 

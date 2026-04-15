@@ -194,7 +194,7 @@ export function OnboardingClient({ email, googleName }: Props) {
                 onClick={handleRejectAccount}
                 className="w-full rounded-lg border border-border px-4 py-2.5 text-sm text-muted hover:text-foreground hover:bg-card-hover transition-colors"
               >
-                That&apos;s not me — search by username
+                That&apos;s not me — search by username or other email
               </button>
             </div>
           </div>
@@ -225,15 +225,15 @@ export function OnboardingClient({ email, googleName }: Props) {
           </div>
         )}
 
-        {/* Step 2: Manual username search */}
+        {/* Step 2: Manual username/email search */}
         {step === "manual_search" && (
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium text-foreground">
-                Activate Player Name
+                Activate Player Name or Email
               </label>
               <p className="mt-0.5 text-xs text-muted">
-                Enter your player name from playactivate.com
+                Enter your player name or account email from playactivate.com
               </p>
               <input
                 type="text"
@@ -243,7 +243,7 @@ export function OnboardingClient({ email, googleName }: Props) {
                   setError("");
                 }}
                 onKeyDown={(event) => event.key === "Enter" && handleManualSearch()}
-                placeholder="Your Activate player name..."
+                placeholder="Player name or email..."
                 className="mt-2 w-full rounded-lg border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
                 autoFocus
               />
@@ -259,12 +259,16 @@ export function OnboardingClient({ email, googleName }: Props) {
           </div>
         )}
 
-        {/* Step 2b: Searching by manual name */}
+        {/* Step 2b: Searching by manual name or email */}
         {step === "searching_manual" && (
           <div className="space-y-4 text-center">
             <SearchingSpinner />
             <div>
-              <p className="text-sm text-foreground">Searching Activate by username...</p>
+              <p className="text-sm text-foreground">
+                {manualName.trim().includes("@")
+                  ? "Searching Activate by email..."
+                  : "Searching Activate by username..."}
+              </p>
               <p className="mt-1 text-xs text-muted">&quot;{manualName.trim()}&quot;</p>
             </div>
           </div>
