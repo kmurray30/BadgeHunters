@@ -130,7 +130,7 @@ export async function NavBar() {
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-sm">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-3 sm:px-4">
-        <div className="flex items-center gap-2 sm:gap-6 overflow-hidden">
+        <div className="flex items-center gap-2 sm:gap-6">
           <Link
             href="/"
             className="shrink-0 text-base sm:text-lg font-bold tracking-tight text-foreground hover:text-accent transition-colors"

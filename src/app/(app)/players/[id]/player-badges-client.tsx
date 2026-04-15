@@ -32,8 +32,8 @@ interface Props {
 }
 
 const COLUMNS: ColumnHeader[] = [
-  { label: "#", width: "1.5rem", align: "right", sticky: true },
-  { label: "Name", width: "8rem", sortField: "name", sticky: true },
+  { label: "#", width: "1.5rem", align: "right" },
+  { label: "Name", width: "8rem", sortField: "name" },
   { label: "Description", width: "minmax(5rem,20rem)" },
   { label: "Difficulty\n(Their Vote)", width: "6rem", align: "right", sortField: "difficulty" },
   { label: "# Players\n(Their Vote)", width: "5.5rem", align: "right", sortField: "players" },
