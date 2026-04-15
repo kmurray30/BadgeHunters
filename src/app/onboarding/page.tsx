@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { OnboardingClient } from "./onboarding-client";
+import { ENABLE_EMAIL_LOOKUP } from "@/lib/config";
 
 export default async function OnboardingPage() {
   const session = await auth();
@@ -26,8 +27,9 @@ export default async function OnboardingPage() {
   return (
     <div className="flex min-h-svh items-center justify-center px-4">
       <OnboardingClient
-        email={email}
+        email={ENABLE_EMAIL_LOOKUP ? email : null}
         googleName={googleName}
+        enableEmailLookup={ENABLE_EMAIL_LOOKUP}
       />
     </div>
   );

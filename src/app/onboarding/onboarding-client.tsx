@@ -6,6 +6,7 @@ import { SITE_NAME } from "@/lib/config";
 interface Props {
   email: string | null;
   googleName: string | null;
+  enableEmailLookup?: boolean;
 }
 
 interface LookupResult {
@@ -22,7 +23,7 @@ interface LookupResult {
 
 type Step = "searching_email" | "email_result" | "email_not_found" | "manual_search" | "searching_manual" | "confirm_account" | "enter_name";
 
-export function OnboardingClient({ email, googleName }: Props) {
+export function OnboardingClient({ email, googleName, enableEmailLookup = false }: Props) {
   const [step, setStep] = useState<Step>("searching_email");
   const [lookupResult, setLookupResult] = useState<LookupResult | null>(null);
   const [manualName, setManualName] = useState("");
@@ -236,15 +237,17 @@ export function OnboardingClient({ email, googleName }: Props) {
           </div>
         )}
 
-        {/* Step 2: Manual username/email search */}
+        {/* Step 2: Manual username search (or username/email if email lookup is enabled) */}
         {step === "manual_search" && (
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium text-foreground">
-                Activate Player Name or Email
+                {enableEmailLookup ? "Activate Player Name or Email" : "Activate Player Name"}
               </label>
               <p className="mt-0.5 text-xs text-muted">
-                Enter your player name or account email from playactivate.com
+                {enableEmailLookup
+                  ? "Enter your player name or account email from playactivate.com"
+                  : "Enter your player name from playactivate.com"}
               </p>
               <input
                 type="text"
@@ -254,29 +257,37 @@ export function OnboardingClient({ email, googleName }: Props) {
                   setError("");
                 }}
                 onKeyDown={(event) => event.key === "Enter" && handleManualSearch()}
-                placeholder="Player name or email..."
+                placeholder={enableEmailLookup ? "Player name or email..." : "Player name..."}
                 className="mt-2 w-full rounded-lg border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
                 autoFocus
               />
             </div>
             {error && <p className="text-xs text-danger">{error}</p>}
-            <button
-              onClick={handleManualSearch}
-              disabled={!manualName.trim()}
-              className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
-            >
-              Search
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { window.location.href = "/"; }}
+                className="rounded-lg border border-border px-4 py-2.5 text-sm text-muted hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleManualSearch}
+                disabled={!manualName.trim()}
+                className="flex-1 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+              >
+                Search
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Step 2b: Searching by manual name or email */}
+        {/* Step 2b: Searching by manual name (or email if enabled) */}
         {step === "searching_manual" && (
           <div className="space-y-4 text-center">
             <SearchingSpinner />
             <div>
               <p className="text-sm text-foreground">
-                {manualName.trim().includes("@")
+                {enableEmailLookup && manualName.trim().includes("@")
                   ? "Searching Activate by email..."
                   : "Searching Activate by username..."}
               </p>
