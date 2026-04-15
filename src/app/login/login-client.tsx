@@ -3,6 +3,7 @@
 import { signIn } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
 interface TestUser {
   id: string;
@@ -27,6 +28,17 @@ interface RealUser {
   createdAt: string;
 }
 
+function GoogleLogo() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24">
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+    </svg>
+  );
+}
+
 export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean }) {
   const [adminMode, setAdminMode] = useState(initialAdminMode);
   const [adminPassword, setAdminPassword] = useState("");
@@ -41,7 +53,8 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
   const [activateSearchDebug, setActivateSearchDebug] = useState<string[]>([]);
   const [isSearchingActivate, setIsSearchingActivate] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ found: boolean; playerName: string | null; score: number | null; rankColor?: string | null; error: string | null } | null>(null);
+  const [syncResult, setSyncResult] = useState<{ found: boolean; searchTerm: string | null; activateUsername: string | null; score: number | null; rankColor?: string | null; error: string | null } | null>(null);
+  const [pendingDeleteUser, setPendingDeleteUser] = useState<TestUser | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -197,10 +210,10 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
         const data = await response.json();
         setSyncResult(data);
       } else {
-        setSyncResult({ found: false, playerName: nameToLookup, score: null, error: "Lookup request failed" });
+        setSyncResult({ found: false, searchTerm: nameToLookup, activateUsername: null, score: null, error: "Lookup request failed" });
       }
     } catch {
-      setSyncResult({ found: false, playerName: nameToLookup, score: null, error: "Network error" });
+      setSyncResult({ found: false, searchTerm: nameToLookup, activateUsername: null, score: null, error: "Network error" });
     } finally {
       setIsSyncing(false);
     }
@@ -239,31 +252,27 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
           </p>
         </div>
 
-        {/* Google OAuth */}
-        <div className="rounded-xl border border-border bg-card p-6">
+        {/* Google OAuth — Sign In / Sign Up */}
+        <div className="rounded-xl border border-border bg-card p-6 space-y-3">
           <button
             onClick={() => signIn("google", { callbackUrl: "/" })}
             className="flex w-full items-center justify-center gap-3 rounded-lg bg-white px-4 py-3 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50 transition-colors"
           >
-            <svg className="h-5 w-5" viewBox="0 0 24 24">
-              <path
-                fill="#4285F4"
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
-              />
-              <path
-                fill="#34A853"
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-              />
-              <path
-                fill="#EA4335"
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-              />
-            </svg>
+            <GoogleLogo />
             Sign in with Google
+          </button>
+          <div className="relative flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <span className="relative bg-card px-3 text-xs text-muted">or</span>
+          </div>
+          <button
+            onClick={() => signIn("google", { callbackUrl: "/onboarding" })}
+            className="flex w-full items-center justify-center gap-3 rounded-lg border border-border bg-background px-4 py-3 text-sm font-medium text-foreground hover:bg-card-hover transition-colors"
+          >
+            <GoogleLogo />
+            Create an account
           </button>
         </div>
 
@@ -347,7 +356,7 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
                     {syncResult.found ? (
                       <div className="flex items-center justify-between">
                         <div>
-                          <span className="font-semibold">{syncResult.playerName}</span>
+                          <span className="font-semibold">{syncResult.activateUsername}</span>
                           {" found — Score: "}
                           <span className="font-bold">{syncResult.score?.toLocaleString()}</span>
                           {syncResult.rankColor && (
@@ -355,7 +364,7 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
                           )}
                         </div>
                         <button
-                          onClick={() => handleCreateTestUser(syncResult.playerName ?? undefined, true)}
+                          onClick={() => handleCreateTestUser(syncResult.activateUsername ?? undefined, true)}
                           disabled={isLoading}
                           className="rounded bg-success/20 px-2 py-0.5 text-[10px] font-bold text-success hover:bg-success/30 transition-colors"
                         >
@@ -365,7 +374,7 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
                     ) : syncResult.error ? (
                       <span>{syncResult.error}</span>
                     ) : (
-                      <span>Player &quot;{syncResult.playerName}&quot; not found on Activate</span>
+                      <span>Player &quot;{syncResult.searchTerm}&quot; not found on Activate</span>
                     )}
                   </div>
                 )}
@@ -491,7 +500,7 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
                           <button
                             onClick={(event) => {
                               event.stopPropagation();
-                              handleDeleteTestUser(testUser.id);
+                              setPendingDeleteUser(testUser);
                             }}
                             disabled={isLoading}
                             className="shrink-0 rounded p-1.5 text-danger/60 hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
@@ -562,6 +571,30 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
           </div>
         )}
       </div>
+
+      {/* Delete test user confirmation */}
+      {pendingDeleteUser && (
+        <ConfirmDialog
+          title={`Delete "${pendingDeleteUser.activatePlayerName || pendingDeleteUser.realName}"?`}
+          description="This will permanently remove this test user and all their data. This cannot be undone."
+          actions={[
+            {
+              label: "Delete",
+              variant: "danger",
+              onClick: () => {
+                handleDeleteTestUser(pendingDeleteUser.id);
+                setPendingDeleteUser(null);
+              },
+            },
+            {
+              label: "Cancel",
+              variant: "muted",
+              onClick: () => setPendingDeleteUser(null),
+            },
+          ]}
+          onClose={() => setPendingDeleteUser(null)}
+        />
+      )}
     </div>
   );
 }

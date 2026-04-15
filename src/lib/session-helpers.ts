@@ -20,6 +20,11 @@ export async function requireUser() {
     redirect("/login");
   }
 
+  // Non-test users who haven't completed onboarding get sent there
+  if (!user.onboardingComplete && !user.isTestUser) {
+    redirect("/onboarding");
+  }
+
   return user;
 }
 

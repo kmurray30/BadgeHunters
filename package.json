@@ -12,7 +12,8 @@
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
     "postinstall": "prisma generate",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "activate:lookup": "tsx scripts/activate-lookup.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

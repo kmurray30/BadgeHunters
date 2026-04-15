@@ -74,7 +74,7 @@ enum FeedbackStatus {
 model User {
   id                  String          @id @default(cuid())
   email               String?         @unique
-  authType            AuthType        @map("auth_type")
+  authType            AuthType        @default(google) @map("auth_type")
   role                Role            @default(user)
   realName            String?         @map("real_name")
   displayNameMode     DisplayNameMode @default(player_name) @map("display_name_mode")
