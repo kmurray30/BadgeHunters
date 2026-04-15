@@ -48,8 +48,8 @@ const DIFFICULTY_OPTIONS: { value: string; label: string; color: string }[] = [
 
 const BADGE_TABLE_COLUMNS: ColumnHeader[] = [
   { label: "#", width: "1.5rem", align: "right", sticky: true },
-  { label: "Name", width: "10rem", sortField: "name", sticky: true },
-  { label: "Description", width: "minmax(5rem,20rem)", sticky: "behind" },
+  { label: "Name", width: "8rem", sortField: "name", sticky: true },
+  { label: "Description", width: "minmax(5rem,20rem)" },
   { label: "Difficulty", width: "5rem", align: "right", sortField: "difficulty" },
   { label: "# Players", width: "4rem", align: "right", sortField: "players" },
   { label: "To Do", width: "3.5rem", align: "center", sortField: "todo", sortDefaultDescending: true },

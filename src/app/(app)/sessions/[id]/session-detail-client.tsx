@@ -27,8 +27,8 @@ import { useCallback, useEffect, useMemo, useOptimistic, useState, useTransition
 
 const YOUR_BADGES_COLUMNS: ColumnHeader[] = [
   { label: "#", width: "1.5rem", align: "right", sticky: true },
-  { label: "Name", width: "10rem", sortField: "name", sticky: true },
-  { label: "Description", width: "minmax(5rem,20rem)", sticky: "behind" },
+  { label: "Name", width: "8rem", sortField: "name", sticky: true },
+  { label: "Description", width: "minmax(5rem,20rem)" },
   { label: "Difficulty", width: "5rem", align: "right", sortField: "difficulty" },
   { label: "# Players", width: "4rem", align: "right", sortField: "players" },
   { label: "Group %", width: "5rem", align: "right", sortField: "need" },
@@ -42,8 +42,8 @@ function buildGroupBadgeColumns(members: { id: string; displayName: string }[], 
   });
   return [
     { label: "#", width: "1.5rem", align: "right", sticky: true },
-    { label: "Name", width: "10rem", sticky: true },
-    { label: "Description", width: "minmax(5rem,20rem)", sticky: "behind" },
+    { label: "Name", width: "8rem", sticky: true },
+    { label: "Description", width: "minmax(5rem,20rem)" },
     { label: "Difficulty", width: "5rem", align: "right" },
     { label: "# Players", width: "4rem", align: "right" },
     { label: "Group %", width: "3.5rem", align: "center", vertical: true },
@@ -1143,7 +1143,7 @@ export function SessionDetailClient({
                     <span className="block min-w-0 text-xs text-muted">{badge.description}</span>,
                     <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
                     <span className={`min-w-0 text-center text-[11px] ${resolvePlayerCount(badge).color}`}>{resolvePlayerCount(badge).label}</span>,
-                    <span className="min-w-0 text-center text-[11px] text-success">{memberCount > 0 ? Math.round((badge.totalUncompletedCount / memberCount) * 100) : 0}%</span>,
+                    <span className={`min-w-0 text-center text-[11px] tabular-nums ${memberCount > 0 && badge.totalUncompletedCount === 0 ? "text-success font-semibold" : "text-muted"}`}>{memberCount > 0 ? Math.round(((memberCount - badge.totalUncompletedCount) / memberCount) * 100) : 0}%</span>,
                   ],
                   footer: undefined,
                 };
@@ -1225,11 +1225,10 @@ function buildGroupBadgeRows(
     const completedCount = members.filter((member) =>
       member.id === currentUserId ? currentUserCompleted : persistentCompletions.has(member.id)
     ).length;
-    const needCount = members.length - completedCount;
-    const needPercent = members.length > 0 ? Math.round((needCount / members.length) * 100) : 0;
+    const completedPercent = members.length > 0 ? Math.round((completedCount / members.length) * 100) : 0;
     const fractionCell = (
-      <span className={`text-[11px] tabular-nums ${needPercent === 0 ? "text-success font-semibold" : "text-muted"}`}>
-        {needPercent}%
+      <span className={`text-[11px] tabular-nums ${completedPercent === 100 ? "text-success font-semibold" : "text-muted"}`}>
+        {completedPercent}%
       </span>
     );
 
