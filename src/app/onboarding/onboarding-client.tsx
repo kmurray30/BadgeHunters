@@ -179,12 +179,22 @@ export function OnboardingClient({ email, googleName }: Props) {
         {/* Step 1b: Email search found a match */}
         {step === "email_result" && lookupResult?.found && (
           <div className="space-y-4">
-            <div className="rounded-lg border border-success/30 bg-success/5 p-4 text-center">
-              <p className="text-xs text-muted">Found an Activate account linked to your email!</p>
-              <p className="mt-2 text-lg font-bold text-foreground">{lookupResult.activateUsername}</p>
-              <AccountStats result={lookupResult} />
+            {/* Success header */}
+            <div className="text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success/15">
+                <svg className="h-6 w-6 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+              </div>
+              <p className="mt-3 text-xs font-medium uppercase tracking-widest text-success/80">Account found</p>
+              <p className="mt-1 text-2xl font-bold text-foreground">{lookupResult.activateUsername}</p>
+              <p className="mt-0.5 text-xs text-muted">via your email</p>
             </div>
-            <div className="space-y-2">
+
+            {/* Stat cards */}
+            <AccountStats result={lookupResult} />
+
+            <div className="space-y-2 pt-1">
               <button
                 onClick={() => handleConfirmAccount(lookupResult.activateUsername!, lookupResult)}
                 className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors"
@@ -278,12 +288,20 @@ export function OnboardingClient({ email, googleName }: Props) {
         {/* Step 3: Confirm the found account */}
         {step === "confirm_account" && lookupResult?.found && (
           <div className="space-y-4">
-            <div className="rounded-lg border border-success/30 bg-success/5 p-4 text-center">
-              <p className="text-xs text-muted">Found an Activate account matching that username!</p>
-              <p className="mt-2 text-lg font-bold text-foreground">{lookupResult.activateUsername}</p>
-              <AccountStats result={lookupResult} />
+            <div className="text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success/15">
+                <svg className="h-6 w-6 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+              </div>
+              <p className="mt-3 text-xs font-medium uppercase tracking-widest text-success/80">Account found</p>
+              <p className="mt-1 text-2xl font-bold text-foreground">{lookupResult.activateUsername}</p>
+              <p className="mt-0.5 text-xs text-muted">via username search</p>
             </div>
-            <div className="space-y-2">
+
+            <AccountStats result={lookupResult} />
+
+            <div className="space-y-2 pt-1">
               <button
                 onClick={() => handleConfirmAccount(lookupResult.activateUsername!, lookupResult)}
                 className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors"
@@ -381,23 +399,23 @@ function SearchingSpinner() {
 
 /** All Activate stats shown when an account is found */
 function AccountStats({ result }: { result: LookupResult }) {
+  const stats = [
+    result.score !== null && { label: "Score", value: result.score.toLocaleString() },
+    result.rank !== null && { label: "Rank", value: String(result.rank) },
+    result.leaderboardPosition && { label: "Leaderboard", value: result.leaderboardPosition },
+    result.levelsBeat && { label: "Levels", value: result.levelsBeat },
+    result.coins !== null && { label: "Coins", value: result.coins!.toLocaleString() },
+  ].filter(Boolean) as { label: string; value: string }[];
+
+  if (stats.length === 0) return null;
+
   return (
-    <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted">
-      {result.score !== null && (
-        <span>Score: <span className="font-semibold text-foreground">{result.score.toLocaleString()}</span></span>
-      )}
-      {result.rank !== null && (
-        <span>Rank: <span className="font-semibold text-foreground">{result.rank}</span></span>
-      )}
-      {result.leaderboardPosition && (
-        <span>Leaderboard: <span className="font-semibold text-foreground">{result.leaderboardPosition}</span></span>
-      )}
-      {result.levelsBeat && (
-        <span>Levels: <span className="font-semibold text-foreground">{result.levelsBeat}</span></span>
-      )}
-      {result.coins !== null && (
-        <span>Coins: <span className="font-semibold text-foreground">{result.coins}</span></span>
-      )}
+    <div className="rounded-lg border border-border bg-background px-4 py-3 flex flex-wrap justify-center gap-x-5 gap-y-1">
+      {stats.map(({ label, value }) => (
+        <span key={label} className="text-xs text-muted">
+          {label}: <span className="font-semibold text-foreground">{value}</span>
+        </span>
+      ))}
     </div>
   );
 }
