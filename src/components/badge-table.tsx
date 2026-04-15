@@ -249,7 +249,11 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
     if (meta) {
       return { position: "sticky", left: meta.left, zIndex: meta.zIndex, backgroundColor: "var(--card)", ...pad };
     }
-    return { position: "relative", zIndex: 20, backgroundColor: "var(--card)", ...pad };
+    // Use position: sticky (without left) so the browser puts non-sticky cells
+    // in the same compositor layer as the sticky cells. This guarantees z-index
+    // is resolved correctly — position: relative vs sticky can produce erratic
+    // stacking on mobile WebKit/Blink.
+    return { position: "sticky", zIndex: 20, backgroundColor: "var(--card)", ...pad };
   }
 
   return (
@@ -412,8 +416,11 @@ function RowWrapper({
       const pad = cellPaddingForSticky(index, columns.length);
       cellStyle = { position: "sticky", left: meta.left, zIndex: meta.zIndex, backgroundColor: "var(--cell-bg)", ...pad };
     } else {
+      // position: sticky (without left) so the browser composites these cells
+      // in the same layer as the actually-sticky cells, ensuring z-index is
+      // respected on mobile WebKit/Blink.
       const pad = cellPaddingForSticky(index, columns.length);
-      cellStyle = { position: "relative", zIndex: 20, backgroundColor: "var(--cell-bg)", ...pad };
+      cellStyle = { position: "sticky", zIndex: 20, backgroundColor: "var(--cell-bg)", ...pad };
     }
     return (
       <div key={index} className={justifyClass} style={cellStyle}>
