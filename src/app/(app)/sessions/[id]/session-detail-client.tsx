@@ -26,9 +26,9 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 
 const YOUR_BADGES_COLUMNS: ColumnHeader[] = [
-  { label: "#", width: "1.5rem", align: "right" },
-  { label: "Name", width: "minmax(0,12rem)", sortField: "name" },
-  { label: "Description", width: "minmax(0,1fr)" },
+  { label: "#", width: "1.5rem", align: "right", sticky: true },
+  { label: "Name", width: "10rem", sortField: "name", sticky: true },
+  { label: "Description", width: "minmax(5rem,20rem)", sticky: "behind" },
   { label: "Difficulty", width: "5rem", align: "right", sortField: "difficulty" },
   { label: "# Players", width: "4rem", align: "right", sortField: "players" },
   { label: "Group %", width: "5rem", align: "right", sortField: "need" },
@@ -41,9 +41,9 @@ function buildGroupBadgeColumns(members: { id: string; displayName: string }[], 
     return 0;
   });
   return [
-    { label: "#", width: "1.5rem", align: "right" },
-    { label: "Name", width: "minmax(0,12rem)" },
-    { label: "Description", width: "minmax(0,1fr)" },
+    { label: "#", width: "1.5rem", align: "right", sticky: true },
+    { label: "Name", width: "10rem", sticky: true },
+    { label: "Description", width: "minmax(5rem,20rem)", sticky: "behind" },
     { label: "Difficulty", width: "5rem", align: "right" },
     { label: "# Players", width: "4rem", align: "right" },
     { label: "Group %", width: "3.5rem", align: "center", vertical: true },
@@ -1107,22 +1107,8 @@ export function SessionDetailClient({
                   onMouseDown: () => handleBadgeSelect(badge.id),
                   cells: [
                     <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{badge.badgeNumber}</span>,
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <span className="min-w-0 truncate text-sm font-medium text-foreground">{badge.name}</span>
-                      <Link
-                        href={`/badges/${badge.id}`}
-                        onClick={(event) => event.stopPropagation()}
-                        className="shrink-0 text-muted hover:text-accent transition-colors"
-                        title="Badge info"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </Link>
-                      {badge.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit-specific</span>}
-                      {badge.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
-                    </div>,
-                    <span className="block min-w-0 truncate text-xs text-muted">{badge.description}</span>,
+                    <span className="min-w-0 text-sm font-medium text-foreground">{badge.name}</span>,
+                    <span className="block min-w-0 text-xs text-muted">{badge.description}</span>,
                     <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
                     <span className={`min-w-0 text-center text-[11px] ${resolvePlayerCount(badge).color}`}>{resolvePlayerCount(badge).label}</span>,
                     <span className="min-w-0 text-center text-[11px] text-success">{memberCount > 0 ? Math.round((badge.totalUncompletedCount / memberCount) * 100) : 0}%</span>,
@@ -1250,21 +1236,8 @@ function buildGroupBadgeRows(
       className: rowClassName,
       cells: [
         <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{entry.selection.badgeNumber}</span>,
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="min-w-0 truncate text-sm font-medium text-foreground">{entry.selection.badgeName}</span>
-          <Link
-            href={`/badges/${entry.selection.badgeId}`}
-            className="shrink-0 text-muted hover:text-accent transition-colors"
-            title="Badge info"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </Link>
-          {entry.selection.isPerVisit && <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit-specific</span>}
-          {fullBadge?.isMetaBadge && <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>}
-        </div>,
-        <span className="block min-w-0 truncate text-xs text-muted">{entry.selection.badgeDescription}</span>,
+        <span className="min-w-0 text-sm font-medium text-foreground">{entry.selection.badgeName}</span>,
+        <span className="block min-w-0 text-xs text-muted">{entry.selection.badgeDescription}</span>,
         <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
         <span className={`min-w-0 text-center text-[11px] ${playerCountResolved.color}`}>{playerCountResolved.label}</span>,
         fractionCell,

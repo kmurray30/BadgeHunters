@@ -23,7 +23,7 @@ export function RankPopup({ currentRank, rankHex }: Props) {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="text-2xl font-bold cursor-pointer hover:opacity-80 transition-opacity"
+        className="text-base sm:text-2xl font-bold cursor-pointer hover:opacity-80 transition-opacity"
         style={{ color: rankHex }}
       >
         {currentRank}

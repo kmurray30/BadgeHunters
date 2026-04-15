@@ -128,11 +128,11 @@ export async function NavBar() {
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-sm">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
-        <div className="flex items-center gap-6">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-3 sm:px-4">
+        <div className="flex items-center gap-2 sm:gap-6 overflow-hidden">
           <Link
             href="/"
-            className="text-lg font-bold tracking-tight text-foreground hover:text-accent transition-colors"
+            className="shrink-0 text-base sm:text-lg font-bold tracking-tight text-foreground hover:text-accent transition-colors"
           >
             {SITE_NAME}
           </Link>
@@ -140,14 +140,14 @@ export async function NavBar() {
             <>
               <Link
                 href="/badges"
-                className="text-sm text-muted hover:text-foreground transition-colors"
+                className="shrink-0 text-xs sm:text-sm text-muted hover:text-foreground transition-colors"
               >
-                My Badges
+                Badges
               </Link>
-              <div className="relative inline-flex">
+              <div className="relative inline-flex shrink-0">
                 <Link
                   href="/sessions"
-                  className="text-sm text-muted hover:text-foreground transition-colors"
+                  className="text-xs sm:text-sm text-muted hover:text-foreground transition-colors"
                 >
                   Sessions
                 </Link>
@@ -168,13 +168,13 @@ export async function NavBar() {
               </div>
               <Link
                 href="/players"
-                className="text-sm text-muted hover:text-foreground transition-colors"
+                className="shrink-0 text-xs sm:text-sm text-muted hover:text-foreground transition-colors"
               >
                 Players
               </Link>
               <Link
                 href="/feedback"
-                className="text-sm text-muted hover:text-foreground transition-colors"
+                className="hidden sm:block text-sm text-muted hover:text-foreground transition-colors"
               >
                 Feedback
               </Link>

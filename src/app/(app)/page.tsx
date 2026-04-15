@@ -87,18 +87,18 @@ export default async function Home() {
       </div>
 
       {/* Stats grid — Badges | Score | Rank (mirrors player page) */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="rounded-xl border border-border bg-card p-4 text-center">
-          <p className="text-2xl font-bold text-foreground">{yourCompletedCount}</p>
-          <p className="text-xs text-muted">of {totalBadges} badges ({completionPct}%)</p>
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <div className="rounded-xl border border-border bg-card px-1.5 py-2.5 sm:p-4 text-center">
+          <p className="text-base sm:text-2xl font-bold text-foreground">{yourCompletedCount}</p>
+          <p className="text-[9px] sm:text-xs text-muted leading-tight">of {totalBadges} badges ({completionPct}%)</p>
         </div>
-        <div className="rounded-xl border border-border bg-card p-4 text-center">
-          <p className="text-2xl font-bold text-foreground">{user.currentScore.toLocaleString()}</p>
-          <p className="text-xs text-muted">Score</p>
+        <div className="rounded-xl border border-border bg-card px-1.5 py-2.5 sm:p-4 text-center">
+          <p className="text-base sm:text-2xl font-bold text-foreground">{user.currentScore.toLocaleString()}</p>
+          <p className="text-[9px] sm:text-xs text-muted">Score</p>
         </div>
-        <div className="rounded-xl border border-border bg-card p-4 text-center">
+        <div className="rounded-xl border border-border bg-card px-1.5 py-2.5 sm:p-4 text-center">
           <RankPopup currentRank={rankColor} rankHex={rankHex} />
-          <p className="text-xs text-muted">Rank</p>
+          <p className="text-[9px] sm:text-xs text-muted">Rank</p>
         </div>
       </div>
 

@@ -32,9 +32,9 @@ interface Props {
 }
 
 const COLUMNS: ColumnHeader[] = [
-  { label: "#", width: "1.5rem", align: "right" },
-  { label: "Name", width: "minmax(0,10rem)", sortField: "name" },
-  { label: "Description", width: "minmax(6rem,1fr)" },
+  { label: "#", width: "1.5rem", align: "right", sticky: true },
+  { label: "Name", width: "10rem", sortField: "name", sticky: true },
+  { label: "Description", width: "minmax(5rem,20rem)", sticky: "behind" },
   { label: "Difficulty\n(Their Vote)", width: "6rem", align: "right", sortField: "difficulty" },
   { label: "# Players\n(Their Vote)", width: "5.5rem", align: "right", sortField: "players" },
   { label: "Completed on", width: "5.5rem", align: "right", sortField: "completedAt", sortDefaultDescending: true },
@@ -142,7 +142,7 @@ export function PlayerBadgesClient({ badges, isOwnProfile }: Props) {
       cells: [
         <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{badge.badgeNumber}</span>,
         <div className="flex items-center gap-1.5 min-w-0">
-          <span className="truncate text-sm font-medium text-foreground">{badge.badgeName}</span>
+          <span className="text-sm font-medium text-foreground">{badge.badgeName}</span>
           {badge.isPerVisit && (
             <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-medium text-accent">visit-specific</span>
           )}
@@ -150,7 +150,7 @@ export function PlayerBadgesClient({ badges, isOwnProfile }: Props) {
             <span className="shrink-0 rounded bg-purple-500/20 px-1 py-px text-[9px] font-medium text-purple-400">meta</span>
           )}
         </div>,
-        <span className="block min-w-0 truncate text-xs text-muted">{badge.description}</span>,
+        <span className="block min-w-0 text-xs text-muted">{badge.description}</span>,
         <span className={`min-w-0 text-center text-[11px] font-medium ${difficultyDisplay.color}`}>
           {difficultyDisplay.label}
         </span>,
