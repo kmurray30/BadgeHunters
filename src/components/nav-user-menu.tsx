@@ -37,23 +37,22 @@ export function NavUserMenu({ userId, userName, userImage, isTestUser, role }: N
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm hover:bg-card-hover transition-colors"
+        className="flex items-center gap-1 rounded-full p-1 hover:bg-card-hover transition-colors"
       >
         {userImage ? (
-          <img src={userImage} alt="" className="h-6 w-6 rounded-full" />
+          <img src={userImage} alt="" className="h-7 w-7 rounded-full" />
         ) : (
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-xs text-white">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-xs font-medium text-white">
             {userName.charAt(0).toUpperCase()}
           </div>
         )}
-        <span className="text-foreground">{userName}</span>
         {isTestUser && (
-          <span className="rounded bg-warning/20 px-1.5 py-0.5 text-[10px] font-bold text-warning">
+          <span className="rounded bg-warning/20 px-1 py-0.5 text-[9px] font-bold text-warning">
             TEST
           </span>
         )}
         {role === "superuser" && (
-          <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] font-bold text-accent">
+          <span className="rounded bg-accent/20 px-1 py-0.5 text-[9px] font-bold text-accent">
             SU
           </span>
         )}

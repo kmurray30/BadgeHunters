@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { NavUserMenu } from "./nav-user-menu";
+import { NavHamburger } from "./nav-hamburger";
 import { NotificationCenter, type NotificationItem } from "./notification-center";
 import { SITE_NAME } from "@/lib/config";
 
@@ -168,21 +169,22 @@ export async function NavBar() {
               </div>
               <Link
                 href="/players"
-                className="shrink-0 text-xs sm:text-sm text-muted hover:text-foreground transition-colors"
+                className="hidden min-[28rem]:block shrink-0 text-xs sm:text-sm text-muted hover:text-foreground transition-colors"
               >
                 Players
               </Link>
               <Link
                 href="/feedback"
-                className="hidden sm:block text-sm text-muted hover:text-foreground transition-colors"
+                className="hidden min-[28rem]:block shrink-0 text-xs sm:text-sm text-muted hover:text-foreground transition-colors"
               >
                 Feedback
               </Link>
+              <NavHamburger />
             </>
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5">
           {isAdminMode && (
             <>
               <Link
