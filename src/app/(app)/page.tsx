@@ -48,6 +48,9 @@ export default async function Home() {
     const userAck = sessionItem.acknowledgements[0];
     const myReviewDone = userAck ? !userAck.needsReview : false;
 
+    // Primary case: cron has already flipped the status to completed_pending_ack.
+    // Fallback: cron hasn't run yet but the expiry window has passed — ensures
+    // correct UI behavior even if the daily job is delayed or missed.
     const effectivelyInReview =
       sessionItem.status === "completed_pending_ack" ||
       (sessionItem.status === "active" && isPastDate && !isFuture);

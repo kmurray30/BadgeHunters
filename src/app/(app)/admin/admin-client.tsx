@@ -7,21 +7,21 @@ interface CronJobConfig {
   id: string;
   label: string;
   description: string;
-  endpoint: string | null;
+  endpoint: string;
 }
 
 const CRON_JOBS: CronJobConfig[] = [
   {
     id: "score-sync",
     label: "Sync PlayActivate Scores",
-    description: "Scrape playactivate.com and update all users' scores and rank colors. Currently a placeholder — will be implemented with the cron infrastructure.",
-    endpoint: null,
+    description: "Scrape playactivate.com and update all users' current scores, rank colors, and leaderboard positions. Also runs automatically each morning via the daily cron job.",
+    endpoint: "/api/cron/score-sync",
   },
   {
     id: "session-expiry",
     label: "Trigger Session Expiry",
-    description: "Check for expired sessions and transition them to review/closed state. Currently a placeholder — will be implemented with the cron infrastructure.",
-    endpoint: null,
+    description: "Check for active sessions past their 6am cutoff and transition them to pending-review state. Also runs automatically each morning via the daily cron job.",
+    endpoint: "/api/cron/session-expiry",
   },
 ];
 
@@ -30,14 +30,6 @@ export function AdminClient() {
   const [jobResults, setJobResults] = useState<Record<string, { success: boolean; message: string }>>({});
 
   async function handleRunJob(job: CronJobConfig) {
-    if (!job.endpoint) {
-      setJobResults((previous) => ({
-        ...previous,
-        [job.id]: { success: false, message: "Not implemented yet — this is a placeholder for future cron job infrastructure." },
-      }));
-      return;
-    }
-
     setRunningJobs((previous) => new Set(previous).add(job.id));
     try {
       const response = await fetch(job.endpoint, { method: "POST" });

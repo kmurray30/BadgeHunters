@@ -311,8 +311,9 @@ export function SessionDetailClient({
   const myReviewDone = session.userAck ? !session.userAck.needsReview : false;
 
   // "Effectively in review" means the session is explicitly in review mode OR
-  // the date has passed on an active session. Only relevant for members —
-  // non-members just see active/closed.
+  // the date has passed on an active session. Primary case: the daily cron has
+  // already transitioned status to completed_pending_ack. The active+isPastDate
+  // branch is a fallback in case the cron was delayed or missed a run.
   const effectivelyInReview = initialIsMember && (
     session.status === "completed_pending_ack" ||
     (session.status === "active" && isPastDate && !isFuture)

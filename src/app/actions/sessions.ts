@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session-helpers";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
+import { fromZonedTime } from "date-fns-tz";
 
 /**
  * Create a new session. Expires at 6am PST/PDT the day after the session date.
@@ -12,21 +13,23 @@ import { cookies } from "next/headers";
 export async function createSession(memberUserIds: string[], ghostNames: string[], dateString?: string) {
   const user = await requireUser();
 
-  let sessionDate: Date;
+  let year: number, month: number, day: number;
   if (dateString) {
-    const [year, month, day] = dateString.split("-").map(Number);
-    sessionDate = new Date(year, month - 1, day);
+    [year, month, day] = dateString.split("-").map(Number);
   } else {
     const nowLA = new Date(
       new Date().toLocaleString("en-US", { timeZone: "America/Los_Angeles" })
     );
-    sessionDate = new Date(nowLA.getFullYear(), nowLA.getMonth(), nowLA.getDate());
+    year = nowLA.getFullYear();
+    month = nowLA.getMonth() + 1;
+    day = nowLA.getDate();
   }
+  // Use UTC for the date-only field to avoid Prisma shifting the date
+  const sessionDate = new Date(Date.UTC(year, month - 1, day));
 
-  // Expires at 6am the day after the SESSION date (not creation date)
-  const expiresAt = new Date(sessionDate);
-  expiresAt.setDate(expiresAt.getDate() + 1);
-  expiresAt.setHours(6, 0, 0, 0);
+  // Expires at 6am America/Los_Angeles the day after the session date.
+  // fromZonedTime treats the date components as LA local time and returns UTC.
+  const expiresAt = fromZonedTime(new Date(year, month - 1, day + 1, 6, 0, 0), "America/Los_Angeles");
 
   const session = await prisma.session.create({
     data: {
@@ -497,8 +500,9 @@ export async function updateSessionDate(sessionId: string, newDateString: string
   const newSessionDate = new Date(Date.UTC(year, month - 1, day));
   if (isNaN(newSessionDate.getTime())) throw new Error("Invalid date");
 
-  // Recalculate expiry: 6am the day after session date (local time)
-  const newExpiresAt = new Date(year, month - 1, day + 1, 6, 0, 0, 0);
+  // Recalculate expiry: 6am America/Los_Angeles the day after the session date.
+  // fromZonedTime treats the date components as LA local time and returns UTC.
+  const newExpiresAt = fromZonedTime(new Date(year, month - 1, day + 1, 6, 0, 0), "America/Los_Angeles");
 
   await prisma.session.update({
     where: { id: sessionId },
