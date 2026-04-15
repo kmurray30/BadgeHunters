@@ -126,30 +126,77 @@ function buildGroupSpans(columns: ColumnHeader[]): Map<number, string> {
  */
 interface StickyMeta { left: string; zIndex: number }
 
-// Must match the row's horizontal padding (px-3 = 0.75rem) so sticky
-// left offsets align with the cells' natural grid positions.
+// Must match the visual spacing the old gap-2 (0.5rem) and px-3 (0.75rem)
+// produced. We now bake these into each column's track width so column-gap
+// can be 0 — no transparent voids between cells.
 const ROW_PADDING_LEFT = "0.75rem";
+const GAP = "0.5rem";
 
-function buildStickyMeta(columns: ColumnHeader[]): Map<number, StickyMeta> {
+/**
+ * Widen each column track to absorb the space formerly occupied by
+ * column-gap and the row's horizontal padding. The total table width
+ * stays the same; the extra space becomes cell padding.
+ */
+function inflateTrackWidths(columns: ColumnHeader[]): string[] {
+  return columns.map((column, columnIdx) => {
+    const leftExtra  = columnIdx === 0 ? ROW_PADDING_LEFT : undefined;
+    const rightExtra = columnIdx === columns.length - 1 ? ROW_PADDING_LEFT : GAP;
+    return addSizeToTrack(column.width, leftExtra, rightExtra);
+  });
+}
+
+/** Add optional left/right extras to a CSS track-size value (handles minmax). */
+function addSizeToTrack(width: string, leftExtra?: string, rightExtra?: string): string {
+  const extras = [leftExtra, rightExtra].filter(Boolean) as string[];
+  if (extras.length === 0) return width;
+  const totalExtra = extras.join(" + ");
+  const minmaxMatch = width.match(/^minmax\(([^,]+),\s*([^)]+)\)$/);
+  if (minmaxMatch) {
+    return `minmax(calc(${minmaxMatch[1].trim()} + ${totalExtra}), calc(${minmaxMatch[2].trim()} + ${totalExtra}))`;
+  }
+  return `calc(${width} + ${totalExtra})`;
+}
+
+/** Return inline padding for a cell so the visible spacing is identical to the old gap + px-3 layout. */
+function cellPaddingForSticky(columnIndex: number, columnCount: number): React.CSSProperties {
+  return {
+    paddingLeft:  columnIndex === 0                  ? ROW_PADDING_LEFT : undefined,
+    paddingRight: columnIndex === columnCount - 1     ? ROW_PADDING_LEFT : GAP,
+  };
+}
+
+function buildStickyMeta(columns: ColumnHeader[], trackWidths: string[]): Map<number, StickyMeta> {
   const result = new Map<number, StickyMeta>();
-  const cumulativeParts: string[] = [ROW_PADDING_LEFT];
+  const cumulativeParts: string[] = [];
   for (let columnIdx = 0; columnIdx < columns.length; columnIdx++) {
     const stickyValue = columns[columnIdx].sticky;
     if (!stickyValue) continue;
-    const leftValue = `calc(${cumulativeParts.join(" + ")})`;
+    const leftValue = cumulativeParts.length > 0
+      ? `calc(${cumulativeParts.join(" + ")})`
+      : "0px";
     result.set(columnIdx, {
       left: leftValue,
       zIndex: stickyValue === "behind" ? 10 : 30,
     });
-    cumulativeParts.push(columns[columnIdx].width, "0.5rem");
+    cumulativeParts.push(trackWidths[columnIdx]);
   }
   return result;
 }
 
 export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, onSortChange }: BadgeTableProps) {
-  const gridTemplateColumns = columns.map((column) => column.width).join(" ");
   const hasStickyCols = columns.some((column) => column.sticky);
-  const stickyMeta = hasStickyCols ? buildStickyMeta(columns) : new Map<number, StickyMeta>();
+
+  // When sticky, inflate track widths to absorb the gap + row-padding so we
+  // can set column-gap: 0 — no transparent voids between cells.
+  const inflatedWidths = hasStickyCols ? inflateTrackWidths(columns) : null;
+  const gridTemplateColumns = (inflatedWidths ?? columns.map((column) => column.width)).join(" ");
+  const stickyMeta = hasStickyCols ? buildStickyMeta(columns, inflatedWidths!) : new Map<number, StickyMeta>();
+
+  // Subgrid style for rows — when sticky, kill column-gap and row padding
+  // because that space is now inside each column track.
+  const stickySubgridStyle: React.CSSProperties = hasStickyCols
+    ? { ...SUBGRID_STYLE, columnGap: 0, paddingLeft: 0, paddingRight: 0 }
+    : SUBGRID_STYLE;
 
   const alignClass = (align: ColumnHeader["align"]) =>
     align === "center" ? "text-center" : align === "right" ? "text-right" : undefined;
@@ -197,14 +244,12 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
 
   function headerCellStyle(columnIndex: number): React.CSSProperties | undefined {
     if (!hasStickyCols) return undefined;
+    const pad = cellPaddingForSticky(columnIndex, columns.length);
     const meta = stickyMeta.get(columnIndex);
     if (meta) {
-      // Frozen (z-30) cells get a box-shadow that extends into the grid gap
-      // to the right, preventing lower-z content from peeking through the gap.
-      const gapShadow = meta.zIndex >= 30 ? "0.5rem 0 0 var(--card)" : undefined;
-      return { position: "sticky", left: meta.left, zIndex: meta.zIndex, backgroundColor: "var(--card)", boxShadow: gapShadow };
+      return { position: "sticky", left: meta.left, zIndex: meta.zIndex, backgroundColor: "var(--card)", ...pad };
     }
-    return { position: "relative", zIndex: 20, backgroundColor: "var(--card)" };
+    return { position: "relative", zIndex: 20, backgroundColor: "var(--card)", ...pad };
   }
 
   return (
@@ -216,7 +261,7 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
         {/* Column header row */}
         <div
           className="grid items-center gap-2 border-b border-border bg-card px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted"
-          style={SUBGRID_STYLE}
+          style={stickySubgridStyle}
         >
           {columns.map((column, index) => {
               const isSortable = !!column.sortField && !!onSortChange;
@@ -315,6 +360,7 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
                     stickyMeta={stickyMeta}
                     hasStickyCols={hasStickyCols}
                     isLastRow={isAbsolutelyLast}
+                    subgridStyle={stickySubgridStyle}
                   />
                 );
               })}
@@ -336,12 +382,14 @@ function RowWrapper({
   stickyMeta,
   hasStickyCols,
   isLastRow,
+  subgridStyle,
 }: {
   row: BadgeTableRow;
   columns: ColumnHeader[];
   stickyMeta: Map<number, StickyMeta>;
   hasStickyCols: boolean;
   isLastRow: boolean;
+  subgridStyle: React.CSSProperties;
 }) {
   const needsBorder = row.footer || !isLastRow;
   const borderClass = needsBorder ? "border-b border-border" : "";
@@ -361,12 +409,11 @@ function RowWrapper({
     } else if (meta) {
       // --cell-bg is set by the row's Tailwind class (see globals.css) so
       // sticky cells pick up the correct opaque tint for completed/selection rows.
-      // Frozen (z-30) cells extend a box-shadow into the grid gap to prevent
-      // lower-z content from peeking through.
-      const gapShadow = meta.zIndex >= 30 ? "0.5rem 0 0 var(--cell-bg)" : undefined;
-      cellStyle = { position: "sticky", left: meta.left, zIndex: meta.zIndex, backgroundColor: "var(--cell-bg)", boxShadow: gapShadow };
+      const pad = cellPaddingForSticky(index, columns.length);
+      cellStyle = { position: "sticky", left: meta.left, zIndex: meta.zIndex, backgroundColor: "var(--cell-bg)", ...pad };
     } else {
-      cellStyle = { position: "relative", zIndex: 20, backgroundColor: "var(--cell-bg)" };
+      const pad = cellPaddingForSticky(index, columns.length);
+      cellStyle = { position: "relative", zIndex: 20, backgroundColor: "var(--cell-bg)", ...pad };
     }
     return (
       <div key={index} className={justifyClass} style={cellStyle}>
@@ -376,13 +423,13 @@ function RowWrapper({
   });
 
   const mainRow = row.href ? (
-    <Link href={row.href} className={rowClassName} style={SUBGRID_STYLE}>
+    <Link href={row.href} className={rowClassName} style={subgridStyle}>
       {innerCells}
     </Link>
   ) : (
     <div
       className={`${rowClassName} ${row.onMouseDown ? "cursor-pointer select-none" : ""}`}
-      style={SUBGRID_STYLE}
+      style={subgridStyle}
       onMouseDown={row.onMouseDown}
     >
       {innerCells}
