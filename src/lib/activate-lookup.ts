@@ -14,7 +14,7 @@
  *   - Local dev:     auto-detects Chrome or uses CHROMIUM_PATH env var
  */
 
-import puppeteer, { type Browser, type Page } from "puppeteer-core";
+import puppeteer, { type Browser, type Page, type ElementHandle } from "puppeteer-core";
 
 const DEFAULT_LOCATION_ID = "69";
 const DEFAULT_LOCATION_SLUG = "seattle (tukwila)";
@@ -335,7 +335,7 @@ async function lookupByFormSearch(
     const buttons = Array.from(document.querySelectorAll("button"));
     return buttons.find((button) => button.textContent?.includes("Show my stats")) ?? null;
   });
-  const submitElement = submitButton.asElement();
+  const submitElement = submitButton.asElement() as ElementHandle<Element> | null;
   if (!submitElement) {
     return { ...NOT_FOUND_RESULT, searchTerm: email, error: "Submit button not found on page" };
   }

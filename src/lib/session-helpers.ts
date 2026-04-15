@@ -8,6 +8,12 @@ import { redirect } from "next/navigation";
  */
 export async function requireUser() {
   const session = await auth();
+
+  // Pending users (mid-onboarding, no DB row yet) go to onboarding
+  if (session?.user?.pendingOnboarding) {
+    redirect("/onboarding");
+  }
+
   if (!session?.user?.id) {
     redirect("/login");
   }
@@ -20,7 +26,7 @@ export async function requireUser() {
     redirect("/login");
   }
 
-  // Non-test users who haven't completed onboarding get sent there
+  // Real users who haven't finished onboarding go back to finish it
   if (!user.onboardingComplete && !user.isTestUser) {
     redirect("/onboarding");
   }

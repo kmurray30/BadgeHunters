@@ -123,6 +123,21 @@ export default async function PlayerDetailPage({ params, searchParams }: Props) 
         </div>
       </div>
 
+      {/* Activate details */}
+      {(player.leaderboardPosition || player.levelsBeat || player.coins !== null) && (
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 rounded-xl border border-border bg-card px-4 py-3 text-xs text-muted">
+          {player.leaderboardPosition && (
+            <span>Leaderboard: <span className="font-semibold text-foreground">{player.leaderboardPosition}</span></span>
+          )}
+          {player.levelsBeat && (
+            <span>Levels Beat: <span className="font-semibold text-foreground">{player.levelsBeat}</span></span>
+          )}
+          {player.coins !== null && (
+            <span>Coins: <span className="font-semibold text-foreground">{player.coins}</span></span>
+          )}
+        </div>
+      )}
+
       {/* Progress bar */}
       <div className="mt-4 h-2 overflow-hidden rounded-full bg-border">
         <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${progressPercent}%` }} />

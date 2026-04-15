@@ -119,6 +119,19 @@ export default async function Home() {
           {user.rankColor && (
             <p className="mt-0.5 text-xs text-muted">Rank: {user.rankColor}</p>
           )}
+          {(user.leaderboardPosition || user.levelsBeat || user.coins !== null) && (
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-0.5 text-xs text-muted">
+              {user.leaderboardPosition && (
+                <span>Leaderboard: <span className="font-medium">{user.leaderboardPosition}</span></span>
+              )}
+              {user.levelsBeat && (
+                <span>Levels: <span className="font-medium">{user.levelsBeat}</span></span>
+              )}
+              {user.coins !== null && (
+                <span>Coins: <span className="font-medium">{user.coins}</span></span>
+              )}
+            </div>
+          )}
         </div>
       )}
 

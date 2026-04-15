@@ -1,27 +1,33 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/db";
 import { OnboardingClient } from "./onboarding-client";
 
 export default async function OnboardingPage() {
   const session = await auth();
-  if (!session?.user?.id) {
+
+  if (!session?.user) {
     redirect("/login");
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-  });
+  // Already fully onboarded — nothing to do here
+  if (session.user.onboardingComplete) {
+    redirect("/badges");
+  }
 
-  if (!user) redirect("/login");
-  if (user.onboardingComplete) redirect("/badges");
+  // Non-pending real users who somehow land here also get bounced to badges
+  if (!session.user.pendingOnboarding && session.user.id && session.user.onboardingComplete) {
+    redirect("/badges");
+  }
+
+  // Read Google profile from the session (no DB query needed)
+  const email = session.user.email ?? null;
+  const googleName = session.user.name ?? null;
 
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4">
+    <div className="flex min-h-svh items-center justify-center px-4">
       <OnboardingClient
-        userId={user.id}
-        email={user.email}
-        googleName={user.googleAccountName}
+        email={email}
+        googleName={googleName}
       />
     </div>
   );

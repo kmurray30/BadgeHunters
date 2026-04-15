@@ -54,7 +54,7 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
   const [isSearchingActivate, setIsSearchingActivate] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ found: boolean; searchTerm: string | null; activateUsername: string | null; score: number | null; rankColor?: string | null; error: string | null } | null>(null);
-  const [pendingDeleteUser, setPendingDeleteUser] = useState<TestUser | null>(null);
+  const [pendingDeleteUser, setPendingDeleteUser] = useState<{ id: string; name: string; isTest: boolean } | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -192,6 +192,27 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
       }
     } catch {
       setTestUserError("Failed to delete test user");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleDeleteRealUser(userId: string) {
+    setIsLoading(true);
+    try {
+      const response = await fetch("/api/admin/real-users", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      if (response.ok) {
+        setRealUsers((previous) => previous.filter((user) => user.id !== userId));
+      } else {
+        const data = await response.json();
+        setTestUserError(data.error || "Failed to delete");
+      }
+    } catch {
+      setTestUserError("Failed to delete real user");
     } finally {
       setIsLoading(false);
     }
@@ -421,13 +442,15 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
                       <p className="py-4 text-center text-xs text-muted">No real users yet</p>
                     ) : (
                       realUsers.map((realUser) => (
-                        <button
+                        <div
                           key={realUser.id}
-                          onClick={() => handleAdminLogin(realUser.id)}
-                          disabled={isLoading}
-                          className="flex w-full items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-card-hover transition-colors disabled:opacity-50"
+                          className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-card-hover transition-colors"
                         >
-                          <div className="flex flex-1 items-center justify-between min-w-0">
+                          <button
+                            onClick={() => handleAdminLogin(realUser.id)}
+                            disabled={isLoading}
+                            className="flex flex-1 items-center justify-between min-w-0 disabled:opacity-50"
+                          >
                             <div className="flex items-center gap-2 min-w-0">
                               <span className="truncate text-foreground">
                                 {realUser.displayName}
@@ -450,8 +473,21 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
                                 </span>
                               )}
                             </div>
-                          </div>
-                        </button>
+                          </button>
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setPendingDeleteUser({ id: realUser.id, name: realUser.displayName, isTest: false });
+                            }}
+                            disabled={isLoading}
+                            className="shrink-0 rounded p-1.5 text-danger/60 hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
+                            title="Delete real user"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
                       ))
                     )}
                   </div>
@@ -500,7 +536,7 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
                           <button
                             onClick={(event) => {
                               event.stopPropagation();
-                              setPendingDeleteUser(testUser);
+                              setPendingDeleteUser({ id: testUser.id, name: testUser.activatePlayerName || testUser.realName || "Unknown", isTest: true });
                             }}
                             disabled={isLoading}
                             className="shrink-0 rounded p-1.5 text-danger/60 hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
@@ -572,17 +608,25 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
         )}
       </div>
 
-      {/* Delete test user confirmation */}
+      {/* Delete user confirmation */}
       {pendingDeleteUser && (
         <ConfirmDialog
-          title={`Delete "${pendingDeleteUser.activatePlayerName || pendingDeleteUser.realName}"?`}
-          description="This will permanently remove this test user and all their data. This cannot be undone."
+          title={`Delete "${pendingDeleteUser.name}"?`}
+          description={
+            pendingDeleteUser.isTest
+              ? "This will permanently remove this test user and all their data. This cannot be undone."
+              : "This will permanently remove this user, their sessions, badge data, and comments. They can re-create their account via Google OAuth. This cannot be undone."
+          }
           actions={[
             {
               label: "Delete",
               variant: "danger",
               onClick: () => {
-                handleDeleteTestUser(pendingDeleteUser.id);
+                if (pendingDeleteUser.isTest) {
+                  handleDeleteTestUser(pendingDeleteUser.id);
+                } else {
+                  handleDeleteRealUser(pendingDeleteUser.id);
+                }
                 setPendingDeleteUser(null);
               },
             },

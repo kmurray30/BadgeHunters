@@ -82,6 +82,10 @@ model User {
   googleAccountName   String?         @map("google_account_name")
   image               String?
   currentScore        Int             @default(0) @map("current_score")
+  activateRank        Int?            @map("activate_rank")
+  leaderboardPosition String?         @map("leaderboard_position")
+  levelsBeat          String?         @map("levels_beat")
+  coins               Int?            @map("coins")
   rankColor           String?         @map("rank_color")
   isTestUser          Boolean         @default(false) @map("is_test_user")
   isActive            Boolean         @default(true) @map("is_active")

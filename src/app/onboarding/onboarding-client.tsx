@@ -1,10 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
 
 interface Props {
-  userId: string;
   email: string | null;
   googleName: string | null;
 }
@@ -23,16 +21,21 @@ interface LookupResult {
 
 type Step = "searching_email" | "email_result" | "email_not_found" | "manual_search" | "searching_manual" | "confirm_account" | "enter_name";
 
-export function OnboardingClient({ userId, email, googleName }: Props) {
+export function OnboardingClient({ email, googleName }: Props) {
   const [step, setStep] = useState<Step>("searching_email");
   const [lookupResult, setLookupResult] = useState<LookupResult | null>(null);
   const [manualName, setManualName] = useState("");
   const [realName, setRealName] = useState(googleName ?? "");
   const [confirmedActivateName, setConfirmedActivateName] = useState("");
-  const [confirmedScore, setConfirmedScore] = useState<number | null>(null);
+  const [confirmedStats, setConfirmedStats] = useState<{
+    score: number | null;
+    rank: number | null;
+    leaderboardPosition: string | null;
+    levelsBeat: string | null;
+    coins: number | null;
+  }>({ score: null, rank: null, leaderboardPosition: null, levelsBeat: null, coins: null });
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const router = useRouter();
 
   const performLookup = useCallback(async (searchTerm: string): Promise<LookupResult | null> => {
     try {
@@ -93,9 +96,15 @@ export function OnboardingClient({ userId, email, googleName }: Props) {
     }
   }
 
-  function handleConfirmAccount(activateName: string, score: number | null) {
+  function handleConfirmAccount(activateName: string, result: LookupResult) {
     setConfirmedActivateName(activateName);
-    setConfirmedScore(score);
+    setConfirmedStats({
+      score: result.score,
+      rank: result.rank,
+      leaderboardPosition: result.leaderboardPosition,
+      levelsBeat: result.levelsBeat,
+      coins: result.coins,
+    });
     setStep("enter_name");
   }
 
@@ -120,16 +129,20 @@ export function OnboardingClient({ userId, email, googleName }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId,
           realName: realName.trim(),
           activatePlayerName: confirmedActivateName,
-          score: confirmedScore,
+          score: confirmedStats.score,
+          activateRank: confirmedStats.rank,
+          leaderboardPosition: confirmedStats.leaderboardPosition,
+          levelsBeat: confirmedStats.levelsBeat,
+          coins: confirmedStats.coins,
         }),
       });
 
       if (response.ok) {
-        router.push("/");
-        router.refresh();
+        // Hard reload so the server re-evaluates the JWT (jwt callback detects
+        // the newly-created User, upgrades the token, and clears pendingOnboarding)
+        window.location.href = "/";
       } else {
         const data = await response.json();
         setError(data.error || "Failed to complete setup");
@@ -156,7 +169,7 @@ export function OnboardingClient({ userId, email, googleName }: Props) {
           <div className="space-y-4 text-center">
             <SearchingSpinner />
             <div>
-              <p className="text-sm text-foreground">Looking up your email on Activate...</p>
+              <p className="text-sm text-foreground">Searching Activate by email...</p>
               <p className="mt-1 text-xs text-muted">{email}</p>
             </div>
           </div>
@@ -166,13 +179,13 @@ export function OnboardingClient({ userId, email, googleName }: Props) {
         {step === "email_result" && lookupResult?.found && (
           <div className="space-y-4">
             <div className="rounded-lg border border-success/30 bg-success/5 p-4 text-center">
-              <p className="text-xs text-muted">We found an Activate account linked to your email!</p>
+              <p className="text-xs text-muted">Found an Activate account linked to your email!</p>
               <p className="mt-2 text-lg font-bold text-foreground">{lookupResult.activateUsername}</p>
               <AccountStats result={lookupResult} />
             </div>
             <div className="space-y-2">
               <button
-                onClick={() => handleConfirmAccount(lookupResult.activateUsername!, lookupResult.score)}
+                onClick={() => handleConfirmAccount(lookupResult.activateUsername!, lookupResult)}
                 className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors"
               >
                 Yes, this is me
@@ -251,7 +264,7 @@ export function OnboardingClient({ userId, email, googleName }: Props) {
           <div className="space-y-4 text-center">
             <SearchingSpinner />
             <div>
-              <p className="text-sm text-foreground">Searching for your account on Activate...</p>
+              <p className="text-sm text-foreground">Searching Activate by username...</p>
               <p className="mt-1 text-xs text-muted">&quot;{manualName.trim()}&quot;</p>
             </div>
           </div>
@@ -261,13 +274,13 @@ export function OnboardingClient({ userId, email, googleName }: Props) {
         {step === "confirm_account" && lookupResult?.found && (
           <div className="space-y-4">
             <div className="rounded-lg border border-success/30 bg-success/5 p-4 text-center">
-              <p className="text-xs text-muted">Found your Activate account!</p>
+              <p className="text-xs text-muted">Found an Activate account matching that username!</p>
               <p className="mt-2 text-lg font-bold text-foreground">{lookupResult.activateUsername}</p>
               <AccountStats result={lookupResult} />
             </div>
             <div className="space-y-2">
               <button
-                onClick={() => handleConfirmAccount(lookupResult.activateUsername!, lookupResult.score)}
+                onClick={() => handleConfirmAccount(lookupResult.activateUsername!, lookupResult)}
                 className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors"
               >
                 Use this account
@@ -286,10 +299,24 @@ export function OnboardingClient({ userId, email, googleName }: Props) {
         {step === "enter_name" && (
           <div className="space-y-4">
             <div className="rounded-lg border border-success/30 bg-success/5 px-3 py-2 text-center text-xs text-success">
-              Linked to <span className="font-bold">{confirmedActivateName}</span>
-              {confirmedScore !== null && (
-                <span> — Score: {confirmedScore.toLocaleString()}</span>
-              )}
+              <p>Linked to <span className="font-bold">{confirmedActivateName}</span></p>
+              <div className="mt-1 flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 text-muted">
+                {confirmedStats.score !== null && (
+                  <span>Score: <span className="font-semibold text-foreground">{confirmedStats.score.toLocaleString()}</span></span>
+                )}
+                {confirmedStats.rank !== null && (
+                  <span>Rank: <span className="font-semibold text-foreground">{confirmedStats.rank}</span></span>
+                )}
+                {confirmedStats.leaderboardPosition && (
+                  <span>Leaderboard: <span className="font-semibold text-foreground">{confirmedStats.leaderboardPosition}</span></span>
+                )}
+                {confirmedStats.levelsBeat && (
+                  <span>Levels: <span className="font-semibold text-foreground">{confirmedStats.levelsBeat}</span></span>
+                )}
+                {confirmedStats.coins !== null && (
+                  <span>Coins: <span className="font-semibold text-foreground">{confirmedStats.coins}</span></span>
+                )}
+              </div>
             </div>
             <div>
               <label className="text-sm font-medium text-foreground">Your Name</label>
@@ -347,10 +374,10 @@ function SearchingSpinner() {
   );
 }
 
-/** Score/rank summary shown when an account is found */
+/** All Activate stats shown when an account is found */
 function AccountStats({ result }: { result: LookupResult }) {
   return (
-    <div className="mt-3 flex items-center justify-center gap-4 text-xs text-muted">
+    <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted">
       {result.score !== null && (
         <span>Score: <span className="font-semibold text-foreground">{result.score.toLocaleString()}</span></span>
       )}
@@ -362,6 +389,9 @@ function AccountStats({ result }: { result: LookupResult }) {
       )}
       {result.levelsBeat && (
         <span>Levels: <span className="font-semibold text-foreground">{result.levelsBeat}</span></span>
+      )}
+      {result.coins !== null && (
+        <span>Coins: <span className="font-semibold text-foreground">{result.coins}</span></span>
       )}
     </div>
   );

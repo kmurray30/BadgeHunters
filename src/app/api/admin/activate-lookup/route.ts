@@ -27,18 +27,24 @@ export async function GET(request: NextRequest) {
 
   const result = await lookupActivatePlayer(playerName.trim());
 
-  // If a userId is provided and the lookup succeeded, sync the score
+  // If a userId is provided and the lookup succeeded, sync all Activate stats
   if (userId && result.found && result.score !== null) {
     const rankColor = getRankColor(result.score);
+    const updateData: Record<string, unknown> = {
+      currentScore: result.score,
+      rankColor,
+      lastScoreSource: "scrape",
+      lastSyncedAt: new Date(),
+      lastGoodScoreAt: new Date(),
+    };
+    if (result.rank !== null) updateData.activateRank = result.rank;
+    if (result.leaderboardPosition) updateData.leaderboardPosition = result.leaderboardPosition;
+    if (result.levelsBeat) updateData.levelsBeat = result.levelsBeat;
+    if (result.coins !== null) updateData.coins = result.coins;
+
     await prisma.user.update({
       where: { id: userId },
-      data: {
-        currentScore: result.score,
-        rankColor,
-        lastScoreSource: "scrape",
-        lastSyncedAt: new Date(),
-        lastGoodScoreAt: new Date(),
-      },
+      data: updateData,
     });
     return NextResponse.json({ ...result, synced: true, rankColor });
   }

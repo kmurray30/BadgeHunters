@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { NavBar } from "@/components/nav-bar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,8 +15,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Badge Hunters",
   description: "Activate badge planner for our crew",
-  // Pin icons to this app only. Omitting `icons` can leave stale merged metadata in dev
-  // (cached) that still references old absolute URLs from a previous layout version.
   icons: {
     icon: [{ url: "/favicon.ico", type: "image/x-icon" }],
     shortcut: "/favicon.ico",
@@ -35,8 +32,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <NavBar />
-        <main className="flex-1">{children}</main>
+        {children}
       </body>
     </html>
   );

@@ -11,7 +11,8 @@ import { lookupActivatePlayer } from "@/lib/activate-lookup";
  */
 export async function GET(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id) {
+  // Accept both pending users (no id yet) and fully authenticated users
+  if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -11,6 +11,10 @@ interface UserData {
   activatePlayerName: string | null;
   displayNameMode: string;
   currentScore: number;
+  activateRank: number | null;
+  leaderboardPosition: string | null;
+  levelsBeat: string | null;
+  coins: number | null;
   rankColor: string;
   rankColorHex: string;
   role: string;
@@ -202,6 +206,21 @@ export function ProfileClient({ user, badgeStats, recentCompletions }: Props) {
           <p className="text-xs text-muted">Rank</p>
         </div>
       </div>
+
+      {/* Activate details */}
+      {(user.leaderboardPosition || user.levelsBeat || user.coins !== null) && (
+        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 rounded-xl border border-border bg-card px-4 py-3 text-xs text-muted">
+          {user.leaderboardPosition && (
+            <span>Leaderboard: <span className="font-semibold text-foreground">{user.leaderboardPosition}</span></span>
+          )}
+          {user.levelsBeat && (
+            <span>Levels Beat: <span className="font-semibold text-foreground">{user.levelsBeat}</span></span>
+          )}
+          {user.coins !== null && (
+            <span>Coins: <span className="font-semibold text-foreground">{user.coins}</span></span>
+          )}
+        </div>
+      )}
 
       {/* Badge progress */}
       <div className="rounded-xl border border-border bg-card p-6">

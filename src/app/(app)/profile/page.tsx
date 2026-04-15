@@ -41,6 +41,10 @@ export default async function ProfilePage() {
           rankColorHex,
           role: user.role,
           isTestUser: user.isTestUser,
+          activateRank: user.activateRank,
+          leaderboardPosition: user.leaderboardPosition,
+          levelsBeat: user.levelsBeat,
+          coins: user.coins,
           lastSyncedAt: user.lastSyncedAt?.toISOString() ?? null,
           lastScoreSource: user.lastScoreSource,
         }}
