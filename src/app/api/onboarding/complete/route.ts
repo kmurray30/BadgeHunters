@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     const token = await getToken({ req: request, secret: process.env.AUTH_SECRET });
 
     if (!token?.pendingEmail) {
-      return NextResponse.json({ error: "Session data missing — please sign in again" }, { status: 400 });
+      return NextResponse.json({ error: "Your session expired. Please refresh the page and try again." }, { status: 400 });
     }
 
     const email = token.pendingEmail as string;

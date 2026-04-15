@@ -13,10 +13,10 @@
       "maxDuration": 120
     },
     "src/app/api/admin/activate-lookup/route.ts": {
-      "maxDuration": 30
+      "maxDuration": 60
     },
     "src/app/api/onboarding/activate-lookup/route.ts": {
-      "maxDuration": 30
+      "maxDuration": 60
     }
   }
 }

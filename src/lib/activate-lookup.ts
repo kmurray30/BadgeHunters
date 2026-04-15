@@ -206,7 +206,7 @@ async function waitForCloudflare(page: Page): Promise<string | null> {
   try {
     await page.waitForFunction(
       `document.title !== "Just a moment..." && !document.title.includes("moment")`,
-      { timeout: 15000 },
+      { timeout: 30000 },
     );
     return null;
   } catch {
@@ -312,7 +312,7 @@ async function lookupByFormSearch(
   email: string,
 ): Promise<ActivateLookupResult> {
   const scoresPageUrl = "https://playactivate.com/scores";
-  await page.goto(scoresPageUrl, { waitUntil: "networkidle2", timeout: 25000 });
+  await page.goto(scoresPageUrl, { waitUntil: "networkidle2", timeout: 45000 });
 
   const cloudflareError = await waitForCloudflare(page);
   if (cloudflareError) {
@@ -347,7 +347,7 @@ async function lookupByFormSearch(
   // for either: the URL changing (player found) or "Unable to find" text.
   const found = await page.waitForFunction(
     `window.location.href !== "${startUrl}" || document.body.innerText.toLowerCase().includes("unable to find")`,
-    { timeout: 12000 },
+    { timeout: 20000 },
   ).catch(() => null);
 
   if (!found) {
