@@ -46,6 +46,12 @@ export function ProfileClient({ user, badgeStats, recentCompletions }: Props) {
   const [isPending, startTransition] = useTransition();
   const [isEditing, setIsEditing] = useState(false);
 
+  // Delete-account confirmation state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteInput, setDeleteInput] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const displayName =
     user.displayNameMode === "real_name"
       ? user.realName ?? user.activatePlayerName ?? "Unknown"
@@ -68,6 +74,55 @@ export function ProfileClient({ user, badgeStats, recentCompletions }: Props) {
     setPlayerNameDraft(user.activatePlayerName ?? "");
     setScoreDraft(String(user.currentScore));
     setIsEditing(false);
+  }
+
+  async function handleDeleteAccount() {
+    if (deleteInput.trim() !== user.activatePlayerName) {
+      setDeleteError("Username doesn't match — try again.");
+      return;
+    }
+    setIsDeleting(true);
+    setDeleteError("");
+    console.log("[delete] sending DELETE /api/profile/delete-account");
+    let response: Response;
+    try {
+      response = await fetch("/api/profile/delete-account", { method: "DELETE" });
+      console.log("[delete] response status:", response.status);
+    } catch (err) {
+      console.error("[delete] fetch threw:", err);
+      setDeleteError("Network error — could not reach server.");
+      setIsDeleting(false);
+      return;
+    }
+    if (response.ok) {
+      console.log("[delete] account deleted, signing out");
+      try {
+        // next-auth/react's signOut throws on the 307 redirect response,
+        // so call the endpoint directly and tell fetch not to follow the redirect.
+        const csrfResponse = await fetch("/api/auth/csrf");
+        const { csrfToken } = await csrfResponse.json();
+        await fetch("/api/auth/signout", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ csrfToken }),
+          redirect: "manual",
+        });
+        console.log("[delete] signout done, navigating");
+      } catch (err) {
+        console.error("[delete] signout error (non-fatal):", err);
+      }
+      window.location.href = "/login";
+    } else {
+      let data: Record<string, unknown> = {};
+      try {
+        data = await response.json();
+        console.log("[delete] error response body:", data);
+      } catch (err) {
+        console.error("[delete] failed to parse error response:", err);
+      }
+      setDeleteError((data.error as string) ?? "Something went wrong.");
+      setIsDeleting(false);
+    }
   }
 
   async function saveAll() {
@@ -272,6 +327,57 @@ export function ProfileClient({ user, badgeStats, recentCompletions }: Props) {
         Last synced: {user.lastSyncedAt ? new Date(user.lastSyncedAt).toLocaleString() : "Never"}
         {user.lastScoreSource && <span> · Source: {user.lastScoreSource}</span>}
       </p>
+
+      {/* Delete account */}
+      {!showDeleteConfirm ? (
+        <button
+          onClick={() => setShowDeleteConfirm(true)}
+          className="text-xs text-danger border border-danger/40 rounded-lg px-3 py-1.5 hover:bg-danger/10 transition-colors"
+        >
+          Delete account
+        </button>
+      ) : (
+        <div className="space-y-2 rounded-xl border border-border bg-card p-4">
+          <p className="text-sm font-medium text-foreground">Delete your account?</p>
+          <p className="text-xs text-muted">
+            Type your Activate username{" "}
+            <span className="font-semibold text-foreground">{user.activatePlayerName ?? "—"}</span>{" "}
+            to confirm. This cannot be undone.
+          </p>
+          <input
+            type="text"
+            value={deleteInput}
+            onChange={(event) => {
+              setDeleteInput(event.target.value);
+              setDeleteError("");
+            }}
+            onKeyDown={(event) => event.key === "Enter" && handleDeleteAccount()}
+            placeholder="Your Activate username..."
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-danger focus:outline-none"
+            autoFocus
+          />
+          {deleteError && <p className="text-xs text-danger">{deleteError}</p>}
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setShowDeleteConfirm(false);
+                setDeleteInput("");
+                setDeleteError("");
+              }}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDeleteAccount}
+              disabled={isDeleting || !deleteInput.trim()}
+              className="rounded-lg bg-danger px-3 py-1.5 text-xs font-medium text-white hover:bg-danger/80 transition-colors disabled:opacity-50"
+            >
+              {isDeleting ? "Deleting..." : "Permanently delete"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

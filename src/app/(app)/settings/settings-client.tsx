@@ -9,13 +9,10 @@ interface Props {
   activatePlayerName: string | null;
 }
 
-export function SettingsClient({ displayNameMode, realName, activatePlayerName }: Props) {
+export function SettingsClient({ displayNameMode, realName: _realName, activatePlayerName: _activatePlayerName }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [currentMode, setCurrentMode] = useState(displayNameMode);
-
-  const playerName = activatePlayerName ?? "—";
-  const real = realName ?? "—";
 
   async function handleToggle(mode: string) {
     if (mode === currentMode) return;
