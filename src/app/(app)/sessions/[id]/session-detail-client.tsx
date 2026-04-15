@@ -46,6 +46,7 @@ function buildGroupBadgeColumns(members: { id: string; displayName: string }[], 
     { label: "Description", width: "minmax(5rem,20rem)" },
     { label: "Difficulty", width: "5rem", align: "right" },
     { label: "# Players", width: "4rem", align: "right" },
+    { label: "Votes", width: "2.5rem", align: "center", vertical: true },
     { label: "Group %", width: "3.5rem", align: "center", vertical: true },
     ...sorted.map((member) => ({
       label: member.id === currentUserId ? "You" : member.displayName.slice(0, 4),
@@ -619,6 +620,31 @@ export function SessionDetailClient({
   const groupNormal = groupBadges.filter((entry) => !entry.selection.isPerVisit && !completedByMeIds.has(entry.selection.badgeId));
 
   const memberCount = session.members.length;
+
+  // Sort group entries: votes descending, then completion % descending
+  function sortGroupEntries(entries: typeof groupBadges): typeof groupBadges {
+    return [...entries].sort((entryA, entryB) => {
+      const votesDiff = entryB.selectors.length - entryA.selectors.length;
+      if (votesDiff !== 0) return votesDiff;
+      const completedA = session.members.filter((member) => {
+        const badge = badgeLookup.get(entryA.selection.badgeId);
+        return member.id === currentUserId
+          ? isCurrentUserCompleted(entryA.selection.badgeId)
+          : (badge?.memberCompletions ?? []).includes(member.id);
+      }).length;
+      const completedB = session.members.filter((member) => {
+        const badge = badgeLookup.get(entryB.selection.badgeId);
+        return member.id === currentUserId
+          ? isCurrentUserCompleted(entryB.selection.badgeId)
+          : (badge?.memberCompletions ?? []).includes(member.id);
+      }).length;
+      return completedB - completedA;
+    });
+  }
+
+  const sortedGroupPerVisit = sortGroupEntries(groupPerVisit);
+  const sortedGroupNormal = sortGroupEntries(groupNormal);
+  const sortedGroupCompletedByMe = sortGroupEntries(groupCompletedByMe);
   const groupBadgeColumns = useMemo(() => buildGroupBadgeColumns(session.members, currentUserId), [session.members, currentUserId]);
 
   // Members sorted with current user first, matching column order
@@ -1176,14 +1202,14 @@ export function SessionDetailClient({
             <BadgeTable
               columns={groupBadgeColumns}
               sections={[
-                ...(groupPerVisit.length > 0
-                  ? [{ label: "Visit-Specific Badges", rows: buildGroupBadgeRows(groupPerVisit, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds) } satisfies BadgeTableSection]
+                ...(sortedGroupPerVisit.length > 0
+                  ? [{ label: "Visit-Specific Badges", rows: buildGroupBadgeRows(sortedGroupPerVisit, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds) } satisfies BadgeTableSection]
                   : []),
-                ...(groupNormal.length > 0
-                  ? [{ label: "Standard Badges", rows: buildGroupBadgeRows(groupNormal, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds) } satisfies BadgeTableSection]
+                ...(sortedGroupNormal.length > 0
+                  ? [{ label: "Standard Badges", rows: buildGroupBadgeRows(sortedGroupNormal, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds) } satisfies BadgeTableSection]
                   : []),
-                ...(groupCompletedByMe.length > 0
-                  ? [{ label: "Completed By Me", rows: buildGroupBadgeRows(groupCompletedByMe, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds) } satisfies BadgeTableSection]
+                ...(sortedGroupCompletedByMe.length > 0
+                  ? [{ label: "Completed By Me", rows: buildGroupBadgeRows(sortedGroupCompletedByMe, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds) } satisfies BadgeTableSection]
                   : []),
               ]}
             />
@@ -1226,6 +1252,12 @@ function buildGroupBadgeRows(
       member.id === currentUserId ? currentUserCompleted : persistentCompletions.has(member.id)
     ).length;
     const completedPercent = members.length > 0 ? Math.round((completedCount / members.length) * 100) : 0;
+
+    const votesCell = (
+      <span className={`text-[11px] tabular-nums ${entry.selectors.length === members.length ? "text-accent font-semibold" : "text-muted"}`}>
+        {entry.selectors.length}
+      </span>
+    );
     const fractionCell = (
       <span className={`text-[11px] tabular-nums ${completedPercent === 100 ? "text-success font-semibold" : "text-muted"}`}>
         {completedPercent}%
@@ -1274,6 +1306,7 @@ function buildGroupBadgeRows(
         <span className="block min-w-0 text-xs text-muted">{entry.selection.badgeDescription}</span>,
         <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
         <span className={`min-w-0 text-center text-[11px] ${playerCountResolved.color}`}>{playerCountResolved.label}</span>,
+        votesCell,
         fractionCell,
         ...memberCells,
       ],
