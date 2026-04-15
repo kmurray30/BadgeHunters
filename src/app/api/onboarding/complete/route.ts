@@ -13,8 +13,8 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const { realName, activatePlayerName, score, activateRank, leaderboardPosition, levelsBeat, coins } = body;
 
-  if (!realName || !activatePlayerName) {
-    return NextResponse.json({ error: "Name and player name are required" }, { status: 400 });
+  if (!realName) {
+    return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
   // ─── Pending user path: create User + Account from session data ─────────
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       onboardingComplete: true,
       isTestUser: false,
       realName: realName.trim(),
-      activatePlayerName: activatePlayerName.trim(),
+      activatePlayerName: activatePlayerName ? activatePlayerName.trim() : null,
     };
 
     if (typeof score === "number" && score > 0) {
@@ -85,9 +85,11 @@ export async function POST(request: NextRequest) {
 
   const updateData: Record<string, unknown> = {
     realName: realName.trim(),
-    activatePlayerName: activatePlayerName.trim(),
     onboardingComplete: true,
   };
+  if (activatePlayerName) {
+    updateData.activatePlayerName = activatePlayerName.trim();
+  }
 
   if (typeof score === "number" && score > 0) {
     updateData.currentScore = score;

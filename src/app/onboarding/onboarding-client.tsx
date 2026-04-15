@@ -21,7 +21,7 @@ interface LookupResult {
   error: string | null;
 }
 
-type Step = "searching_email" | "email_result" | "email_not_found" | "manual_search" | "searching_manual" | "confirm_account" | "enter_name";
+type Step = "searching_email" | "email_result" | "email_not_found" | "manual_search" | "searching_manual" | "confirm_account" | "enter_name" | "skip_enter_name";
 
 export function OnboardingClient({ email, googleName, enableEmailLookup = false }: Props) {
   const [step, setStep] = useState<Step>("searching_email");
@@ -38,6 +38,7 @@ export function OnboardingClient({ email, googleName, enableEmailLookup = false 
   }>({ score: null, rank: null, leaderboardPosition: null, levelsBeat: null, coins: null });
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showSkipConfirm, setShowSkipConfirm] = useState(false);
 
   const performLookup = useCallback(async (searchTerm: string): Promise<LookupResult | null> => {
     try {
@@ -126,24 +127,24 @@ export function OnboardingClient({ email, googleName, enableEmailLookup = false 
     setIsSubmitting(true);
     setError("");
 
+    const isSkipped = step === "skip_enter_name";
+
     try {
       const response = await fetch("/api/onboarding/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           realName: realName.trim(),
-          activatePlayerName: confirmedActivateName,
-          score: confirmedStats.score,
-          activateRank: confirmedStats.rank,
-          leaderboardPosition: confirmedStats.leaderboardPosition,
-          levelsBeat: confirmedStats.levelsBeat,
-          coins: confirmedStats.coins,
+          activatePlayerName: isSkipped ? null : confirmedActivateName,
+          score: isSkipped ? null : confirmedStats.score,
+          activateRank: isSkipped ? null : confirmedStats.rank,
+          leaderboardPosition: isSkipped ? null : confirmedStats.leaderboardPosition,
+          levelsBeat: isSkipped ? null : confirmedStats.levelsBeat,
+          coins: isSkipped ? null : confirmedStats.coins,
         }),
       });
 
       if (response.ok) {
-        // Hard reload so the server re-evaluates the JWT (jwt callback detects
-        // the newly-created User, upgrades the token, and clears pendingOnboarding)
         window.location.href = "/";
       } else {
         const data = await response.json();
@@ -180,7 +181,6 @@ export function OnboardingClient({ email, googleName, enableEmailLookup = false 
         {/* Step 1b: Email search found a match */}
         {step === "email_result" && lookupResult?.found && (
           <div className="space-y-4">
-            {/* Success header */}
             <div className="text-center">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success/15">
                 <svg className="h-6 w-6 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -192,7 +192,6 @@ export function OnboardingClient({ email, googleName, enableEmailLookup = false 
               <p className="mt-0.5 text-xs text-muted">via your email</p>
             </div>
 
-            {/* Stat cards */}
             <AccountStats result={lookupResult} />
 
             <div className="space-y-2 pt-1">
@@ -237,7 +236,7 @@ export function OnboardingClient({ email, googleName, enableEmailLookup = false 
           </div>
         )}
 
-        {/* Step 2: Manual username search (or username/email if email lookup is enabled) */}
+        {/* Step 2: Manual username search */}
         {step === "manual_search" && (
           <div className="space-y-4">
             <div>
@@ -263,25 +262,23 @@ export function OnboardingClient({ email, googleName, enableEmailLookup = false 
               />
             </div>
             {error && <p className="text-xs text-danger">{error}</p>}
-            <div className="flex gap-2">
-              <button
-                onClick={() => { window.location.href = "/"; }}
-                className="rounded-lg border border-border px-4 py-2.5 text-sm text-muted hover:text-foreground transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleManualSearch}
-                disabled={!manualName.trim()}
-                className="flex-1 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
-              >
-                Search
-              </button>
-            </div>
+            <button
+              onClick={handleManualSearch}
+              disabled={!manualName.trim()}
+              className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+            >
+              Search
+            </button>
+            <button
+              onClick={() => setShowSkipConfirm(true)}
+              className="w-full text-xs text-muted hover:text-foreground transition-colors"
+            >
+              Skip for now
+            </button>
           </div>
         )}
 
-        {/* Step 2b: Searching by manual name (or email if enabled) */}
+        {/* Step 2b: Searching by manual name */}
         {step === "searching_manual" && (
           <div className="space-y-4 text-center">
             <SearchingSpinner />
@@ -329,7 +326,7 @@ export function OnboardingClient({ email, googleName, enableEmailLookup = false 
           </div>
         )}
 
-        {/* Step 4: Enter real name and finish */}
+        {/* Step 4: Enter real name and finish (with linked Activate account) */}
         {step === "enter_name" && (
           <div className="space-y-4">
             <div className="rounded-lg border border-success/30 bg-success/5 px-3 py-2 text-center text-xs text-success">
@@ -371,6 +368,41 @@ export function OnboardingClient({ email, googleName, enableEmailLookup = false 
               />
             </div>
             {error && <p className="text-xs text-danger">{error}</p>}
+            <button
+              onClick={handleCompleteOnboarding}
+              disabled={isSubmitting || !realName.trim()}
+              className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+            >
+              {isSubmitting ? "Setting up..." : "Complete Setup"}
+            </button>
+          </div>
+        )}
+
+        {/* Step 4b: Enter real name (skipped Activate linking) */}
+        {step === "skip_enter_name" && (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border bg-background/50 px-3 py-2 text-center text-xs text-muted">
+              Activate account not linked — you can link it later from your profile.
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground">Your Name</label>
+              <p className="mt-0.5 text-xs text-muted">
+                Your real name so your friends know who you are
+              </p>
+              <input
+                type="text"
+                value={realName}
+                onChange={(event) => {
+                  setRealName(event.target.value);
+                  setError("");
+                }}
+                onKeyDown={(event) => event.key === "Enter" && handleCompleteOnboarding()}
+                placeholder="Enter your real name..."
+                className="mt-2 w-full rounded-lg border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+                autoFocus
+              />
+            </div>
+            {error && <p className="text-xs text-danger">{error}</p>}
             <div className="flex gap-2">
               <button
                 onClick={() => {
@@ -392,6 +424,42 @@ export function OnboardingClient({ email, googleName, enableEmailLookup = false 
           </div>
         )}
       </div>
+
+      {/* Skip confirmation modal */}
+      {showSkipConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-lg space-y-4">
+            <h3 className="text-lg font-bold text-foreground">Skip account linking?</h3>
+            <p className="text-sm text-muted">
+              We recommend linking your Activate account if you can — it syncs your score,
+              rank, and leaderboard position automatically.
+            </p>
+            <p className="text-sm text-muted">
+              You can always link it later from your profile page.
+            </p>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => setShowSkipConfirm(false)}
+                className="flex-1 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-foreground hover:bg-card-hover transition-colors"
+              >
+                Go back
+              </button>
+              <button
+                onClick={() => {
+                  setShowSkipConfirm(false);
+                  setConfirmedActivateName("");
+                  setConfirmedStats({ score: null, rank: null, leaderboardPosition: null, levelsBeat: null, coins: null });
+                  setError("");
+                  setStep("skip_enter_name");
+                }}
+                className="flex-1 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors"
+              >
+                Skip for now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

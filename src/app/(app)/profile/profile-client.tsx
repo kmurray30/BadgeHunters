@@ -52,6 +52,12 @@ export function ProfileClient({ user, badgeStats, recentCompletions }: Props) {
   const [deleteError, setDeleteError] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Link Activate account state (for users who skipped during onboarding)
+  const [showLinkActivate, setShowLinkActivate] = useState(false);
+  const [linkPlayerName, setLinkPlayerName] = useState("");
+  const [linkError, setLinkError] = useState("");
+  const [isLinking, setIsLinking] = useState(false);
+
   const displayName =
     user.displayNameMode === "real_name"
       ? user.realName ?? user.activatePlayerName ?? "Unknown"
@@ -122,6 +128,35 @@ export function ProfileClient({ user, badgeStats, recentCompletions }: Props) {
       }
       setDeleteError((data.error as string) ?? "Something went wrong.");
       setIsDeleting(false);
+    }
+  }
+
+  async function handleLinkActivate() {
+    if (!linkPlayerName.trim()) return;
+
+    setIsLinking(true);
+    setLinkError("");
+
+    try {
+      const response = await fetch("/api/profile/link-activate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activatePlayerName: linkPlayerName.trim() }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setShowLinkActivate(false);
+        setLinkPlayerName("");
+        refresh();
+      } else {
+        setLinkError(data.error || "Failed to link account");
+      }
+    } catch {
+      setLinkError("Something went wrong");
+    } finally {
+      setIsLinking(false);
     }
   }
 
@@ -238,6 +273,69 @@ export function ProfileClient({ user, badgeStats, recentCompletions }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Link Activate account — only shown for users who skipped during onboarding */}
+      {!user.activatePlayerName && !showLinkActivate && (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-foreground">Link Activate Account</p>
+              <p className="mt-0.5 text-xs text-muted">
+                Sync your score, rank, and stats from playactivate.com
+              </p>
+            </div>
+            <button
+              onClick={() => setShowLinkActivate(true)}
+              className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover transition-colors"
+            >
+              Link
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!user.activatePlayerName && showLinkActivate && (
+        <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Link Activate Account</h3>
+            <p className="mt-0.5 text-xs text-muted">
+              Enter your player name from playactivate.com. This is a one-time link and cannot be undone.
+            </p>
+          </div>
+          <input
+            type="text"
+            value={linkPlayerName}
+            onChange={(event) => {
+              setLinkPlayerName(event.target.value);
+              setLinkError("");
+            }}
+            onKeyDown={(event) => event.key === "Enter" && handleLinkActivate()}
+            placeholder="Activate player name..."
+            className="w-full rounded-lg border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+            autoFocus
+          />
+          {linkError && <p className="text-xs text-danger">{linkError}</p>}
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setShowLinkActivate(false);
+                setLinkPlayerName("");
+                setLinkError("");
+              }}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleLinkActivate}
+              disabled={isLinking || !linkPlayerName.trim()}
+              className="flex-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+            >
+              {isLinking ? "Linking..." : "Link Account"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Score and rank */}
       <div className="grid grid-cols-2 gap-4">
