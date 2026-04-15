@@ -145,10 +145,7 @@ model Badge {
   description        String            @db.Text
   rooms              String[]          @default([])
   games              String[]          @default([])
-  playerCountBucket  PlayerCountBucket @default(none) @map("player_count_bucket")
   tags               String[]          @default([])
-  defaultDifficulty  Difficulty        @default(unknown) @map("default_difficulty")
-  durationLabel      String?           @map("duration_label")
   isPerVisit         Boolean           @default(false) @map("is_per_visit")
   isMetaBadge        Boolean           @default(false) @map("is_meta_badge")
   active             Boolean           @default(true)

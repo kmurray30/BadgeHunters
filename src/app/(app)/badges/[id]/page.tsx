@@ -121,8 +121,6 @@ export default async function BadgeDetailPage({ params }: Props) {
           description: badge.description,
           rooms: badge.rooms,
           games: badge.games,
-          playerCountBucket: badge.playerCountBucket,
-          defaultDifficulty: badge.defaultDifficulty,
           isPerVisit: badge.isPerVisit,
           isMetaBadge: badge.isMetaBadge,
         }}

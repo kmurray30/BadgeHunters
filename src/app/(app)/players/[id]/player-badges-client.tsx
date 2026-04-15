@@ -14,8 +14,6 @@ interface PlayerBadge {
   isPerVisit: boolean;
   isMetaBadge: boolean;
   completedAt: string | null;
-  defaultDifficulty: string;
-  playerCountBucket: string;
   /** Viewed player's personal ratings — used for Difficulty/Players columns */
   playerDifficulty: string | null;
   playerPlayerCount: string | null;
@@ -54,7 +52,7 @@ const DIFFICULTY_OPTIONS = [
 const PLAYER_COUNT_SORT: Record<string, number> = { lte_3: 1, none: 2, gte_5: 3 };
 
 function getDifficultyDisplay(badge: PlayerBadge): { label: string; color: string; sortKey: number } {
-  // Use the viewed player's personal rating first, then community, then badge default
+  // Use the viewed player's personal rating first, then community average
   const personalDiff = badge.playerDifficulty;
   if (personalDiff && personalDiff !== "unknown") {
     const option = DIFFICULTY_OPTIONS.find((o) => o.value === personalDiff);
@@ -63,9 +61,6 @@ function getDifficultyDisplay(badge: PlayerBadge): { label: string; color: strin
   const votes: number[] = badge.communityDifficultyVotes
     .filter((v) => v && v !== "unknown" && DIFFICULTY_MAP[v] !== undefined)
     .map((v) => DIFFICULTY_MAP[v]);
-  if (badge.defaultDifficulty !== "unknown" && DIFFICULTY_MAP[badge.defaultDifficulty] !== undefined) {
-    votes.push(DIFFICULTY_MAP[badge.defaultDifficulty]);
-  }
   if (votes.length > 0) {
     const mean = votes.reduce((sum, v) => sum + v, 0) / votes.length;
     const rounded = Math.max(1, Math.min(4, Math.round(mean)));
@@ -73,12 +68,11 @@ function getDifficultyDisplay(badge: PlayerBadge): { label: string; color: strin
     const option = DIFFICULTY_OPTIONS.find((o) => o.value === key);
     return { ...(option ?? { label: "???", color: "text-muted" }), sortKey: rounded };
   }
-  const option = DIFFICULTY_OPTIONS.find((o) => o.value === badge.defaultDifficulty);
-  return { ...(option ?? { label: "???", color: "text-muted" }), sortKey: DIFFICULTY_MAP[badge.defaultDifficulty] ?? 99 };
+  return { label: "???", color: "text-muted", sortKey: 99 };
 }
 
 function getPlayerCountDisplay(badge: PlayerBadge): { label: string; color: string; sortKey: number } {
-  // Use the viewed player's personal rating first, then community, then badge default
+  // Use the viewed player's personal rating first, then community mode
   const personal = badge.playerPlayerCount;
   if (personal && personal !== "none") {
     return {
@@ -92,7 +86,8 @@ function getPlayerCountDisplay(badge: PlayerBadge): { label: string; color: stri
     if (vote !== "none") counts[vote] = (counts[vote] ?? 0) + 1;
   }
   const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  const winner = entries[0]?.[0] ?? badge.playerCountBucket;
+  const winner = entries[0]?.[0];
+  if (!winner) return { label: "Any", color: "text-muted", sortKey: 2 };
   return {
     label: winner === "lte_3" ? "≤3" : winner === "gte_5" ? "5+" : "Any",
     color: winner === "lte_3" ? "text-blue-400" : winner === "gte_5" ? "text-orange-400" : "text-muted",

@@ -24,12 +24,11 @@ export function difficultyLabel(difficulty: Difficulty | null | undefined): stri
 }
 
 /**
- * Compute the community average difficulty from user votes and a default.
+ * Compute the community average difficulty from user votes only.
  * Returns null if no valid votes exist.
  */
 export function computeAverageDifficulty(
   userVotes: (Difficulty | null)[],
-  defaultDifficulty: Difficulty
 ): Difficulty | null {
   const numericVotes: number[] = [];
 
@@ -37,11 +36,6 @@ export function computeAverageDifficulty(
     if (vote && vote !== "unknown" && DIFFICULTY_NUMERIC[vote] !== undefined) {
       numericVotes.push(DIFFICULTY_NUMERIC[vote]);
     }
-  }
-
-  // Include default difficulty as one vote if it's not unknown
-  if (defaultDifficulty !== "unknown" && DIFFICULTY_NUMERIC[defaultDifficulty] !== undefined) {
-    numericVotes.push(DIFFICULTY_NUMERIC[defaultDifficulty]);
   }
 
   if (numericVotes.length === 0) return null;
@@ -53,23 +47,23 @@ export function computeAverageDifficulty(
 }
 
 /**
- * Get displayed difficulty for a badge, respecting precedence from Spec §10.
+ * Get displayed difficulty for a badge.
+ * Personal vote wins; falls back to community average; returns "unknown" if no data.
  */
 export function getDisplayedDifficulty(
   personalDifficulty: Difficulty | null | undefined,
   communityVotes: (Difficulty | null)[],
-  defaultDifficulty: Difficulty
 ): Difficulty {
   if (personalDifficulty && personalDifficulty !== "unknown") {
     return personalDifficulty;
   }
 
-  const communityAverage = computeAverageDifficulty(communityVotes, defaultDifficulty);
+  const communityAverage = computeAverageDifficulty(communityVotes);
   if (communityAverage) {
     return communityAverage;
   }
 
-  return defaultDifficulty;
+  return "unknown";
 }
 
 /** Sort order for difficulty ascending — unknown always last */

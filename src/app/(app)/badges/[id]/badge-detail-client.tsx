@@ -35,8 +35,6 @@ interface BadgeInfo {
   description: string;
   rooms: string[];
   games: string[];
-  playerCountBucket: string;
-  defaultDifficulty: string;
   isPerVisit: boolean;
   isMetaBadge: boolean;
 }
@@ -92,7 +90,7 @@ interface Props {
   metaRules: MetaRule[];
 }
 
-function computeCommunityAverage(votes: string[], defaultDifficulty: string): string {
+function computeCommunityAverage(votes: string[]): string {
   const numericMap: Record<string, number> = { easy: 1, medium: 2, hard: 3, impossible: 4 };
   const numericVotes: number[] = [];
 
@@ -100,9 +98,6 @@ function computeCommunityAverage(votes: string[], defaultDifficulty: string): st
     if (numericMap[vote] !== undefined) {
       numericVotes.push(numericMap[vote]);
     }
-  }
-  if (defaultDifficulty !== "unknown" && numericMap[defaultDifficulty] !== undefined) {
-    numericVotes.push(numericMap[defaultDifficulty]);
   }
 
   if (numericVotes.length === 0) return "???";
@@ -113,12 +108,11 @@ function computeCommunityAverage(votes: string[], defaultDifficulty: string): st
   return reverseMap[rounded];
 }
 
-function computeCommunityPlayerCount(votes: string[] | undefined, defaultBucket: string): string {
+function computeCommunityPlayerCount(votes: string[] | undefined): string {
   const counts: Record<string, number> = {};
   for (const vote of (votes ?? [])) {
     if (vote !== "none") counts[vote] = (counts[vote] ?? 0) + 1;
   }
-  if (defaultBucket !== "none") counts[defaultBucket] = (counts[defaultBucket] ?? 0) + 1;
 
   const entries = Object.entries(counts);
   if (entries.length === 0) return "Any";
@@ -146,9 +140,9 @@ export function BadgeDetailClient({
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [isEditingNotes, setIsEditingNotes] = useState(false);
 
-  const communityAverageLabel = computeCommunityAverage(communityDifficultyVotes, badge.defaultDifficulty);
-  const communityPlayerCountLabel = computeCommunityPlayerCount(communityPlayerCountVotes, badge.playerCountBucket);
-  const playerCountVoteCount = (communityPlayerCountVotes ?? []).filter((vote) => vote !== "none").length + (badge.playerCountBucket !== "none" ? 1 : 0);
+  const communityAverageLabel = computeCommunityAverage(communityDifficultyVotes);
+  const communityPlayerCountLabel = computeCommunityPlayerCount(communityPlayerCountVotes);
+  const playerCountVoteCount = (communityPlayerCountVotes ?? []).filter((vote) => vote !== "none").length;
 
   async function handleSaveNotes() {
     setIsSavingNotes(true);
@@ -194,12 +188,6 @@ export function BadgeDetailClient({
           )}
           {badge.isMetaBadge && (
             <span className="rounded-full bg-purple-500/20 px-3 py-1 text-xs font-medium text-purple-400">Meta badge</span>
-          )}
-          {badge.playerCountBucket === "lte_3" && (
-            <span className="rounded-full bg-blue-500/20 px-3 py-1 text-xs font-medium text-blue-400">Best with ≤3 players</span>
-          )}
-          {badge.playerCountBucket === "gte_5" && (
-            <span className="rounded-full bg-orange-500/20 px-3 py-1 text-xs font-medium text-orange-400">Best with 5+ players</span>
           )}
           {badge.rooms.map((room) => (
             <span key={room} className="rounded-full bg-border px-3 py-1 text-xs text-muted">{room}</span>

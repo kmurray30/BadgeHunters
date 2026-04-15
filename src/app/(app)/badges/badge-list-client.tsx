@@ -19,9 +19,6 @@ interface BadgeData {
   description: string;
   rooms: string[];
   games: string[];
-  playerCountBucket: string;
-
-  defaultDifficulty: string;
   isPerVisit: boolean;
   isMetaBadge: boolean;
   completedByCurrentUser: boolean;
@@ -83,9 +80,6 @@ function getDifficultyDisplay(badge: BadgeData): { label: string; color: string;
       numericVotes.push(numericMap[vote]);
     }
   }
-  if (badge.defaultDifficulty !== "unknown" && numericMap[badge.defaultDifficulty] !== undefined) {
-    numericVotes.push(numericMap[badge.defaultDifficulty]);
-  }
 
   if (numericVotes.length > 0) {
     const mean = numericVotes.reduce((sum, value) => sum + value, 0) / numericVotes.length;
@@ -96,8 +90,7 @@ function getDifficultyDisplay(badge: BadgeData): { label: string; color: string;
     return { ...(option ?? { label: "???", color: "text-muted" }), sortKey: rounded };
   }
 
-  const option = DIFFICULTY_OPTIONS.find((diffOption) => diffOption.value === badge.defaultDifficulty);
-  return { ...(option ?? { label: "???", color: "text-muted" }), sortKey: numericMap[badge.defaultDifficulty] ?? 99 };
+  return { label: "???", color: "text-muted", sortKey: 99 };
 }
 
 const PLAYER_COUNT_SORT: Record<string, number> = { lte_3: 1, none: 2, gte_5: 3 };
@@ -109,10 +102,10 @@ function playerCountLabel(bucket: string): string {
 }
 
 /**
- * Resolve the displayed player count bucket with the same precedence as difficulty:
+ * Resolve the displayed player count bucket:
  *   1. Current user's personal setting (always wins)
  *   2. Community mode (most common vote among all users)
- *   3. Badge default from the seed data
+ *   3. "Any" if no votes at all
  */
 function getPlayerCountDisplay(badge: BadgeData): { bucket: string; label: string; color: string; sortKey: number } {
   const personal = badge.currentUserPlayerCount;
@@ -143,13 +136,7 @@ function getPlayerCountDisplay(badge: BadgeData): { bucket: string; label: strin
     }
   }
 
-  const fallback = badge.playerCountBucket;
-  return {
-    bucket: fallback,
-    label: playerCountLabel(fallback),
-    color: fallback === "lte_3" ? "text-blue-400" : fallback === "gte_5" ? "text-orange-400" : "text-muted",
-    sortKey: PLAYER_COUNT_SORT[fallback] ?? 2,
-  };
+  return { bucket: "none", label: "Any", color: "text-muted", sortKey: 2 };
 }
 
 export function BadgeListClient({ badges, currentUserId, currentUserRole, allUsers }: Props) {

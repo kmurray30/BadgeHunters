@@ -164,8 +164,6 @@ export async function updateBadgeCatalogField(
   const allowedFields = [
     "rooms",
     "games",
-    "playerCountBucket",
-    "defaultDifficulty",
     "isPerVisit",
     "isMetaBadge",
     "active",

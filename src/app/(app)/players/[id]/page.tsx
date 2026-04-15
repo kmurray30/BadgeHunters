@@ -42,8 +42,6 @@ export default async function PlayerDetailPage({ params, searchParams }: Props) 
           badgeNumber: true,
           name: true,
           description: true,
-          defaultDifficulty: true,
-          playerCountBucket: true,
           isPerVisit: true,
           isMetaBadge: true,
           userStatuses: {
@@ -168,8 +166,6 @@ export default async function PlayerDetailPage({ params, searchParams }: Props) 
               isPerVisit: status.badge.isPerVisit,
               isMetaBadge: status.badge.isMetaBadge,
               completedAt: status.completedAt?.toISOString() ?? null,
-              defaultDifficulty: status.badge.defaultDifficulty,
-              playerCountBucket: status.badge.playerCountBucket,
               playerDifficulty: playerStatus?.personalDifficulty ?? null,
               playerPlayerCount: playerStatus?.idealPlayerCountBucket ?? null,
               currentUserDifficulty: currentUserStatus?.personalDifficulty ?? null,

@@ -181,8 +181,6 @@ export default async function SessionDetailPage({ params }: Props) {
     badgeNumber: badge.badgeNumber,
     name: badge.name,
     description: badge.description,
-    playerCountBucket: badge.playerCountBucket,
-    defaultDifficulty: badge.defaultDifficulty,
     isPerVisit: badge.isPerVisit,
     isMetaBadge: badge.isMetaBadge,
     rooms: badge.rooms,

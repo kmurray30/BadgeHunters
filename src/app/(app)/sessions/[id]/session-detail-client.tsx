@@ -101,8 +101,6 @@ interface BadgeData {
   badgeNumber: number;
   name: string;
   description: string;
-  playerCountBucket: string;
-  defaultDifficulty: string;
   isPerVisit: boolean;
   isMetaBadge: boolean;
   rooms: string[];
@@ -279,12 +277,17 @@ function resolvePlayerCount(badge: BadgeData): { bucket: string; label: string; 
     }
   }
 
-  const fallback = badge.playerCountBucket;
-  return {
-    bucket: fallback,
-    label: playerCountLabel(fallback),
-    color: fallback === "lte_3" ? "text-blue-400" : fallback === "gte_5" ? "text-orange-400" : "text-muted",
-  };
+  return { bucket: "none", label: "Any", color: "text-muted" };
+}
+
+function resolveDifficulty(communityVotes: string[]): string {
+  const numericVotes: number[] = communityVotes
+    .filter((v) => v && v !== "unknown" && DIFFICULTY_MAP[v] !== undefined)
+    .map((v) => DIFFICULTY_MAP[v]);
+  if (numericVotes.length === 0) return "unknown";
+  const mean = numericVotes.reduce((sum, v) => sum + v, 0) / numericVotes.length;
+  const rounded = Math.max(1, Math.min(4, Math.round(mean)));
+  return (["", "easy", "medium", "hard", "impossible"] as const)[rounded];
 }
 
 export function SessionDetailClient({
@@ -511,7 +514,7 @@ export function SessionDetailClient({
         const totalUncompletedCount = allRealMemberIds.filter(
           (memberId) => !badge.memberCompletions.includes(memberId)
         ).length;
-        const difficultySortKey = DIFFICULTY_MAP[badge.defaultDifficulty] ?? 99;
+        const difficultySortKey = DIFFICULTY_MAP[resolveDifficulty(badge.communityVotes)] ?? 99;
         return { ...badge, totalUncompletedCount, difficultySortKey };
       });
 
@@ -530,7 +533,7 @@ export function SessionDetailClient({
     if (completionVal === "uncompleted") list = list.filter((badge) => !badge.memberCompletions.includes(currentUserId));
     else if (completionVal === "completed") list = list.filter((badge) => badge.memberCompletions.includes(currentUserId));
 
-    if (difficultyVal !== "all") list = list.filter((badge) => badge.defaultDifficulty === difficultyVal);
+    if (difficultyVal !== "all") list = list.filter((badge) => resolveDifficulty(badge.communityVotes) === difficultyVal);
     if (playersVal !== "all") list = list.filter((badge) => resolvePlayerCount(badge).bucket === playersVal);
     if (typeVal === "per_visit") list = list.filter((badge) => badge.isPerVisit);
     else if (typeVal === "normal") list = list.filter((badge) => !badge.isPerVisit);
@@ -1091,7 +1094,7 @@ export function SessionDetailClient({
               const buildRow = (badge: typeof yourBadgesList[number]): BadgeTableRow => {
                 const isSelected = userSelectedBadgeIds.has(badge.id);
                 const isCompleted = badge.memberCompletions.includes(currentUserId);
-                const diffInfo = DIFFICULTY_LABELS[badge.defaultDifficulty] ?? DIFFICULTY_LABELS.unknown;
+                const diffInfo = DIFFICULTY_LABELS[resolveDifficulty(badge.communityVotes)] ?? DIFFICULTY_LABELS.unknown;
                 const blurb = metaRuleBlurbs[badge.id];
                 const rowClassName = isCompleted
                   ? "bg-completed hover:bg-completed-hover"
@@ -1187,7 +1190,7 @@ function buildGroupBadgeRows(
 ): BadgeTableRow[] {
   return entries.map((entry) => {
     const fullBadge = badgeLookup.get(entry.selection.badgeId);
-    const diffKey = fullBadge?.defaultDifficulty ?? "unknown";
+    const diffKey = resolveDifficulty(fullBadge?.communityVotes ?? []);
     const diffInfo = DIFFICULTY_LABELS[diffKey] ?? DIFFICULTY_LABELS.unknown;
     const playerCountResolved = fullBadge ? resolvePlayerCount(fullBadge) : { bucket: "none", label: "Any", color: "text-muted" };
     const persistentCompletions = new Set(fullBadge?.memberCompletions ?? []);
