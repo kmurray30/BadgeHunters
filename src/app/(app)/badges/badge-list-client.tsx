@@ -5,7 +5,8 @@ import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type ColumnHeader } from
 import { MultiFilter, type ActiveFilter, type FilterDefinition } from "@/components/multi-filter";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useOptimistic, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 interface BadgeUser {
   id: string;
@@ -139,7 +140,73 @@ function getPlayerCountDisplay(badge: BadgeData): { bucket: string; label: strin
   return { bucket: "none", label: "Any", color: "text-muted", sortKey: 2 };
 }
 
+type OptimisticAction =
+  | { type: "toggleCompletion"; badgeId: string }
+  | { type: "toggleTodo"; badgeId: string };
+
+function applyOptimisticOverrides(
+  serverBadges: BadgeData[],
+  overrides: Map<string, { completedByCurrentUser: boolean; isTodoByCurrentUser: boolean }>,
+): BadgeData[] {
+  if (overrides.size === 0) return serverBadges;
+  return serverBadges.map((badge) => {
+    const override = overrides.get(badge.id);
+    return override ? { ...badge, ...override } : badge;
+  });
+}
+
 export function BadgeListClient({ badges, currentUserId, currentUserRole, allUsers }: Props) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+
+  // Optimistic overrides keyed by badge id
+  const [optimisticOverrides, applyOptimisticAction] = useOptimistic(
+    new Map<string, { completedByCurrentUser: boolean; isTodoByCurrentUser: boolean }>(),
+    (currentOverrides: Map<string, { completedByCurrentUser: boolean; isTodoByCurrentUser: boolean }>, action: OptimisticAction) => {
+      const next = new Map(currentOverrides);
+      const badgeServer = badges.find((badge) => badge.id === action.badgeId);
+      const existing = next.get(action.badgeId);
+      const currentCompleted = existing?.completedByCurrentUser ?? badgeServer?.completedByCurrentUser ?? false;
+      const currentTodo = existing?.isTodoByCurrentUser ?? badgeServer?.isTodoByCurrentUser ?? false;
+
+      if (action.type === "toggleCompletion") {
+        const newCompleted = !currentCompleted;
+        next.set(action.badgeId, {
+          completedByCurrentUser: newCompleted,
+          isTodoByCurrentUser: newCompleted ? false : currentTodo,
+        });
+      } else {
+        if (currentCompleted) return currentOverrides;
+        next.set(action.badgeId, {
+          completedByCurrentUser: currentCompleted,
+          isTodoByCurrentUser: !currentTodo,
+        });
+      }
+      return next;
+    },
+  );
+
+  const optimisticBadges = useMemo(
+    () => applyOptimisticOverrides(badges, optimisticOverrides),
+    [badges, optimisticOverrides],
+  );
+
+  const handleToggleCompletion = useCallback((badgeId: string) => {
+    startTransition(async () => {
+      applyOptimisticAction({ type: "toggleCompletion", badgeId });
+      await toggleBadgeCompletion(badgeId);
+      router.refresh();
+    });
+  }, [applyOptimisticAction, startTransition, router]);
+
+  const handleToggleTodo = useCallback((badgeId: string) => {
+    startTransition(async () => {
+      applyOptimisticAction({ type: "toggleTodo", badgeId });
+      await toggleBadgeTodo(badgeId);
+      router.refresh();
+    });
+  }, [applyOptimisticAction, startTransition, router]);
+
   const [searchQuery, setSearchQuery] = usePersistedState("bh:badges:search", "");
   const [activeFilters, setActiveFilters] = usePersistedState<ActiveFilter[]>("bh:badges:filters", [
     { key: "completion", value: "not_completed" },
@@ -230,7 +297,7 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
     const completedByVal = getFilterVal("completedBy");
     const notDoneByVal = getFilterVal("notDoneBy");
 
-    const filtered = badges.filter((badge) => {
+    const filtered = optimisticBadges.filter((badge) => {
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         if (
@@ -266,9 +333,9 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
     });
 
     return filtered;
-  }, [badges, searchQuery, activeFilters, sortCriteria]);
+  }, [optimisticBadges, searchQuery, activeFilters, sortCriteria]);
 
-  const completionCount = badges.filter((badge) => badge.completedByCurrentUser).length;
+  const completionCount = optimisticBadges.filter((badge) => badge.completedByCurrentUser).length;
 
   return (
     <div>
@@ -340,7 +407,7 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
               <BadgeCheckbox
                 checked={badge.isTodoByCurrentUser}
                 title={badge.completedByCurrentUser ? "Already completed — can't mark To Do" : badge.isTodoByCurrentUser ? "Remove from To Do" : "Mark as To Do"}
-                onClick={() => toggleBadgeTodo(badge.id)}
+                onClick={() => handleToggleTodo(badge.id)}
                 preventLinkNavigation
                 disabled={badge.completedByCurrentUser}
                 checkedClassName="border-amber-500 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
@@ -350,7 +417,7 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
               <BadgeCheckbox
                 checked={badge.completedByCurrentUser}
                 title={badge.completedByCurrentUser ? "Mark incomplete" : "Mark complete"}
-                onClick={() => toggleBadgeCompletion(badge.id)}
+                onClick={() => handleToggleCompletion(badge.id)}
                 preventLinkNavigation
               />,
             ],
