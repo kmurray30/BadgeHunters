@@ -25,7 +25,11 @@ export async function POST(request: NextRequest) {
     const token = await getToken({ req: request, secret: process.env.AUTH_SECRET });
 
     if (!token?.pendingEmail) {
-      return NextResponse.json({ error: "Your session expired. Please refresh the page and try again." }, { status: 400 });
+      // Temporary diagnostic — shown in the UI error message to debug
+      // why getToken() isn't returning the pending data on production.
+      return NextResponse.json({
+        error: `Session debug — pendingOnboarding: ${session.user.pendingOnboarding}, tokenIsNull: ${token === null}, tokenKeys: [${token ? Object.keys(token).join(", ") : ""}]`,
+      }, { status: 400 });
     }
 
     const email = token.pendingEmail as string;
