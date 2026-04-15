@@ -5,13 +5,15 @@
  * The site is behind Cloudflare's managed challenge, so a real browser
  * that can execute JS is required.
  *
- * Performance: blocks images/CSS/fonts (we only need text), keeps a warm
- * browser between requests, and closes it after 2 minutes of inactivity.
- * Typical lookup time: ~2s.
+ * Environment handling (in priority order):
+ *   1. BROWSERLESS_TOKEN set  → connect to Browserless.io via WebSocket
+ *      (recommended for production — passes Cloudflare from non-DC IPs)
+ *   2. Vercel/Lambda          → launch @sparticuz/chromium locally
+ *   3. Local dev              → auto-detect Chrome or use CHROMIUM_PATH
  *
- * Environment handling:
- *   - Vercel/Lambda: uses @sparticuz/chromium (compressed Linux binary)
- *   - Local dev:     auto-detects Chrome or uses CHROMIUM_PATH env var
+ * When using Browserless, each invocation opens a fresh connection —
+ * there's no warm-browser pooling since serverless functions don't
+ * share memory across invocations anyway. Local dev still pools.
  */
 
 import puppeteer, { type Browser, type Page, type ElementHandle } from "puppeteer-core";
@@ -67,9 +69,10 @@ const NOT_FOUND_RESULT: Omit<ActivateLookupResult, "searchTerm" | "error"> = {
   coins: null,
 };
 
-// ─── Warm browser singleton ─────────────────────────────────────────────────
+// ─── Browser lifecycle ──────────────────────────────────────────────────────
 
-let browserInstance: Browser | null = null;
+// Local dev warm-browser pool (irrelevant for Browserless / serverless)
+let localBrowserInstance: Browser | null = null;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
 function resetIdleTimer() {
@@ -80,27 +83,48 @@ function resetIdleTimer() {
 }
 
 async function teardownBrowser() {
-  if (browserInstance) {
-    await browserInstance.close().catch(() => {});
-    browserInstance = null;
+  if (localBrowserInstance) {
+    await localBrowserInstance.close().catch(() => {});
+    localBrowserInstance = null;
   }
 }
 
-async function getOrLaunchBrowser(): Promise<Browser> {
-  if (browserInstance) {
+function useBrowserless(): boolean {
+  return !!process.env.BROWSERLESS_TOKEN;
+}
+
+/**
+ * Connect to Browserless.io via WebSocket. Each call creates a fresh
+ * browser session — Browserless manages the actual Chrome lifecycle on
+ * their infrastructure with IPs that pass Cloudflare challenges.
+ */
+async function connectBrowserless(): Promise<Browser> {
+  const browserlessToken = process.env.BROWSERLESS_TOKEN!;
+  return puppeteer.connect({
+    browserWSEndpoint: `wss://production-sfo.browserless.io?token=${browserlessToken}`,
+  });
+}
+
+/**
+ * Launch a local Chromium instance. Used for local dev and as a fallback
+ * when BROWSERLESS_TOKEN is not set. Maintains a warm singleton to avoid
+ * repeated cold starts during development.
+ */
+async function launchLocalBrowser(): Promise<Browser> {
+  if (localBrowserInstance) {
     try {
-      await browserInstance.version();
+      await localBrowserInstance.version();
       resetIdleTimer();
-      return browserInstance;
+      return localBrowserInstance;
     } catch {
-      browserInstance = null;
+      localBrowserInstance = null;
     }
   }
 
   const executablePath = await getChromiumExecutablePath();
   const launchArgs = await getLaunchArgs();
 
-  browserInstance = await puppeteer.launch({
+  localBrowserInstance = await puppeteer.launch({
     args: launchArgs,
     defaultViewport: { width: 1440, height: 900 },
     executablePath,
@@ -108,7 +132,14 @@ async function getOrLaunchBrowser(): Promise<Browser> {
   });
 
   resetIdleTimer();
-  return browserInstance;
+  return localBrowserInstance;
+}
+
+async function getOrLaunchBrowser(): Promise<Browser> {
+  if (useBrowserless()) {
+    return connectBrowserless();
+  }
+  return launchLocalBrowser();
 }
 
 /**
@@ -396,9 +427,11 @@ export async function lookupActivatePlayer(
   }
 
   let page: Page | null = null;
+  let browser: Browser | null = null;
   const isEmail = isEmailSearch(trimmedName);
+  const isBrowserless = useBrowserless();
   try {
-    const browser = await getOrLaunchBrowser();
+    browser = await getOrLaunchBrowser();
     page = await createLightweightPage(
       browser,
       isEmail ? BLOCKED_RESOURCE_TYPES_LIGHT : BLOCKED_RESOURCE_TYPES_AGGRESSIVE,
@@ -410,11 +443,20 @@ export async function lookupActivatePlayer(
     return await lookupByDirectUrl(page, trimmedName, locationId, locationSlug);
   } catch (launchError) {
     const errorMessage = launchError instanceof Error ? launchError.message : String(launchError);
-    await teardownBrowser();
+    if (isBrowserless) {
+      browser?.disconnect();
+    } else {
+      await teardownBrowser();
+    }
     return { ...NOT_FOUND_RESULT, searchTerm: trimmedName, error: `Browser lookup failed: ${errorMessage}` };
   } finally {
     if (page) {
       await page.close().catch(() => {});
+    }
+    // Browserless: disconnect after each request to free remote resources.
+    // Local: keep the warm singleton alive for the idle timeout.
+    if (isBrowserless && browser) {
+      browser.disconnect();
     }
   }
 }
