@@ -10,6 +10,23 @@ declare module "next-auth" {
       /** True while the user has authenticated via OAuth but hasn't yet completed
        *  onboarding. No DB User record exists yet in this state. */
       pendingOnboarding: boolean;
+      /** Pending onboarding fields — only populated when pendingOnboarding is true.
+       *  Passed through the session so the complete route doesn't need getToken(). */
+      pendingEmail?: string;
+      pendingName?: string | null;
+      pendingImage?: string | null;
+      pendingAccount?: {
+        type: string;
+        provider: string;
+        providerAccountId: string;
+        access_token?: string | null;
+        expires_at?: number | null;
+        id_token?: string | null;
+        refresh_token?: string | null;
+        token_type?: string | null;
+        scope?: string | null;
+        session_state?: string | null;
+      } | null;
     } & DefaultSession["user"];
   }
 }

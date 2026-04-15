@@ -137,6 +137,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = "user";
         session.user.isTestUser = false;
         session.user.onboardingComplete = false;
+        session.user.pendingEmail = token.pendingEmail;
+        session.user.pendingName = token.pendingName;
+        session.user.pendingImage = token.pendingImage;
+        session.user.pendingAccount = token.pendingAccount;
       } else {
         session.user.pendingOnboarding = false;
         session.user.id = token.userId as string;
