@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { SITE_NAME } from "@/lib/config";
 
 interface Props {
   email: string | null;
@@ -157,7 +158,7 @@ export function OnboardingClient({ email, googleName }: Props) {
   return (
     <div className="w-full max-w-md space-y-6">
       <div className="text-center">
-        <h1 className="text-2xl font-bold text-foreground">Welcome to Badge Hunters!</h1>
+        <h1 className="text-2xl font-bold text-foreground">Welcome to {SITE_NAME}!</h1>
         <p className="mt-2 text-sm text-muted">
           Let&apos;s link your Activate account.
         </p>

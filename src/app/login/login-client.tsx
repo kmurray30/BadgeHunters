@@ -3,6 +3,7 @@
 import { signIn } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { SITE_NAME } from "@/lib/config";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
 interface TestUser {
@@ -266,7 +267,7 @@ export function LoginClient({ initialAdminMode }: { initialAdminMode: boolean })
       <div className={`w-full ${adminMode ? "max-w-4xl" : "max-w-md"} space-y-8`}>
         <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            Badge Hunters
+            {SITE_NAME}
           </h1>
           <p className="mt-2 text-sm text-muted">
             Plan your Activate badge runs with the crew

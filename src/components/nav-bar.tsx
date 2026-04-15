@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { NavUserMenu } from "./nav-user-menu";
 import { NotificationCenter, type NotificationItem } from "./notification-center";
+import { SITE_NAME } from "@/lib/config";
 
 export async function NavBar() {
   const session = await auth();
@@ -133,7 +134,7 @@ export async function NavBar() {
             href="/"
             className="text-lg font-bold tracking-tight text-foreground hover:text-accent transition-colors"
           >
-            Badge Hunters
+            {SITE_NAME}
           </Link>
           {session?.user && (
             <>

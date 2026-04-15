@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { SITE_NAME } from "@/lib/config";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Badge Hunters",
+  title: SITE_NAME,
   description: "Activate badge planner for our crew",
   icons: {
     icon: [{ url: "/favicon.ico", type: "image/x-icon" }],
