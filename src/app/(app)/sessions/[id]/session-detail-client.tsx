@@ -1205,7 +1205,7 @@ export function SessionDetailClient({
                   onMouseDown: () => handleBadgeSelect(badge.id),
                   cells: [
                     <span className={`min-w-0 text-center text-[11px] tabular-nums ${memberCount > 0 && badge.totalUncompletedCount === 0 ? "text-success font-semibold" : "text-muted"}`}>{memberCount > 0 ? Math.round(((memberCount - badge.totalUncompletedCount) / memberCount) * 100) : 0}%</span>,
-                    <span className="flex w-full items-center gap-1 min-w-0">
+                    <span className="flex w-full items-center gap-1 min-w-0 pr-1">
                       <span className="min-w-0 flex-1 text-sm font-medium text-foreground">{badge.name}</span>
                       <button
                         type="button"
