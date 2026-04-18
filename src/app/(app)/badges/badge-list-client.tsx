@@ -1,13 +1,14 @@
 "use client";
 
 import { toggleBadgeCompletion, toggleBadgeTodo } from "@/app/actions/badges";
-import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type ColumnHeader } from "@/components/badge-table";
 import { BadgeInfoModal } from "@/components/badge-info-modal";
+import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type ColumnHeader } from "@/components/badge-table";
+import { descriptionColumn, nameColumn } from "@/components/badge-table-columns";
 import { MultiFilter, type ActiveFilter, type FilterDefinition } from "@/components/multi-filter";
-import { usePersistedState } from "@/hooks/use-persisted-state";
 import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
-import { useCallback, useMemo, useOptimistic, useState, useTransition } from "react";
+import { usePersistedState } from "@/hooks/use-persisted-state";
 import { useRouter } from "next/navigation";
+import { useCallback, useMemo, useOptimistic, useState, useTransition } from "react";
 
 interface BadgeUser {
   id: string;
@@ -50,8 +51,8 @@ const DIFFICULTY_OPTIONS: { value: string; label: string; color: string }[] = [
 
 const BADGE_TABLE_COLUMNS: ColumnHeader[] = [
   { label: "Done", width: "3rem", align: "center", sortField: "done", sticky: true },
-  { label: "Name", width: "minmax(4rem, 1fr)", sortField: "name", sticky: true },
-  { label: "Description", width: "minmax(5rem,20rem)" },
+  nameColumn(),
+  descriptionColumn(),
   { label: "Difficulty", width: "5rem", align: "right", sortField: "difficulty" },
   { label: "# Players", width: "4rem", align: "right", sortField: "players" },
   { label: "To Do", width: "3.5rem", align: "center", sortField: "todo", sortDefaultDescending: true },

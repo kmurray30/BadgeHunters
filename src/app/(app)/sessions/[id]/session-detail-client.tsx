@@ -17,6 +17,7 @@ import {
 import { BackButton } from "@/components/back-button";
 import { BadgeInfoModal } from "@/components/badge-info-modal";
 import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type BadgeTableSection, type ColumnHeader } from "@/components/badge-table";
+import { descriptionColumn, nameColumn } from "@/components/badge-table-columns";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MultiFilter, type ActiveFilter, type FilterDefinition } from "@/components/multi-filter";
 import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
@@ -28,8 +29,8 @@ import { useCallback, useEffect, useMemo, useOptimistic, useState, useTransition
 
 const YOUR_BADGES_COLUMNS: ColumnHeader[] = [
   { label: "Group %", width: "1.5rem", align: "center", vertical: true, sticky: true },
-  { label: "Name", width: "minmax(4rem, 1fr)", sortField: "name", sticky: true },
-  { label: "Description", width: "minmax(5rem,20rem)" },
+  nameColumn(),
+  descriptionColumn(),
   { label: "Difficulty", width: "5rem", align: "right", sortField: "difficulty" },
   { label: "# Players", width: "4rem", align: "right", sortField: "players" },
 ];
@@ -46,8 +47,8 @@ function buildGroupBadgeColumns(members: { id: string; displayName: string }[], 
     { label: "Votes", width: "1.0rem", align: "center", vertical: true, sticky: true },
     { label: "Group %", width: "1.5rem", align: "center", vertical: true, sticky: true, labelShift: "-10px"  },
     { label: "Done", width: "1.5rem", align: "center", vertical: true, sticky: true, tooltip: "Your completion — click to toggle", labelShift: "-4px" },
-    { label: "Name", width: "minmax(4rem, 1fr)", sticky: true },
-    { label: "Description", width: "minmax(5rem,20rem)" },
+    nameColumn({ sortField: undefined }),
+    descriptionColumn(),
     { label: "Difficulty", width: "5rem", align: "right" },
     { label: "# Players", width: "4rem", align: "right" },
     ...sortedMembersForHeader.map((member) => ({

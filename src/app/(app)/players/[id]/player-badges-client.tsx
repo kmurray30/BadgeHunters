@@ -2,6 +2,7 @@
 
 import { toggleBadgeTodo } from "@/app/actions/badges";
 import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type ColumnHeader } from "@/components/badge-table";
+import { descriptionColumn, nameColumn } from "@/components/badge-table-columns";
 import type { SortCriterion } from "@/components/multi-sort";
 import { useMemo, useState } from "react";
 
@@ -32,8 +33,8 @@ interface Props {
 }
 
 const COLUMNS: ColumnHeader[] = [
-  { label: "Name", width: "minmax(4rem, 1fr)", sortField: "name", sticky: true },
-  { label: "Description", width: "minmax(5rem,20rem)" },
+  nameColumn(),
+  descriptionColumn(),
   { label: "Difficulty\n(Their Vote)", width: "6rem", align: "right", sortField: "difficulty" },
   { label: "# Players\n(Their Vote)", width: "5.5rem", align: "right", sortField: "players" },
   { label: "Completed on", width: "5.5rem", align: "right", sortField: "completedAt", sortDefaultDescending: true },

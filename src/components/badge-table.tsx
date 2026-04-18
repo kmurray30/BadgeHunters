@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import React, { useState } from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import type { SortCriterion } from "./multi-sort";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 
@@ -27,6 +27,27 @@ export interface ColumnHeader {
   group?: string;
   /** If true, this column is pinned to the left edge when the user enables column pinning. */
   sticky?: boolean;
+  /**
+   * If true, a `1fr` "filler" track is injected into the grid immediately
+   * after this column, and this column's cells (header + body) span both
+   * tracks. The column's own track holds the intrinsic content-max size;
+   * the filler absorbs any leftover container width so the cell visually
+   * extends to the edge without the column's intrinsic width growing.
+   */
+  fillerAfter?: boolean;
+  /**
+   * If true, BadgeTable measures the widest cell in this column across
+   * ALL rows (using a hidden max-content / nowrap clone) and replaces
+   * the `max-content` keyword in `width` with that measured pixel value
+   * before feeding it to grid-template-columns. This is the workaround
+   * for the fact that every row is its own independent CSS grid (needed
+   * so sticky cells stretch correctly): without it, `max-content` is
+   * computed per-row and cells in the same column end up with different
+   * widths. Use together with `width: "minmax(<min>, max-content)"` to
+   * get a track that grows from <min> up to the widest cell's natural
+   * width and STAYS ALIGNED across every row.
+   */
+  measureMax?: boolean;
   /**
    * Extra horizontal shift applied to the rotated label of a vertical
    * header (before rotation). Accepts any CSS length, e.g. "-9px".
@@ -95,8 +116,11 @@ interface StickyMeta {
  * prior pair of tracks. Using the column's natural x-position means
  * position:sticky clamps immediately at scroll > 0, with no slide-to-
  * pinned transition.
+ *
+ * Widths are passed in already-resolved (measureMax substitutions applied)
+ * so the `calc()` expression only ever contains concrete length units.
  */
-function buildStickyMeta(columns: ColumnHeader[]): (StickyMeta | null)[] {
+function buildStickyMeta(columns: ColumnHeader[], resolvedWidths: string[]): (StickyMeta | null)[] {
   const metas: (StickyMeta | null)[] = [];
   const parts: string[] = [ROW_PX];
 
@@ -107,7 +131,7 @@ function buildStickyMeta(columns: ColumnHeader[]): (StickyMeta | null)[] {
     } else {
       metas.push(null);
     }
-    parts.push(columns[index].width);
+    parts.push(resolvedWidths[index]);
     if (index < columns.length - 1) {
       parts.push(COLUMN_GAP);
     }
@@ -135,20 +159,62 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
   const [pinned, setPinned] = usePersistedState("bh:table:pinColumns", false);
   const isPinned = hasPinnableColumns && pinned;
 
+  // ── Measured max-content widths ──────────────────────────────────────────
+  //
+  // Each row renders as its own independent CSS grid (this is what makes
+  // position:sticky cells behave correctly). The side-effect is that a
+  // `max-content` track is computed PER ROW from that row's cells — so
+  // rows end up with different Name/Description column widths and cells
+  // visually misalign across rows.
+  //
+  // Fix: for columns flagged `measureMax: true`, we measure the widest
+  // cell's natural (nowrapped, max-content) width across ALL rows once
+  // after render, then substitute that fixed pixel value in for the
+  // `max-content` keyword in `width`. Result: `minmax(6rem, max-content)`
+  // becomes e.g. `minmax(6rem, 248px)`, a fully-concrete track value
+  // that's identical for every row → cells align. The track still
+  // grows/shrinks with the viewport because of the minmax range.
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [measuredMaxes, setMeasuredMaxes] = useState<Record<number, number>>({});
+
+  const resolvedWidths = columns.map((column, idx) => {
+    const measured = measuredMaxes[idx];
+    if (column.measureMax && measured != null) {
+      return column.width.replace(/max-content/g, `${measured}px`);
+    }
+    return column.width;
+  });
+
   // Sticky metadata (only computed when pinned). Widths stay at their
   // declared values — no inflation — so columns look identical in both modes.
-  const stickyMeta = isPinned ? buildStickyMeta(columns) : null;
+  const stickyMeta = isPinned ? buildStickyMeta(columns, resolvedWidths) : null;
   const firstStickyIndex = stickyMeta ? stickyMeta.findIndex((m) => m !== null) : -1;
 
-  const gridTemplateColumns = columns.map((column) => column.width).join(" ");
+  // Inject a `1fr` filler track after any column marked `fillerAfter`. The
+  // column's own track stays at its intrinsic size (e.g. minmax(min,
+  // max-content)); the filler absorbs leftover container width so the
+  // column's cell can span into it without forcing the intrinsic column
+  // to grow. The filler is NOT a separate column in `columns` — cells
+  // stay 1:1 with `columns`, and filler-owner cells get `grid-column:
+  // span 2` so they visually cover both tracks.
+  const gridTemplateColumns = columns
+    .map((column, idx) => (column.fillerAfter ? `${resolvedWidths[idx]} 1fr` : resolvedWidths[idx]))
+    .join(" ");
+
+  // When a column has `fillerAfter`, its cell (header + body) spans two
+  // grid tracks so the cell visually extends into the filler area.
+  function cellSpanStyle(index: number): React.CSSProperties | undefined {
+    return columns[index]?.fillerAfter ? { gridColumn: "span 2" } : undefined;
+  }
 
   const alignClass = (align: ColumnHeader["align"]) =>
     align === "center" ? "text-center" : align === "right" ? "text-right" : undefined;
 
   function headerCellStyle(index: number): React.CSSProperties | undefined {
-    if (!isPinned || !stickyMeta) return undefined;
+    const span = cellSpanStyle(index);
+    if (!isPinned || !stickyMeta) return span;
     const meta = stickyMeta[index];
-    if (!meta) return undefined;
+    if (!meta) return span;
     return {
       position: "sticky",
       left: meta.left,
@@ -159,6 +225,7 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
       // shadows offset horizontally; since the color matches the cell bg
       // they form a seamless opaque strip across the entire pinned area.
       boxShadow: buildStickyBoxShadow("var(--card)", index),
+      ...span,
     };
   }
 
@@ -246,15 +313,92 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
   const rowGridStyle: React.CSSProperties = {
     display: "grid",
     gridTemplateColumns,
-    minWidth: "max-content",
+    // min-content (not max-content) lets variable-max tracks actually
+    // reach their minmax min on narrow containers; with max-content the
+    // row would stay wide enough for every track's max-content and the
+    // min regime would never trigger.
+    minWidth: "min-content",
   };
   const rowStackingStyle: React.CSSProperties | undefined = isPinned
     ? { ...rowGridStyle, isolation: "isolate", zIndex: 0 }
     : rowGridStyle;
 
+  // Stable digests so the measurement effect only re-runs when the set
+  // of rows or the `measureMax` column flags actually changes.
+  const rowKeyDigest = resolvedSections
+    .flatMap((section) => section.rows.map((row) => row.key))
+    .join("|");
+  const measureMaxDigest = columns
+    .map((column, idx) => (column.measureMax ? `${idx}:${column.width}` : ""))
+    .filter(Boolean)
+    .join(",");
+
+  useLayoutEffect(() => {
+    const root = wrapperRef.current;
+    if (!root) return;
+    const columnsToMeasure = columns
+      .map((column, idx) => ({ column, idx }))
+      .filter(({ column }) => column.measureMax);
+    if (columnsToMeasure.length === 0) {
+      setMeasuredMaxes((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      return;
+    }
+
+    // Hidden measurement container appended INSIDE the table wrapper so
+    // it inherits all ancestor font / text / Tailwind styles. Setting
+    // width:max-content + white-space:nowrap makes each cloned cell
+    // lay out at its true intrinsic width regardless of whatever track
+    // size the real grid item is currently constrained to.
+    const measurer = document.createElement("div");
+    measurer.setAttribute("aria-hidden", "true");
+    measurer.style.cssText =
+      "position:absolute;visibility:hidden;pointer-events:none;top:-9999px;left:-9999px;width:max-content;white-space:nowrap;";
+    root.appendChild(measurer);
+
+    const next: Record<number, number> = {};
+    try {
+      for (const { idx: columnIndex } of columnsToMeasure) {
+        const cells = root.querySelectorAll<HTMLElement>(
+          `[data-bh-col-idx="${columnIndex}"][data-bh-cell-kind="body"]`,
+        );
+        let maxPixels = 0;
+        cells.forEach((cell) => {
+          const clone = cell.cloneNode(true) as HTMLElement;
+          // Clear positioning / sizing styles that would reimpose a
+          // track-width constraint on the clone.
+          clone.style.position = "static";
+          clone.style.width = "auto";
+          clone.style.maxWidth = "none";
+          clone.style.minWidth = "0";
+          clone.style.boxShadow = "none";
+          measurer.textContent = "";
+          measurer.appendChild(clone);
+          const measuredWidth = measurer.getBoundingClientRect().width;
+          if (measuredWidth > maxPixels) maxPixels = measuredWidth;
+        });
+        if (maxPixels > 0) next[columnIndex] = Math.ceil(maxPixels);
+      }
+    } finally {
+      root.removeChild(measurer);
+    }
+
+    setMeasuredMaxes((prev) => {
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (
+        prevKeys.length === nextKeys.length &&
+        nextKeys.every((key) => prev[Number(key)] === next[Number(key)])
+      ) {
+        return prev;
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowKeyDigest, measureMaxDigest]);
+
   return (
-    <div className="overflow-x-auto overflow-y-hidden rounded-lg border border-border">
-      <div style={{ minWidth: "max-content" }}>
+    <div ref={wrapperRef} className="overflow-x-auto overflow-y-hidden rounded-lg border border-border">
+      <div style={{ minWidth: "min-content" }}>
         {/* Column header row */}
         <div
           className="items-stretch gap-2 border-b border-border bg-card py-1.5 px-2 text-[10px] font-semibold uppercase tracking-wide text-muted"
@@ -439,9 +583,16 @@ function RowWrapper({
   const firstStickyIdx = stickyMeta ? stickyMeta.findIndex((meta) => meta !== null) : -1;
 
   function cellStyle(index: number): React.CSSProperties | undefined {
-    if (!isPinned || !stickyMeta) return undefined;
+    // Columns marked `fillerAfter` get a sibling `1fr` track injected
+    // into the grid; the cell must span both tracks to visually cover
+    // the filler area.
+    const span: React.CSSProperties | undefined = columns[index]?.fillerAfter
+      ? { gridColumn: "span 2" }
+      : undefined;
+
+    if (!isPinned || !stickyMeta) return span;
     const meta = stickyMeta[index];
-    if (!meta) return undefined;
+    if (!meta) return span;
 
     const isFirstSticky = index === firstStickyIdx;
     const nextIsSticky = (stickyMeta[index + 1] ?? null) !== null;
@@ -455,6 +606,7 @@ function RowWrapper({
       zIndex: meta.zIndex,
       backgroundColor: "var(--cell-bg)",
       boxShadow: shadows.length > 0 ? shadows.join(", ") : undefined,
+      ...span,
     };
   }
 
@@ -465,7 +617,13 @@ function RowWrapper({
       align === "right"  ? "flex items-center justify-end min-w-0" :
                            "flex items-center min-w-0";
     return (
-      <div key={index} className={justifyClass} style={cellStyle(index)}>
+      <div
+        key={index}
+        className={justifyClass}
+        style={cellStyle(index)}
+        data-bh-col-idx={index}
+        data-bh-cell-kind="body"
+      >
         {cell}
       </div>
     );
