@@ -27,6 +27,12 @@ export interface ColumnHeader {
   group?: string;
   /** If true, this column is pinned to the left edge when the user enables column pinning. */
   sticky?: boolean;
+  /**
+   * Extra horizontal shift applied to the rotated label of a vertical
+   * header (before rotation). Accepts any CSS length, e.g. "-9px".
+   * Defaults to "-5px". Has no effect on non-vertical columns.
+   */
+  labelShift?: string;
 }
 
 // ─── Row ──────────────────────────────────────────────────────────────────────
@@ -61,68 +67,52 @@ export interface BadgeTableSection {
 
 // ─── Sticky helpers ──────────────────────────────────────────────────────────
 //
-// When pinning is active we use column-gap: 0 and bake the gap into each
-// track width so there are no transparent cracks between cells.  Sticky cells
-// get position: sticky + left + z-index. Non-sticky cells also use
-// position: sticky (without left) so that z-index resolves consistently across
-// mobile WebKit/Blink compositing layers.
+// When pinning is active, each sticky cell gets position: sticky + left +
+// z-index + an opaque background. To guarantee that the pinned area looks
+// seamless even when sticky cells are narrower than their grid tracks or
+// when there's a column-gap between them, the ROW itself is painted with
+// the same --cell-bg color; the sticky cells simply layer on top of that
+// continuous row background.
+//
+// Each sticky cell's `left` value is set to its *natural* x-position inside
+// the row — the sum of the row's horizontal padding plus every preceding
+// column's width plus the column-gap between tracks. Because `left` ==
+// natural position, the cell never "slides" while transitioning into the
+// pinned state; from the first pixel of horizontal scroll it's already
+// clamped.
 
-const GAP = "0.5rem";
-const ROW_PX = "0.75rem"; // matches px-3 on header & rows
+const ROW_PX = "0.5rem";       // matches px-2 on header & rows
+const COLUMN_GAP = "0.5rem";   // matches gap-2 on header & rows
 
 interface StickyMeta {
   left: string;
   zIndex: number;
 }
 
-/** Add half-gap to each side of a track width string (absorbs column-gap: 0). */
-function inflateTrackWidths(columns: ColumnHeader[]): string[] {
-  return columns.map((column, index) => {
-    const isFirst = index === 0;
-    const isLast = index === columns.length - 1;
-    const leftExtra = isFirst ? ROW_PX : `calc(${GAP} / 2)`;
-    const rightExtra = isLast ? ROW_PX : `calc(${GAP} / 2)`;
-    return addSizeToTrack(addSizeToTrack(column.width, leftExtra), rightExtra);
-  });
-}
-
-/** Wrap raw track value so it grows by `extra`. Handles minmax() & plain values. */
-function addSizeToTrack(track: string, extra: string): string {
-  const minmaxMatch = track.match(/^minmax\((.+),\s*(.+)\)$/);
-  if (minmaxMatch) {
-    return `minmax(calc(${minmaxMatch[1]} + ${extra}), calc(${minmaxMatch[2]} + ${extra}))`;
-  }
-  if (track === "auto" || track === "max-content" || track === "min-content") {
-    return track;
-  }
-  return `calc(${track} + ${extra})`;
-}
-
-/** Compute left offset and z-index for each sticky column. */
-function buildStickyMeta(columns: ColumnHeader[], inflatedWidths: string[]): (StickyMeta | null)[] {
+/** Compute left offset and z-index for each sticky column.
+ *
+ * Left = ROW_PX + sum of each prior column's width + gap between each
+ * prior pair of tracks. Using the column's natural x-position means
+ * position:sticky clamps immediately at scroll > 0, with no slide-to-
+ * pinned transition.
+ */
+function buildStickyMeta(columns: ColumnHeader[]): (StickyMeta | null)[] {
   const metas: (StickyMeta | null)[] = [];
-  const parts: string[] = [];
+  const parts: string[] = [ROW_PX];
 
   for (let index = 0; index < columns.length; index++) {
     if (columns[index].sticky) {
-      const left = parts.length === 0 ? "0px" : `calc(${parts.join(" + ")})`;
+      const left = `calc(${parts.join(" + ")})`;
       metas.push({ left, zIndex: 30 });
-      parts.push(inflatedWidths[index]);
     } else {
       metas.push(null);
     }
+    parts.push(columns[index].width);
+    if (index < columns.length - 1) {
+      parts.push(COLUMN_GAP);
+    }
   }
   return metas;
-}
-
-/** Return inline padding for a cell in inflated-width mode. */
-function cellPaddingForSticky(index: number, totalColumns: number): React.CSSProperties {
-  const isFirst = index === 0;
-  const isLast = index === totalColumns - 1;
-  return {
-    paddingLeft: isFirst ? ROW_PX : `calc(${GAP} / 2)`,
-    paddingRight: isLast ? ROW_PX : `calc(${GAP} / 2)`,
-  };
 }
 
 // ─── Table ────────────────────────────────────────────────────────────────────
@@ -140,30 +130,17 @@ interface BadgeTableProps {
   onSortChange?: (criteria: SortCriterion[]) => void;
 }
 
-const SUBGRID_STYLE: React.CSSProperties = {
-  gridColumn: "1 / -1",
-  display: "grid",
-  gridTemplateColumns: "subgrid",
-};
-
-const FULL_SPAN_STYLE: React.CSSProperties = { gridColumn: "1 / -1" };
-
 export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, onSortChange }: BadgeTableProps) {
   const hasPinnableColumns = columns.some((column) => column.sticky);
   const [pinned, setPinned] = usePersistedState("bh:table:pinColumns", false);
   const isPinned = hasPinnableColumns && pinned;
 
-  // Inflated widths & sticky metadata (only computed when pinned)
-  const inflatedWidths = isPinned ? inflateTrackWidths(columns) : null;
-  const stickyMeta = isPinned && inflatedWidths ? buildStickyMeta(columns, inflatedWidths) : null;
+  // Sticky metadata (only computed when pinned). Widths stay at their
+  // declared values — no inflation — so columns look identical in both modes.
+  const stickyMeta = isPinned ? buildStickyMeta(columns) : null;
+  const firstStickyIndex = stickyMeta ? stickyMeta.findIndex((m) => m !== null) : -1;
 
-  const gridTemplateColumns = isPinned && inflatedWidths
-    ? inflatedWidths.join(" ")
-    : columns.map((column) => column.width).join(" ");
-
-  const stickySubgridStyle: React.CSSProperties | undefined = isPinned
-    ? { ...SUBGRID_STYLE, columnGap: 0, paddingLeft: 0, paddingRight: 0, isolation: "isolate", zIndex: 0 }
-    : undefined;
+  const gridTemplateColumns = columns.map((column) => column.width).join(" ");
 
   const alignClass = (align: ColumnHeader["align"]) =>
     align === "center" ? "text-center" : align === "right" ? "text-right" : undefined;
@@ -171,12 +148,28 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
   function headerCellStyle(index: number): React.CSSProperties | undefined {
     if (!isPinned || !stickyMeta) return undefined;
     const meta = stickyMeta[index];
-    const padding = cellPaddingForSticky(index, columns.length);
-    if (meta) {
-      return { position: "sticky", left: meta.left, zIndex: meta.zIndex, backgroundColor: "var(--card)", ...padding };
-    }
-    // Non-sticky cells also use position: sticky (without left) for consistent z-index
-    return { position: "sticky", zIndex: 20, backgroundColor: "var(--card)", ...padding };
+    if (!meta) return undefined;
+    return {
+      position: "sticky",
+      left: meta.left,
+      zIndex: meta.zIndex,
+      backgroundColor: "var(--card)",
+      // Paint box-shadows to cover the row's left padding (first sticky
+      // only) and the gap-2 between adjacent sticky cells. Same-size
+      // shadows offset horizontally; since the color matches the cell bg
+      // they form a seamless opaque strip across the entire pinned area.
+      boxShadow: buildStickyBoxShadow("var(--card)", index),
+    };
+  }
+
+  function buildStickyBoxShadow(bg: string, index: number): string | undefined {
+    if (!stickyMeta) return undefined;
+    const isFirstSticky = index === firstStickyIndex;
+    const nextIsSticky = (stickyMeta[index + 1] ?? null) !== null;
+    const shadows: string[] = [];
+    if (isFirstSticky) shadows.push(`-${ROW_PX} 0 0 0 ${bg}`);
+    if (nextIsSticky) shadows.push(`${COLUMN_GAP} 0 0 0 ${bg}`);
+    return shadows.length > 0 ? shadows.join(", ") : undefined;
   }
 
   function handleHeaderSort(column: ColumnHeader) {
@@ -244,16 +237,28 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
     ? columns.reduce((last, column, index) => column.sticky ? index : last, -1)
     : -1;
 
+  // Each row is its own grid (not subgrid). This is the key change that
+  // makes sticky columns behave correctly: position:sticky grid items
+  // inside a subgrid don't reliably stretch to fill their tracks, which
+  // caused "column width changes on lock" and transparent gutters around
+  // sticky cells. Direct grid layout fixes both issues. Columns still
+  // align across rows because every row uses the same gridTemplateColumns.
+  const rowGridStyle: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns,
+    minWidth: "max-content",
+  };
+  const rowStackingStyle: React.CSSProperties | undefined = isPinned
+    ? { ...rowGridStyle, isolation: "isolate", zIndex: 0 }
+    : rowGridStyle;
+
   return (
     <div className="overflow-x-auto overflow-y-hidden rounded-lg border border-border">
-      <div
-        className="grid"
-        style={{ gridTemplateColumns, minWidth: "max-content" }}
-      >
+      <div style={{ minWidth: "max-content" }}>
         {/* Column header row */}
         <div
-          className={`grid items-center border-b border-border bg-card py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted ${isPinned ? "" : "gap-2 px-3"}`}
-          style={isPinned ? { ...SUBGRID_STYLE, columnGap: 0, paddingLeft: 0, paddingRight: 0 } : SUBGRID_STYLE}
+          className="items-stretch gap-2 border-b border-border bg-card py-1.5 px-2 text-[10px] font-semibold uppercase tracking-wide text-muted"
+          style={rowStackingStyle}
         >
           {columns.map((column, index) => {
               const isSortable = !!column.sortField && !!onSortChange;
@@ -288,23 +293,38 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
               }
 
               if (column.vertical) {
+                // Wrapper holds the sticky bg + positioning and fills the
+                // track; the inner span inherits full track width via the
+                // default grid-item justify-self: stretch, keeping the
+                // rotated label aligned with the body column below.
+                // Separating bg from rotation prevents the rotated
+                // background rectangle from spilling into the neighbour.
+                const labelShift = column.labelShift ?? "-5px";
                 return (
-                  <span
+                  <div
                     key={index}
-                    title={column.tooltip ?? column.label}
-                    className={`self-end text-center normal-case tracking-normal text-[11px] ${column.bold ? "font-bold text-foreground" : ""}`}
+                    className="min-w-0"
                     style={{
-                      writingMode: "vertical-rl",
-                      transform: "rotate(195deg) translateX(-7px)",
-                      maxHeight: "4rem",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      textTransform: "none",
                       ...cellStyle,
+                      display: "grid",
+                      alignItems: "end",
                     }}
                   >
-                    {column.label}
-                  </span>
+                    <span
+                      title={column.tooltip ?? column.label}
+                      className={`text-center normal-case tracking-normal text-[10px] leading-none ${column.bold ? "font-bold text-foreground" : ""}`}
+                      style={{
+                        writingMode: "vertical-rl",
+                        transform: `rotate(195deg) translateX(${labelShift})`,
+                        maxHeight: "3.5rem",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        textTransform: "none",
+                      }}
+                    >
+                      {column.label}
+                    </span>
+                  </div>
                 );
               }
 
@@ -319,10 +339,18 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
                 );
               }
 
+              // Plain (non-sortable, non-vertical, non-pin-toggle) header:
+              // wrap in a flex container with items-center so the label
+              // stays vertically centered within the stretched header row.
+              const flexJustify =
+                column.align === "center" ? "justify-center" :
+                column.align === "right" ? "justify-end" : "";
               return (
-                <span key={index} title={column.tooltip} className={`${baseHeaderClass} ${alignClass(column.align) ?? ""}`} style={cellStyle}>
-                  {column.label}
-                </span>
+                <div key={index} className={`flex items-center min-w-0 ${flexJustify}`} style={cellStyle}>
+                  <span title={column.tooltip} className={`${baseHeaderClass} ${alignClass(column.align) ?? ""}`}>
+                    {column.label}
+                  </span>
+                </div>
               );
             })}
         </div>
@@ -334,7 +362,7 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
           return (
             <React.Fragment key={sectionIndex}>
               {section.label && (
-                <div className="border-b border-border bg-card" style={FULL_SPAN_STYLE}>
+                <div className="border-b border-border bg-card">
                   <button
                     type="button"
                     onClick={() => toggleSection(sectionIndex)}
@@ -365,7 +393,7 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
                     columns={columns}
                     isLastRow={isAbsolutelyLast}
                     stickyMeta={stickyMeta}
-                    subgridStyle={stickySubgridStyle}
+                    rowGridStyle={rowStackingStyle}
                     isPinned={isPinned}
                   />
                 );
@@ -380,36 +408,54 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
   );
 }
 
-// ─── Row wrapper — subgrid row (Link or div) ─────────────────────────────────
+// ─── Row wrapper — direct-grid row (Link or div) ─────────────────────────────
+//
+// NOTE: rowGridStyle comes from the parent and contains the shared
+// gridTemplateColumns plus the pin-mode stacking context (isolation:isolate).
+// We intentionally use a direct grid per row (not subgrid) — this is what
+// makes position:sticky cells stretch correctly and keeps column widths
+// identical when toggling the lock button.
 
 function RowWrapper({
   row,
   columns,
   isLastRow,
   stickyMeta,
-  subgridStyle,
+  rowGridStyle,
   isPinned,
 }: {
   row: BadgeTableRow;
   columns: ColumnHeader[];
   isLastRow: boolean;
   stickyMeta: (StickyMeta | null)[] | null;
-  subgridStyle: React.CSSProperties | undefined;
+  rowGridStyle: React.CSSProperties | undefined;
   isPinned: boolean;
 }) {
   const needsBorder = row.footer || !isLastRow;
   const borderClass = needsBorder ? "border-b border-border" : "";
-  const rowClassName = `grid py-2 transition-colors ${borderClass} ${row.className ?? "hover:bg-card-hover"} ${isPinned ? "" : "gap-2 px-3"}`;
-  const rowStyle = subgridStyle ?? SUBGRID_STYLE;
+  const rowClassName = `items-stretch gap-2 py-2 transition-colors px-2 ${borderClass} ${row.className ?? "hover:bg-card-hover"}`;
+  const rowStyle = rowGridStyle;
+
+  const firstStickyIdx = stickyMeta ? stickyMeta.findIndex((meta) => meta !== null) : -1;
 
   function cellStyle(index: number): React.CSSProperties | undefined {
     if (!isPinned || !stickyMeta) return undefined;
     const meta = stickyMeta[index];
-    const padding = cellPaddingForSticky(index, columns.length);
-    if (meta) {
-      return { position: "sticky", left: meta.left, zIndex: meta.zIndex, backgroundColor: "var(--cell-bg)", ...padding };
-    }
-    return { position: "sticky", zIndex: 20, backgroundColor: "var(--cell-bg)", ...padding };
+    if (!meta) return undefined;
+
+    const isFirstSticky = index === firstStickyIdx;
+    const nextIsSticky = (stickyMeta[index + 1] ?? null) !== null;
+    const shadows: string[] = [];
+    if (isFirstSticky) shadows.push(`-0.5rem 0 0 0 var(--cell-bg)`);
+    if (nextIsSticky) shadows.push(`0.5rem 0 0 0 var(--cell-bg)`);
+
+    return {
+      position: "sticky",
+      left: meta.left,
+      zIndex: meta.zIndex,
+      backgroundColor: "var(--cell-bg)",
+      boxShadow: shadows.length > 0 ? shadows.join(", ") : undefined,
+    };
   }
 
   const innerCells = row.cells.map((cell, index) => {
@@ -445,7 +491,7 @@ function RowWrapper({
   return (
     <>
       {mainRow}
-      <div className={footerBorderClass} style={FULL_SPAN_STYLE}>
+      <div className={footerBorderClass}>
         {row.footer}
       </div>
     </>

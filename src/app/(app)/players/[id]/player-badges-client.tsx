@@ -32,8 +32,7 @@ interface Props {
 }
 
 const COLUMNS: ColumnHeader[] = [
-  { label: "#", width: "1.5rem", align: "right", sticky: true },
-  { label: "Name", width: "8rem", sortField: "name", sticky: true },
+  { label: "Name", width: "minmax(4rem, 1fr)", sortField: "name", sticky: true },
   { label: "Description", width: "minmax(5rem,20rem)" },
   { label: "Difficulty\n(Their Vote)", width: "6rem", align: "right", sortField: "difficulty" },
   { label: "# Players\n(Their Vote)", width: "5.5rem", align: "right", sortField: "players" },
@@ -140,7 +139,6 @@ export function PlayerBadgesClient({ badges, isOwnProfile }: Props) {
           ? "bg-selection hover:bg-selection-hover"
           : "hover:bg-card-hover",
       cells: [
-        <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{badge.badgeNumber}</span>,
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="text-sm font-medium text-foreground">{badge.badgeName}</span>
           {badge.isPerVisit && (

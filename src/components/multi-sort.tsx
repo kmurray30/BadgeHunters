@@ -105,7 +105,7 @@ export function MultiSort({ availableFields, criteria, onChange }: MultiSortProp
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-lg border border-border bg-card p-2 shadow-lg">
+        <div className="absolute right-0 top-full z-50 mt-1 w-72 max-w-[calc(100vw-1rem)] rounded-lg border border-border bg-card p-2 shadow-lg">
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">Sort by</p>
 
           <div className="space-y-1">

@@ -49,13 +49,12 @@ const DIFFICULTY_OPTIONS: { value: string; label: string; color: string }[] = [
 ];
 
 const BADGE_TABLE_COLUMNS: ColumnHeader[] = [
-  { label: "#", width: "1.5rem", align: "right", sticky: true },
-  { label: "Name", width: "8rem", sortField: "name", sticky: true },
+  { label: "Done", width: "3rem", align: "center", sortField: "done", sticky: true },
+  { label: "Name", width: "minmax(4rem, 1fr)", sortField: "name", sticky: true },
   { label: "Description", width: "minmax(5rem,20rem)" },
   { label: "Difficulty", width: "5rem", align: "right", sortField: "difficulty" },
   { label: "# Players", width: "4rem", align: "right", sortField: "players" },
   { label: "To Do", width: "3.5rem", align: "center", sortField: "todo", sortDefaultDescending: true },
-  { label: "Done", width: "3.5rem", align: "center", sortField: "done" },
 ];
 
 const SORT_FIELDS: SortField[] = [
@@ -390,7 +389,13 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
                 ? "bg-selection hover:bg-selection-hover"
                 : "hover:bg-card-hover",
             cells: [
-              <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{badge.badgeNumber}</span>,
+              <div onMouseDown={(event) => event.stopPropagation()}>
+                <BadgeCheckbox
+                  checked={badge.completedByCurrentUser}
+                  title={badge.completedByCurrentUser ? "Mark incomplete" : "Mark complete"}
+                  onClick={() => handleToggleCompletion(badge.id)}
+                />
+              </div>,
               <span className="min-w-0 text-sm font-medium text-foreground">{badge.name}</span>,
               <span className="block min-w-0 text-xs text-muted">{badge.description}</span>,
               <span className={`min-w-0 text-center text-[11px] font-medium ${difficultyDisplay.color}`}>
@@ -408,13 +413,6 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
                   checkedClassName="border-amber-500 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
                   crossWhenDisabled
                   useStar
-                />
-              </div>,
-              <div onMouseDown={(event) => event.stopPropagation()}>
-                <BadgeCheckbox
-                  checked={badge.completedByCurrentUser}
-                  title={badge.completedByCurrentUser ? "Mark incomplete" : "Mark complete"}
-                  onClick={() => handleToggleCompletion(badge.id)}
                 />
               </div>,
             ],

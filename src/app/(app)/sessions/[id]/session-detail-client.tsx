@@ -15,8 +15,8 @@ import {
   updateSessionDate,
 } from "@/app/actions/sessions";
 import { BackButton } from "@/components/back-button";
-import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type BadgeTableSection, type ColumnHeader } from "@/components/badge-table";
 import { BadgeInfoModal } from "@/components/badge-info-modal";
+import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type BadgeTableSection, type ColumnHeader } from "@/components/badge-table";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MultiFilter, type ActiveFilter, type FilterDefinition } from "@/components/multi-filter";
 import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
@@ -27,31 +27,32 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useOptimistic, useState, useTransition } from "react";
 
 const YOUR_BADGES_COLUMNS: ColumnHeader[] = [
-  { label: "#", width: "1.5rem", align: "right", sticky: true },
-  { label: "Name", width: "8rem", sortField: "name", sticky: true },
+  { label: "Group %", width: "2rem", align: "center", vertical: true, sticky: true },
+  { label: "Name", width: "minmax(4rem, 1fr)", sortField: "name", sticky: true },
   { label: "Description", width: "minmax(5rem,20rem)" },
   { label: "Difficulty", width: "5rem", align: "right", sortField: "difficulty" },
   { label: "# Players", width: "4rem", align: "right", sortField: "players" },
-  { label: "Group %", width: "5rem", align: "right", sortField: "need" },
 ];
 
 function buildGroupBadgeColumns(members: { id: string; displayName: string }[], currentUserId: string): ColumnHeader[] {
-  const sorted = [...members].sort((memberA, memberB) => {
+  // Member name columns live at the far right and are non-sticky. "You"
+  // appears as the first member column so the current user reads first.
+  const sortedMembersForHeader = [...members].sort((memberA, memberB) => {
     if (memberA.id === currentUserId) return -1;
     if (memberB.id === currentUserId) return 1;
     return 0;
   });
   return [
-    { label: "#", width: "1.5rem", align: "right", sticky: true },
-    { label: "Name", width: "8rem", sticky: true },
+    { label: "Votes", width: "1.75rem", align: "center", vertical: true, sticky: true },
+    { label: "Group %", width: "2rem", align: "center", vertical: true, sticky: true },
+    { label: "Done", width: "1.5rem", align: "center", vertical: true, sticky: true, tooltip: "Your completion — click to toggle", labelShift: "-4px" },
+    { label: "Name", width: "minmax(4rem, 1fr)", sticky: true },
     { label: "Description", width: "minmax(5rem,20rem)" },
     { label: "Difficulty", width: "5rem", align: "right" },
     { label: "# Players", width: "4rem", align: "right" },
-    { label: "Votes", width: "2.5rem", align: "center", vertical: true },
-    { label: "Group %", width: "3.5rem", align: "center", vertical: true },
-    ...sorted.map((member) => ({
+    ...sortedMembersForHeader.map((member) => ({
       label: member.id === currentUserId ? "You" : member.displayName.slice(0, 4),
-      width: "2rem",
+      width: "1.25rem",
       align: "center" as const,
       vertical: true,
       bold: member.id === currentUserId,
@@ -679,7 +680,7 @@ export function SessionDetailClient({
   const sortedGroupCompletedByMe = sortGroupEntries(groupCompletedByMe);
   const groupBadgeColumns = useMemo(() => buildGroupBadgeColumns(session.members, currentUserId), [session.members, currentUserId]);
 
-  // Members sorted with current user first, matching column order
+  // Members sorted with current user FIRST, matching column order
   const sortedMembers = useMemo(() => {
     return [...session.members].sort((memberA, memberB) => {
       if (memberA.id === currentUserId) return -1;
@@ -1203,7 +1204,7 @@ export function SessionDetailClient({
                   className: rowClassName,
                   onMouseDown: () => handleBadgeSelect(badge.id),
                   cells: [
-                    <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{badge.badgeNumber}</span>,
+                    <span className={`min-w-0 text-center text-[11px] tabular-nums ${memberCount > 0 && badge.totalUncompletedCount === 0 ? "text-success font-semibold" : "text-muted"}`}>{memberCount > 0 ? Math.round(((memberCount - badge.totalUncompletedCount) / memberCount) * 100) : 0}%</span>,
                     <span className="flex w-full items-center gap-1 min-w-0">
                       <span className="min-w-0 flex-1 text-sm font-medium text-foreground">{badge.name}</span>
                       <button
@@ -1220,7 +1221,6 @@ export function SessionDetailClient({
                     <span className="block min-w-0 text-xs text-muted">{badge.description}</span>,
                     <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
                     <span className={`min-w-0 text-center text-[11px] ${resolvePlayerCount(badge).color}`}>{resolvePlayerCount(badge).label}</span>,
-                    <span className={`min-w-0 text-center text-[11px] tabular-nums ${memberCount > 0 && badge.totalUncompletedCount === 0 ? "text-success font-semibold" : "text-muted"}`}>{memberCount > 0 ? Math.round(((memberCount - badge.totalUncompletedCount) / memberCount) * 100) : 0}%</span>,
                   ],
                   footer: undefined,
                 };
@@ -1321,26 +1321,32 @@ function buildGroupBadgeRows(
       </span>
     );
 
-    // Per-member completion cells: clickable checkbox for current user, static indicator for others
+    // Left "Done" column — the only clickable completion toggle (for the
+    // current user). onMouseDown stopPropagation keeps the row-click from
+    // opening the badge-info popup while toggling.
+    const doneCell = (
+      <div onMouseDown={(event) => event.stopPropagation()}>
+        <BadgeCheckbox
+          checked={currentUserCompleted}
+          disabled={!canEdit}
+          title={!canEdit ? "Session is closed" : currentUserCompleted ? "Click to un-complete" : "Mark as completed"}
+          onClick={() => onToggleCompletion(entry.selection.badgeId)}
+        />
+      </div>
+    );
+
+    // Per-member completion cells at the far right. All are non-clickable
+    // status indicators — including the current user's "You" column, which
+    // mirrors the left-side Done checkbox's state.
     const memberCells = members.map((member) => {
-      const completed = persistentCompletions.has(member.id);
-      if (member.id === currentUserId) {
-        return (
-          <div key={member.id} onMouseDown={(event) => event.stopPropagation()}>
-            <BadgeCheckbox
-              checked={currentUserCompleted}
-              disabled={!canEdit}
-              title={!canEdit ? "Session is closed" : currentUserCompleted ? "Click to un-complete" : "Mark as completed"}
-              onClick={() => onToggleCompletion(entry.selection.badgeId)}
-            />
-          </div>
-        );
-      }
+      const isCurrentUser = member.id === currentUserId;
+      const completed = isCurrentUser ? currentUserCompleted : persistentCompletions.has(member.id);
+      const memberLabel = isCurrentUser ? "You" : member.displayName;
       return (
         <span
           key={member.id}
           className={`flex items-center justify-center ${completed ? "text-success" : "text-accent/40"}`}
-          title={completed ? `${member.displayName} has completed` : `${member.displayName} has not completed`}
+          title={completed ? `${memberLabel} has completed` : `${memberLabel} has not completed`}
         >
           {completed ? (
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -1360,13 +1366,13 @@ function buildGroupBadgeRows(
       className: rowClassName,
       onMouseDown: () => onBadgeInfoClick(entry.selection.badgeId),
       cells: [
-        <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{entry.selection.badgeNumber}</span>,
+        votesCell,
+        fractionCell,
+        doneCell,
         <span className="min-w-0 text-sm font-medium text-foreground">{entry.selection.badgeName}</span>,
         <span className="block min-w-0 text-xs text-muted">{entry.selection.badgeDescription}</span>,
         <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
         <span className={`min-w-0 text-center text-[11px] ${playerCountResolved.color}`}>{playerCountResolved.label}</span>,
-        votesCell,
-        fractionCell,
         ...memberCells,
       ],
       footer: undefined,
