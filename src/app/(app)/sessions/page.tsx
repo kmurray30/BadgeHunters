@@ -9,52 +9,52 @@ export default async function SessionsPage() {
   const sessionFilter = sessionIsolationFilter(user);
   const userFilter = isolationFilter(user);
 
-  const sessions = await prisma.session.findMany({
-    where: sessionFilter,
-    orderBy: { sessionDateLocal: "desc" },
-    include: {
-      createdBy: {
-        select: {
-          id: true,
-          activatePlayerName: true,
-          realName: true,
-          displayNameMode: true,
+  const [sessions, availableUsers] = await Promise.all([
+    prisma.session.findMany({
+      where: sessionFilter,
+      orderBy: { sessionDateLocal: "desc" },
+      include: {
+        createdBy: {
+          select: {
+            id: true,
+            activatePlayerName: true,
+            realName: true,
+            displayNameMode: true,
+          },
         },
-      },
-      members: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              activatePlayerName: true,
-              realName: true,
-              displayNameMode: true,
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                activatePlayerName: true,
+                realName: true,
+                displayNameMode: true,
+              },
             },
           },
         },
+        ghostMembers: true,
+        acknowledgements: {
+          where: { userId: user.id },
+          select: { needsReview: true },
+        },
+        _count: {
+          select: { selections: true },
+        },
       },
-      ghostMembers: true,
-      acknowledgements: {
-        where: { userId: user.id },
-        select: { needsReview: true },
+    }),
+    prisma.user.findMany({
+      where: { ...userFilter, isActive: true },
+      select: {
+        id: true,
+        activatePlayerName: true,
+        realName: true,
+        displayNameMode: true,
       },
-      _count: {
-        select: { selections: true },
-      },
-    },
-  });
-
-  // Get all users in the same world for the create form
-  const availableUsers = await prisma.user.findMany({
-    where: { ...userFilter, isActive: true },
-    select: {
-      id: true,
-      activatePlayerName: true,
-      realName: true,
-      displayNameMode: true,
-    },
-    orderBy: { activatePlayerName: "asc" },
-  });
+      orderBy: { activatePlayerName: "asc" },
+    }),
+  ]);
 
   function getDisplayName(appUser: { displayNameMode: string; realName: string | null; activatePlayerName: string | null }) {
     return appUser.displayNameMode === "real_name"

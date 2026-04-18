@@ -24,22 +24,23 @@ export default async function Home() {
   if (!user) redirect("/login");
   if (!user.onboardingComplete) redirect("/onboarding");
 
-  // Your stats
-  const totalBadges = await prisma.badge.count({ where: { active: true } });
-  const yourCompletedCount = await prisma.badgeUserStatus.count({
-    where: { userId: user.id, isCompleted: true },
-  });
-  const mySessions = await prisma.session.findMany({
-    where: {
-      status: { not: "closed" },
-      members: { some: { userId: user.id } },
-    },
-    include: {
-      createdBy: { select: { activatePlayerName: true, realName: true, displayNameMode: true } },
-      acknowledgements: { where: { userId: user.id }, select: { needsReview: true } },
-    },
-    orderBy: { sessionDateLocal: "desc" },
-  });
+  const [totalBadges, yourCompletedCount, mySessions] = await Promise.all([
+    prisma.badge.count({ where: { active: true } }),
+    prisma.badgeUserStatus.count({
+      where: { userId: user.id, isCompleted: true },
+    }),
+    prisma.session.findMany({
+      where: {
+        status: { not: "closed" },
+        members: { some: { userId: user.id } },
+      },
+      include: {
+        createdBy: { select: { activatePlayerName: true, realName: true, displayNameMode: true } },
+        acknowledgements: { where: { userId: user.id }, select: { needsReview: true } },
+      },
+      orderBy: { sessionDateLocal: "desc" },
+    }),
+  ]);
 
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
 
