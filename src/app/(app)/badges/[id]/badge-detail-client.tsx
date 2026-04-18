@@ -88,6 +88,8 @@ interface Props {
   communityPlayerCountVotes: string[];
   comments: Comment[];
   metaRules: MetaRule[];
+  /** When true, hides the back-navigation button (used when embedded inside a modal). */
+  isModal?: boolean;
 }
 
 function computeCommunityAverage(votes: string[]): string {
@@ -134,6 +136,7 @@ export function BadgeDetailClient({
   communityPlayerCountVotes,
   comments,
   metaRules,
+  isModal = false,
 }: Props) {
   const [newComment, setNewComment] = useState("");
   const [notesValue, setNotesValue] = useState(currentUserStatus.personalNotesSummary ?? "");
@@ -159,7 +162,7 @@ export function BadgeDetailClient({
 
   return (
     <div className="space-y-6">
-      <BackButton fallback="/badges" label="Badges" />
+      {!isModal && <BackButton fallback="/badges" label="Badges" />}
 
       {/* Badge header — no badge number */}
       <div className="rounded-xl border border-border bg-card p-6">

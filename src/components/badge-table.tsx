@@ -150,7 +150,7 @@ const FULL_SPAN_STYLE: React.CSSProperties = { gridColumn: "1 / -1" };
 
 export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, onSortChange }: BadgeTableProps) {
   const hasPinnableColumns = columns.some((column) => column.sticky);
-  const [pinned, setPinned] = usePersistedState("bh:table:pinColumns", true);
+  const [pinned, setPinned] = usePersistedState("bh:table:pinColumns", false);
   const isPinned = hasPinnableColumns && pinned;
 
   // Inflated widths & sticky metadata (only computed when pinned)
@@ -204,7 +204,7 @@ export function BadgeTable({ columns, rows, sections, emptyState, sortCriteria, 
     <button
       type="button"
       onClick={(event) => { event.stopPropagation(); setPinned((prev) => !prev); }}
-      title={pinned ? "Unpin # and Name columns" : "Pin # and Name columns to the left"}
+      title={pinned ? "Unpin Name column" : "Pin Name column to the left"}
       className="ml-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted hover:text-foreground transition-colors"
     >
       {pinned ? (

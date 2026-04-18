@@ -185,16 +185,6 @@ export async function NavBar() {
         </div>
 
         <div className="flex items-center gap-1.5">
-          {isAdminMode && (
-            <>
-              <Link
-                href="/admin"
-                className="rounded-full bg-warning/20 px-3 py-1.5 text-xs font-semibold text-warning hover:bg-warning/30 transition-colors"
-              >
-                Admin Tools
-              </Link>
-            </>
-          )}
           {session?.user ? (
             <>
               <NotificationCenter notifications={notifications} />
@@ -204,6 +194,7 @@ export async function NavBar() {
                 userImage={session.user.image ?? undefined}
                 isTestUser={session.user.isTestUser}
                 role={session.user.role}
+                isAdminMode={isAdminMode}
               />
             </>
           ) : (

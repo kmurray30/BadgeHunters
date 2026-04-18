@@ -27,27 +27,13 @@ export function LoginClient() {
           </p>
         </div>
 
-        {/* Google OAuth — Sign In / Sign Up */}
-        <div className="rounded-xl border border-border bg-card p-6 space-y-3">
+        <div className="rounded-xl border border-border bg-card p-6">
           <button
             onClick={() => signIn("google", { callbackUrl: "/" })}
             className="flex w-full items-center justify-center gap-3 rounded-lg bg-white px-4 py-3 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50 transition-colors"
           >
             <GoogleLogo />
-            Sign in with Google
-          </button>
-          <div className="relative flex items-center justify-center">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
-            </div>
-            <span className="relative bg-card px-3 text-xs text-muted">or</span>
-          </div>
-          <button
-            onClick={() => signIn("google", { callbackUrl: "/onboarding" })}
-            className="flex w-full items-center justify-center gap-3 rounded-lg border border-border bg-background px-4 py-3 text-sm font-medium text-foreground hover:bg-card-hover transition-colors"
-          >
-            <GoogleLogo />
-            Create an account
+            Continue with Google
           </button>
         </div>
       </div>

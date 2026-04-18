@@ -10,17 +10,11 @@ export default async function OnboardingPage() {
     redirect("/login");
   }
 
-  // Already fully onboarded — nothing to do here
-  if (session.user.onboardingComplete) {
-    redirect("/badges");
+  // Already fully set up → go home
+  if (!session.user.pendingOnboarding) {
+    redirect("/");
   }
 
-  // Non-pending real users who somehow land here also get bounced to badges
-  if (!session.user.pendingOnboarding && session.user.id && session.user.onboardingComplete) {
-    redirect("/badges");
-  }
-
-  // Read Google profile from the session (no DB query needed)
   const email = session.user.email ?? null;
   const googleName = session.user.name ?? null;
 

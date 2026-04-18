@@ -2,6 +2,7 @@
 
 import { toggleBadgeCompletion, toggleBadgeTodo } from "@/app/actions/badges";
 import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type ColumnHeader } from "@/components/badge-table";
+import { BadgeInfoModal } from "@/components/badge-info-modal";
 import { MultiFilter, type ActiveFilter, type FilterDefinition } from "@/components/multi-filter";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
@@ -158,6 +159,7 @@ function applyOptimisticOverrides(
 export function BadgeListClient({ badges, currentUserId, currentUserRole, allUsers }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
+  const [selectedBadgeId, setSelectedBadgeId] = useState<string | null>(null);
 
   // Optimistic overrides keyed by badge id
   const [optimisticOverrides, applyOptimisticAction] = useOptimistic(
@@ -339,6 +341,9 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
 
   return (
     <div>
+      {selectedBadgeId && (
+        <BadgeInfoModal badgeId={selectedBadgeId} onClose={() => setSelectedBadgeId(null)} />
+      )}
       {/* Header */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -378,7 +383,7 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
           const playerCount = getPlayerCountDisplay(badge);
           return {
             key: badge.id,
-            href: `/badges/${badge.id}`,
+            onMouseDown: () => setSelectedBadgeId(badge.id),
             className: badge.completedByCurrentUser
               ? "bg-completed hover:bg-completed-hover"
               : badge.isTodoByCurrentUser
@@ -394,22 +399,24 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
               <span className={`min-w-0 text-center text-[11px] ${playerCount.color}`}>
                 {playerCount.label}
               </span>,
-              <BadgeCheckbox
-                checked={badge.isTodoByCurrentUser}
-                title={badge.completedByCurrentUser ? "Already completed — can't mark To Do" : badge.isTodoByCurrentUser ? "Remove from To Do" : "Mark as To Do"}
-                onClick={() => handleToggleTodo(badge.id)}
-                preventLinkNavigation
-                disabled={badge.completedByCurrentUser}
-                checkedClassName="border-amber-500 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
-                crossWhenDisabled
-                useStar
-              />,
-              <BadgeCheckbox
-                checked={badge.completedByCurrentUser}
-                title={badge.completedByCurrentUser ? "Mark incomplete" : "Mark complete"}
-                onClick={() => handleToggleCompletion(badge.id)}
-                preventLinkNavigation
-              />,
+              <div onMouseDown={(event) => event.stopPropagation()}>
+                <BadgeCheckbox
+                  checked={badge.isTodoByCurrentUser}
+                  title={badge.completedByCurrentUser ? "Already completed — can't mark To Do" : badge.isTodoByCurrentUser ? "Remove from To Do" : "Mark as To Do"}
+                  onClick={() => handleToggleTodo(badge.id)}
+                  disabled={badge.completedByCurrentUser}
+                  checkedClassName="border-amber-500 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
+                  crossWhenDisabled
+                  useStar
+                />
+              </div>,
+              <div onMouseDown={(event) => event.stopPropagation()}>
+                <BadgeCheckbox
+                  checked={badge.completedByCurrentUser}
+                  title={badge.completedByCurrentUser ? "Mark incomplete" : "Mark complete"}
+                  onClick={() => handleToggleCompletion(badge.id)}
+                />
+              </div>,
             ],
           };
         })}

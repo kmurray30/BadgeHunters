@@ -84,7 +84,8 @@ export function NewSessionClient({ availableUsers, currentUserDisplayName, defau
       const sessionId = await createSession(selectedMembers, ghostNames, sessionDate);
       // Replace instead of push so the creation form is removed from history —
       // pressing Back from the new session goes to sessions list, not back here.
-      router.replace(`/sessions/${sessionId}`);
+      // ?tab=select tells the session page to open on the "Select Badges" tab first.
+      router.replace(`/sessions/${sessionId}?tab=select`);
     } catch {
       setIsCreating(false);
     }

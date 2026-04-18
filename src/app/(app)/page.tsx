@@ -7,7 +7,13 @@ import { RankPopup } from "@/components/rank-popup";
 
 export default async function Home() {
   const session = await auth();
-  if (!session?.user) {
+
+  // Pending user (mid-onboarding) → complete setup first
+  if (session?.user?.pendingOnboarding) {
+    redirect("/onboarding");
+  }
+
+  if (!session?.user?.id) {
     redirect("/login");
   }
 

@@ -1,4 +1,4 @@
-﻿Number,Name,Description,Completed,Room,Game,# ppl,Tags,Difficulty,Duration
+Number,Name,Description,Completed,Room,Game,# ppl,Tags,Difficulty,Duration
 1,10 FOR 10,Win ten different level 10 games in a row,,TBD,TBD,,,Impossible?,Partial Day
 2,15S IN 15S,Complete each wave of 15 Green level 6 in exactly 15 seconds.,Kyle,Hoops,15 Green,,,Medium,Quick
 3,2 FAST 2 SEE,Complete Numbers level 2 without the eye going off,,Hide,Numbers,5,,Hard,Quick
@@ -61,43 +61,42 @@
 60,ONE BY ONE,Complete Defuse level 5 with 3 players by only completing one target at a time,,,Defuse,,,???,Quick
 61,OUT FOR BLOOD,Only play competitive mode games for one visit,,N/A,N/A,,Per-visit,Easy,Meta
 62,PERFECT PAIRS,Win level 1 of Link in less than 10 seconds.,,,Link,,,???,Quick
-63,PHOTOBOMB,Take a photo in the photo room,,Photo Room,Photo Room,,,Easy,Meta
-64,PICTURE PERFECT,Take a photo within 60 seconds of completing a level without losing a life,,Photo Room,Photo Room,,,Easy,Meta
-65,POP QUIZ,Solve each question of Trivial level 1 in less than 10 seconds,,,Trivial,,,???,Quick
-66,PRACTICE MAKES PERFECT,Beat your personal high score in 100 levels,,N/A,N/A,,Score,Hard,Multi-day
-67,RIDDLE 1.0,"With the sign all lit up, search the screen for the cup.",,N/A,N/A,,???,???,Meta
-68,RIDDLE 2.0,"Looking for stars while taking a break, look no further and click the mistake.",,N/A,N/A,,???,???,Meta
-69,RIDDLE 3.0,"Mary had a little lamb, little lamb, little lamb. Mary had a little lamb, its fleece was white as snow.",,N/A,N/A,,???,???,Meta
-70,RIDDLE 4.0,"Within one second of signing into a game, exit the score checker and this badge you will claim.",,N/A,N/A,,???,???,Meta
-71,RIDDLE 5.0,"When the timer starts to run, in the first stage of level one, go tick tock around the clock, giving all the buttons a knock.",,N/A,N/A,,???,???,Meta
-72,RIDDLE 6.0,"Winning Activate level 7s can cause lots of stress, now do it back to back in all games that start with S.",,N/A,N/A,,???,???,Meta
-73,SAFETY SECOND,Complete Order Up level 8 without stepping on a green tile.,,,Order Up,,,???,Quick
-74,SCATTERBRAINED,Never play the same game back to back for one visit.,,N/A,N/A,,Per-visit,Easy,Meta
-75,SHOWING OFF,Complete Barrage level 8 and sink 10 baskets on an unused net,Kyle,Hoops,Barrage,,,Medium,Quick
-76,SIZE MATTERS,Complete Jigsaw level 5 by stepping on the solution pieces from smallest to largest,,,Jigsaw,,,???,Quick
-77,SNAKE ISLAND,Keep five players alive in Tails for 60 seconds.,,,Tails,5,,???,Quick
-78,SNIPER 1.0,Complete Terminal level 5 without missing a single throw.,,,Terminal,,,???,Quick
-79,SNIPER 2.0,Complete Dartmouth level 10 without missing a single throw,,,Dartmouth,,,???,Quick
-80,SOCIAL BUTTERFLY,Play with 25 different people.,,N/A,N/A,,,Hard,Meta
-81,STARTING A RIVALRY,Win 25 competitive mode games,,N/A,N/A,,Competitive,Easy,Multi-day
-82,THE GAUNTLET,Beat levels 1 through 10 of a single game in a row without losing,,Grid,Zones,3,,Medium,Partial Day
-83,THE GAUNTLET PLUS,Beat levels 1 through 10 in a row without repeating a game and without losing a life.,,TBD,TBD,,,Hard,Partial Day
-84,THE GRAND TOUR,Win a level from every room in a row without losing a life.,,TBD,TBD,,,Medium,Partial Day
-85,THE MARATHON,"Beat Relay level 5, Mega Relay level 5 and Laser Relay level 5 in a row.",,,"Laser Relay, Mega Relay, Relay",,,Medium,Quick
-86,THE ULTIMATE WINNER,Win 100 competitive mode games,,N/A,N/A,,Competitive,Hard,Multi-day
-87,THUMB WAR,Score exactly 1234 points in any one level,,TBD,TBD,,,Medium,Quick
-88,TIPTOEING,Complete Zones level 5 without stepping on any wrong colours,,Grid,Zones,,,???,Quick
-89,TOTAL RECALL,Complete Flip level 6 without revealing a target more than twice,,,Flip,,,???,
-90,TOTAL RECALL 2.0,Complete Sequence level 6 without revealing a number more than twice,,,Sequence,,,???,
-91,TOTAL RECALL 3.0,Complete Link level 8 without making a mistake,,,Link,,,???,
-92,UNTOUCHABLE,Win level 1 of Mega Grid without losing a life,,,Mega Grid,,,Easy,
-93,UNTOUCHABLE 2.0,Win level 2 of Maze without losing a life,,,Maze,,,Easy,
-94,UNTOUCHABLE 4.0,Win level 4 of Order Up without losing a life,,,Order Up,,,Medium,
-95,UNTOUCHABLE 5.0,Win level 5 of Wormholes without losing a life,,,Wormholes,,,???,
-96,UNTOUCHABLE 6.0,Win level 6 of Gauntiet without losing a life,,,Gauntlet,,,???,
-97,UNTOUCHABLE 7.0,Win level 7 of Mega Zones without losing a life,Kyle,,Mega Zones,,,???,
-98,UNTOUCHABLE 8.0,Win level 8 of Defuse without losing a life,,,Defuse,,,???,
-99,UNTOUCHABLE 9.0,Win level 9 of Asteroids without losing a life,,,Asteroids,,,???,
-100,UNTOUCHABLE MASTER,Win level 10 of Relay without losing a life,,,Relay,,,???,
-101,UP TO DATE,Sign up for the Activate Newsletter from the website or from the,Kyle,N/A,N/A,,,Easy,Meta
-102,WIN/LOSS,Win twice as many games as you lose in one visit,Kyle,N/A,N/A,,Per-visit,Easy,All day
+63,PICTURE PERFECT,Take a photo within 60 seconds of completing a level without losing a life,,Photo Room,Photo Room,,,Easy,Meta
+64,POP QUIZ,Solve each question of Trivial level 1 in less than 10 seconds,,,Trivial,,,???,Quick
+65,PRACTICE MAKES PERFECT,Beat your personal high score in 100 levels,,N/A,N/A,,Score,Hard,Multi-day
+66,RIDDLE 1.0,"With the sign all lit up, search the screen for the cup.",,N/A,N/A,,???,???,Meta
+67,RIDDLE 2.0,"Looking for stars while taking a break, look no further and click the mistake.",,N/A,N/A,,???,???,Meta
+68,RIDDLE 3.0,"Mary had a little lamb, little lamb, little lamb. Mary had a little lamb, its fleece was white as snow.",,N/A,N/A,,???,???,Meta
+69,RIDDLE 4.0,"Within one second of signing into a game, exit the score checker and this badge you will claim.",,N/A,N/A,,???,???,Meta
+70,RIDDLE 6.0,"When the timer starts to run, in the first stage of level one, go tick tock around the clock, giving all the buttons a knock.",,N/A,N/A,,???,???,Meta
+71,RIDDLE 7.0,"Winning Activate level 7s can cause lots of stress, now do it back to back in all games that start with S.",,N/A,N/A,,???,???,Meta
+72,SAFETY SECOND,Complete Order Up level 8 without stepping on a green tile.,,,Order Up,,,???,Quick
+73,SCATTERBRAINED,Never play the same game back to back for one visit.,,N/A,N/A,,Per-visit,Easy,Meta
+74,SHOWING OFF,Complete Barrage level 8 and sink 10 baskets on an unused net,Kyle,Hoops,Barrage,,,Medium,Quick
+75,SIZE MATTERS,Complete Jigsaw level 5 by stepping on the solution pieces from smallest to largest,,,Jigsaw,,,???,Quick
+76,SNAKE ISLAND,Keep five players alive in Tails for 60 seconds.,,,Tails,5,,???,Quick
+77,SNIPER 1.0,Complete Terminal level 5 without missing a single throw.,,,Terminal,,,???,Quick
+78,SNIPER 2.0,Complete Dartmouth level 10 without missing a single throw,,,Dartmouth,,,???,Quick
+79,SOCIAL BUTTERFLY,Play with 25 different people.,,N/A,N/A,,,Hard,Meta
+80,STARTING A RIVALRY,Win 25 competitive mode games,,N/A,N/A,,Competitive,Easy,Multi-day
+81,THE GAUNTLET,Beat levels 1 through 10 of a single game in a row without losing,,Grid,Zones,3,,Medium,Partial Day
+82,THE GAUNTLET PLUS,Beat levels 1 through 10 in a row without repeating a game and without losing a life.,,TBD,TBD,,,Hard,Partial Day
+83,THE GRAND TOUR,Win a level from every room in a row without losing a life.,,TBD,TBD,,,Medium,Partial Day
+84,THE MARATHON,"Beat Relay level 5, Mega Relay level 5 and Laser Relay level 5 in a row.",,,"Laser Relay, Mega Relay, Relay",,,Medium,Quick
+85,THE ULTIMATE WINNER,Win 100 competitive mode games,,N/A,N/A,,Competitive,Hard,Multi-day
+86,THUMB WAR,Score exactly 1234 points in any one level,,TBD,TBD,,,Medium,Quick
+87,TIPTOEING,Complete Zones level 5 without stepping on any wrong colours,,Grid,Zones,,,???,Quick
+88,TOTAL RECALL,Complete Flip level 6 without revealing a target more than twice,,,Flip,,,???,
+89,TOTAL RECALL 2.0,Complete Sequence level 6 without revealing a number more than twice,,,Sequence,,,???,
+90,TOTAL RECALL 3.0,Complete Link level 8 without making a mistake,,,Link,,,???,
+91,UNTOUCHABLE,Win level 1 of Mega Grid without losing a life,,,Mega Grid,,,Easy,
+92,UNTOUCHABLE 2.0,Win level 2 of Maze without losing a life,,,Maze,,,Easy,
+93,UNTOUCHABLE 4.0,Win level 4 of Order Up without losing a life,,,Order Up,,,Medium,
+94,UNTOUCHABLE 5.0,Win level 5 of Wormholes without losing a life,,,Wormholes,,,???,
+95,UNTOUCHABLE 6.0,Win level 6 of Gauntiet without losing a life,,,Gauntlet,,,???,
+96,UNTOUCHABLE 7.0,Win level 7 of Mega Zones without losing a life,Kyle,,Mega Zones,,,???,
+97,UNTOUCHABLE 8.0,Win level 8 of Defuse without losing a life,,,Defuse,,,???,
+98,UNTOUCHABLE 9.0,Win level 9 of Asteroids without losing a life,,,Asteroids,,,???,
+99,UNTOUCHABLE MASTER,Win level 10 of Relay without losing a life,,,Relay,,,???,
+100,UP TO DATE,Sign up for the Activate Newsletter from the website or from the,Kyle,N/A,N/A,,,Easy,Meta
+101,WIN/LOSS,Win twice as many games as you lose in one visit,Kyle,N/A,N/A,,Per-visit,Easy,All day

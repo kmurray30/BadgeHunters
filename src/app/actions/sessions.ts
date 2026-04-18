@@ -465,9 +465,10 @@ export async function deleteSession(sessionId: string) {
   });
   if (!session) throw new Error("Session not found");
 
+  const isSuperuser = user.role === "superuser";
   const isCreator = session.createdByUserId === user.id;
-  if (!isCreator && !isAdminMode) {
-    throw new Error("Only the session creator or an admin can delete a session");
+  if (!isCreator && !isAdminMode && !isSuperuser) {
+    throw new Error("Only the session creator, a superuser, or an admin can delete a session");
   }
 
   // Prisma cascade handles most child records (members, ghosts, selections,

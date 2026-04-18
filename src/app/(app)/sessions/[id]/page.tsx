@@ -7,10 +7,12 @@ import { SessionDetailClient } from "./session-detail-client";
 
 interface Props {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }
 
-export default async function SessionDetailPage({ params }: Props) {
+export default async function SessionDetailPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const { tab } = await searchParams;
   const user = await requireUser();
   const isolation = isolationFilter(user);
   const cookieStore = await cookies();
@@ -219,6 +221,7 @@ export default async function SessionDetailPage({ params }: Props) {
         metaRuleBlurbs={metaRuleBlurbs}
         todayString={todayString}
         isAdminMode={isAdminMode}
+        initialTab={tab === "select" ? "your_badges" : undefined}
       />
     </div>
   );

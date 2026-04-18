@@ -16,6 +16,7 @@ import {
 } from "@/app/actions/sessions";
 import { BackButton } from "@/components/back-button";
 import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type BadgeTableSection, type ColumnHeader } from "@/components/badge-table";
+import { BadgeInfoModal } from "@/components/badge-info-modal";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MultiFilter, type ActiveFilter, type FilterDefinition } from "@/components/multi-filter";
 import { MultiSort, type SortCriterion, type SortField } from "@/components/multi-sort";
@@ -128,6 +129,8 @@ interface Props {
   metaRuleBlurbs: Record<string, string>;
   todayString: string;
   isAdminMode: boolean;
+  /** When set, overrides the persisted tab on this page load only (e.g. new session → start on select-badges). */
+  initialTab?: TabMode;
 }
 
 type TabMode = "your_badges" | "group_badges";
@@ -301,6 +304,7 @@ export function SessionDetailClient({
   metaRuleBlurbs,
   todayString,
   isAdminMode,
+  initialTab,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -354,7 +358,7 @@ export function SessionDetailClient({
     (session.status === "active" && !inReviewMode && !personallyDone) || isEditing
   );
 
-  const [activeTab, setActiveTab] = usePersistedState<TabMode>("bh:session:tab", showYourBadges ? "your_badges" : "group_badges");
+  const [activeTab, setActiveTab] = useState<TabMode>(initialTab ?? (showYourBadges ? "your_badges" : "group_badges"));
 
   // When showYourBadges turns off (e.g. session completed), fall back to group view
   // so the badge list doesn't just vanish.
@@ -369,10 +373,25 @@ export function SessionDetailClient({
   const [editingDate, setEditingDate] = useState(false);
   const [newDateValue, setNewDateValue] = useState(session.sessionDateLA);
 
-  const canDeleteSession = isAdminMode || session.createdBy.id === currentUserId;
+  const canDeleteSession = isAdminMode || currentUserRole === "superuser" || session.createdBy.id === currentUserId;
   const canEditDate = isAdminMode;
 
   const [pendingUncompleteBadgeId, setPendingUncompleteBadgeId] = useState<string | null>(null);
+
+  // Badge info modal
+  const [badgeInfoId, setBadgeInfoId] = useState<string | null>(null);
+
+  // Group goals sort
+  const GROUP_SORT_FIELDS: SortField[] = [
+    { value: "votes", label: "Votes" },
+    { value: "completion", label: "Completion %" },
+    { value: "name", label: "Name" },
+    { value: "difficulty", label: "Difficulty" },
+  ];
+  const [groupSortCriteria, setGroupSortCriteria] = usePersistedState<SortCriterion[]>(
+    `bh:session:${session.id}:group-sort`,
+    [{ field: "votes", ascending: false }, { field: "completion", ascending: false }],
+  );
 
   // Optimistic completion: tracks which badges have been toggled by the current
   // user before the server confirms. Resets when allBadges (server data) changes.
@@ -621,24 +640,37 @@ export function SessionDetailClient({
 
   const memberCount = session.members.length;
 
-  // Sort group entries: votes descending, then completion % descending
+  // Sort group entries according to groupSortCriteria
   function sortGroupEntries(entries: typeof groupBadges): typeof groupBadges {
     return [...entries].sort((entryA, entryB) => {
-      const votesDiff = entryB.selectors.length - entryA.selectors.length;
-      if (votesDiff !== 0) return votesDiff;
-      const completedA = session.members.filter((member) => {
-        const badge = badgeLookup.get(entryA.selection.badgeId);
-        return member.id === currentUserId
-          ? isCurrentUserCompleted(entryA.selection.badgeId)
-          : (badge?.memberCompletions ?? []).includes(member.id);
-      }).length;
-      const completedB = session.members.filter((member) => {
-        const badge = badgeLookup.get(entryB.selection.badgeId);
-        return member.id === currentUserId
-          ? isCurrentUserCompleted(entryB.selection.badgeId)
-          : (badge?.memberCompletions ?? []).includes(member.id);
-      }).length;
-      return completedB - completedA;
+      for (const criterion of groupSortCriteria) {
+        let comparison = 0;
+        if (criterion.field === "votes") {
+          comparison = entryA.selectors.length - entryB.selectors.length;
+        } else if (criterion.field === "completion") {
+          const completedA = session.members.filter((member) => {
+            const badge = badgeLookup.get(entryA.selection.badgeId);
+            return member.id === currentUserId
+              ? isCurrentUserCompleted(entryA.selection.badgeId)
+              : (badge?.memberCompletions ?? []).includes(member.id);
+          }).length;
+          const completedB = session.members.filter((member) => {
+            const badge = badgeLookup.get(entryB.selection.badgeId);
+            return member.id === currentUserId
+              ? isCurrentUserCompleted(entryB.selection.badgeId)
+              : (badge?.memberCompletions ?? []).includes(member.id);
+          }).length;
+          comparison = completedA - completedB;
+        } else if (criterion.field === "name") {
+          comparison = entryA.selection.badgeName.localeCompare(entryB.selection.badgeName);
+        } else if (criterion.field === "difficulty") {
+          const diffA = DIFFICULTY_MAP[resolveDifficulty(badgeLookup.get(entryA.selection.badgeId)?.communityVotes ?? [])] ?? 99;
+          const diffB = DIFFICULTY_MAP[resolveDifficulty(badgeLookup.get(entryB.selection.badgeId)?.communityVotes ?? [])] ?? 99;
+          comparison = diffA - diffB;
+        }
+        if (comparison !== 0) return criterion.ascending ? comparison : -comparison;
+      }
+      return entryA.selection.badgeName.localeCompare(entryB.selection.badgeName);
     });
   }
 
@@ -714,6 +746,13 @@ export function SessionDetailClient({
           onClose={() => dismissRecommendation(currentRecommendation.badgeNumber)}
         />
       )}
+
+      {/* Badge info modal */}
+      {badgeInfoId && (() => {
+        const badge = allBadges.find((b) => b.id === badgeInfoId);
+        if (!badge) return null;
+        return <BadgeInfoModal badgeId={badge.id} onClose={() => setBadgeInfoId(null)} />;
+      })()}
 
       {/* Delete session confirmation dialog */}
       {showDeleteConfirm && (
@@ -1165,7 +1204,19 @@ export function SessionDetailClient({
                   onMouseDown: () => handleBadgeSelect(badge.id),
                   cells: [
                     <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{badge.badgeNumber}</span>,
-                    <span className="min-w-0 text-sm font-medium text-foreground">{badge.name}</span>,
+                    <span className="flex w-full items-center gap-1 min-w-0">
+                      <span className="min-w-0 flex-1 text-sm font-medium text-foreground">{badge.name}</span>
+                      <button
+                        type="button"
+                        onMouseDown={(event) => { event.stopPropagation(); setBadgeInfoId(badge.id); }}
+                        title="View badge info"
+                        className="shrink-0 flex h-4 w-4 items-center justify-center rounded-full text-muted hover:text-accent transition-colors"
+                      >
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                        </svg>
+                      </button>
+                    </span>,
                     <span className="block min-w-0 text-xs text-muted">{badge.description}</span>,
                     <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
                     <span className={`min-w-0 text-center text-[11px] ${resolvePlayerCount(badge).color}`}>{resolvePlayerCount(badge).label}</span>,
@@ -1193,6 +1244,11 @@ export function SessionDetailClient({
       {/* ── Group Badges tab ── */}
       {displayTab === "group_badges" && (
         <div className="space-y-4">
+          {session.selections.length > 0 && (
+            <div className="flex justify-end">
+              <MultiSort availableFields={GROUP_SORT_FIELDS} criteria={groupSortCriteria} onChange={setGroupSortCriteria} />
+            </div>
+          )}
           {session.selections.length === 0 ? (
             <div className="rounded-xl border border-border bg-card p-8 text-center">
               <p className="text-muted">No badges selected yet.</p>
@@ -1203,13 +1259,13 @@ export function SessionDetailClient({
               columns={groupBadgeColumns}
               sections={[
                 ...(sortedGroupPerVisit.length > 0
-                  ? [{ label: "Visit-Specific Badges", rows: buildGroupBadgeRows(sortedGroupPerVisit, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds) } satisfies BadgeTableSection]
+                  ? [{ label: "Visit-Specific Badges", rows: buildGroupBadgeRows(sortedGroupPerVisit, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds, setBadgeInfoId) } satisfies BadgeTableSection]
                   : []),
                 ...(sortedGroupNormal.length > 0
-                  ? [{ label: "Standard Badges", rows: buildGroupBadgeRows(sortedGroupNormal, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds) } satisfies BadgeTableSection]
+                  ? [{ label: "Standard Badges", rows: buildGroupBadgeRows(sortedGroupNormal, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds, setBadgeInfoId) } satisfies BadgeTableSection]
                   : []),
                 ...(sortedGroupCompletedByMe.length > 0
-                  ? [{ label: "Completed By Me", rows: buildGroupBadgeRows(sortedGroupCompletedByMe, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds) } satisfies BadgeTableSection]
+                  ? [{ label: "Completed By Me", rows: buildGroupBadgeRows(sortedGroupCompletedByMe, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds, setBadgeInfoId) } satisfies BadgeTableSection]
                   : []),
               ]}
             />
@@ -1232,6 +1288,7 @@ function buildGroupBadgeRows(
   onToggleCompletion: (badgeId: string) => void,
   members: { id: string; displayName: string }[],
   optimisticCompletedBadgeIds: Set<string>,
+  onBadgeInfoClick: (badgeId: string) => void,
 ): BadgeTableRow[] {
   return entries.map((entry) => {
     const fullBadge = badgeLookup.get(entry.selection.badgeId);
@@ -1269,13 +1326,14 @@ function buildGroupBadgeRows(
       const completed = persistentCompletions.has(member.id);
       if (member.id === currentUserId) {
         return (
-          <BadgeCheckbox
-            key={member.id}
-            checked={currentUserCompleted}
-            disabled={!canEdit}
-            title={!canEdit ? "Session is closed" : currentUserCompleted ? "Click to un-complete" : "Mark as completed"}
-            onClick={() => onToggleCompletion(entry.selection.badgeId)}
-          />
+          <div key={member.id} onMouseDown={(event) => event.stopPropagation()}>
+            <BadgeCheckbox
+              checked={currentUserCompleted}
+              disabled={!canEdit}
+              title={!canEdit ? "Session is closed" : currentUserCompleted ? "Click to un-complete" : "Mark as completed"}
+              onClick={() => onToggleCompletion(entry.selection.badgeId)}
+            />
+          </div>
         );
       }
       return (
@@ -1300,6 +1358,7 @@ function buildGroupBadgeRows(
     return {
       key: entry.selection.badgeId,
       className: rowClassName,
+      onMouseDown: () => onBadgeInfoClick(entry.selection.badgeId),
       cells: [
         <span className="w-5 text-[10px] font-mono text-muted tabular-nums">{entry.selection.badgeNumber}</span>,
         <span className="min-w-0 text-sm font-medium text-foreground">{entry.selection.badgeName}</span>,

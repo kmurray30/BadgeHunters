@@ -10,9 +10,10 @@ interface NavUserMenuProps {
   userImage?: string;
   isTestUser: boolean;
   role: string;
+  isAdminMode?: boolean;
 }
 
-export function NavUserMenu({ userId, userName, userImage, isTestUser, role }: NavUserMenuProps) {
+export function NavUserMenu({ userId, userName, userImage, isTestUser, role, isAdminMode = false }: NavUserMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -46,26 +47,34 @@ export function NavUserMenu({ userId, userName, userImage, isTestUser, role }: N
             {userName.charAt(0).toUpperCase()}
           </div>
         )}
-        {isTestUser && (
-          <span className="rounded bg-warning/20 px-1 py-0.5 text-[9px] font-bold text-warning">
-            TEST
-          </span>
-        )}
-        {role === "superuser" && (
-          <span className="rounded bg-accent/20 px-1 py-0.5 text-[9px] font-bold text-accent">
-            SU
-          </span>
-        )}
       </button>
 
       {isOpen && (
         <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-border bg-card py-1 shadow-xl">
+          {isAdminMode && (
+            <>
+              <Link
+                href="/admin"
+                className="block px-4 py-2 text-sm font-semibold text-warning hover:bg-card-hover transition-colors"
+                onClick={() => setIsOpen(false)}
+              >
+                Admin Tools
+              </Link>
+              <hr className="my-1 border-border" />
+            </>
+          )}
           <Link
             href="/profile"
-            className="block px-4 py-2 text-sm text-foreground hover:bg-card-hover"
+            className="flex items-center gap-2 px-4 py-2 text-sm text-foreground hover:bg-card-hover"
             onClick={() => setIsOpen(false)}
           >
-            Profile
+            <span className="flex-1">Profile</span>
+            {isTestUser && (
+              <span className="rounded bg-warning/20 px-1 py-0.5 text-[9px] font-bold text-warning">TEST</span>
+            )}
+            {role === "superuser" && (
+              <span className="rounded bg-accent/20 px-1 py-0.5 text-[9px] font-bold text-accent">SU</span>
+            )}
           </Link>
           <Link
             href="/settings"

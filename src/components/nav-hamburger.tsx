@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 
-export function NavHamburger() {
+interface NavHamburgerProps {
+  className?: string;
+}
+
+export function NavHamburger({ className }: NavHamburgerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -18,7 +22,7 @@ export function NavHamburger() {
   }, []);
 
   return (
-    <div className="relative min-[28rem]:hidden" ref={menuRef}>
+    <div className={`relative min-[28rem]:hidden ml-2 min-[28rem]:ml-0 ${className ?? ""}`} ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:text-foreground hover:bg-card-hover transition-colors"
@@ -30,7 +34,7 @@ export function NavHamburger() {
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1 w-36 rounded-lg border border-border bg-card py-1 shadow-xl">
+        <div className="absolute left-0 top-full mt-1 w-40 rounded-lg border border-border bg-card py-1 shadow-xl z-50">
           <Link
             href="/players"
             className="block px-4 py-2 text-sm text-foreground hover:bg-card-hover transition-colors"
