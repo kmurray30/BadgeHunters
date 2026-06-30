@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { withActivateBrowserSession } from "@/lib/activate-browser";
 import { ACTIVATE_ROOM_SLUGS } from "@/lib/activate-config";
 import {
@@ -24,6 +25,13 @@ export interface ScoreSyncResult {
 export interface ScoreSyncErrorDetail {
   context: string;
   message: string;
+}
+
+function errorDetailsForDb(
+  details: ScoreSyncErrorDetail[],
+): Prisma.InputJsonValue | undefined {
+  if (details.length === 0) return undefined;
+  return details as Prisma.InputJsonValue;
 }
 
 interface SyncProgressCallbacks {
@@ -351,7 +359,7 @@ export async function runScoreSync(
           syncedCount: synced,
           notFoundCount: notFound,
           errorCount: errors,
-          errorDetails: errorDetails.length > 0 ? errorDetails : undefined,
+          errorDetails: errorDetailsForDb(errorDetails),
           completedAt: new Date(),
         },
       });
@@ -370,7 +378,7 @@ export async function runScoreSync(
           syncedCount: synced,
           notFoundCount: notFound,
           errorCount: errors + 1,
-          errorDetails: errorDetails.length > 0 ? errorDetails : undefined,
+          errorDetails: errorDetailsForDb(errorDetails),
           completedAt: new Date(),
         },
       });
