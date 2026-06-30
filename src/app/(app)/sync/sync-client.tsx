@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { ScoreSyncErrorDetail } from "@/lib/score-sync";
-import type { SyncProgressSnapshot } from "@/lib/sync-progress";
+import type { SyncItemStatus, SyncProgressSnapshot } from "@/lib/sync-progress";
 
 interface SyncRunStatus {
   id: string;
@@ -26,6 +26,53 @@ interface SyncRunStatus {
 interface SyncClientProps {
   initialActiveRun: SyncRunStatus | null;
   initialLatestFinished: SyncRunStatus | null;
+}
+
+function syncStepStatusLabel(
+  status: SyncItemStatus,
+  detailLabel?: string,
+): { text: string; className: string } {
+  if (status === "done") {
+    return {
+      text: detailLabel === "Not found" ? "Not found" : "Done",
+      className: "text-accent",
+    };
+  }
+  if (status === "error") {
+    return { text: "Failed", className: "text-danger" };
+  }
+  if (status === "running") {
+    return {
+      text: detailLabel ?? "In progress…",
+      className: "text-foreground animate-pulse",
+    };
+  }
+  return { text: "Waiting…", className: "text-muted" };
+}
+
+function SyncStepList({ syncProgress }: { syncProgress: SyncProgressSnapshot }) {
+  return (
+    <ul className="mt-3 max-h-64 space-y-0.5 overflow-y-auto text-xs">
+      {syncProgress.rooms.map((room) => {
+        const status = syncStepStatusLabel(room.status);
+        return (
+          <li key={`room-${room.slug}`} className="flex items-center justify-between gap-3">
+            <span className="truncate text-foreground">Room: {room.label}</span>
+            <span className={`shrink-0 ${status.className}`}>{status.text}</span>
+          </li>
+        );
+      })}
+      {syncProgress.players.map((player) => {
+        const status = syncStepStatusLabel(player.status, player.label);
+        return (
+          <li key={`player-${player.userId}`} className="flex items-center justify-between gap-3">
+            <span className="truncate text-foreground">Player: {player.playerName}</span>
+            <span className={`shrink-0 ${status.className}`}>{status.text}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 function SyncErrorEntry({ entry }: { entry: ScoreSyncErrorDetail }) {
@@ -387,6 +434,10 @@ export function SyncClient({
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
+
+            {activeRun.syncProgress ? (
+              <SyncStepList syncProgress={activeRun.syncProgress} />
+            ) : null}
 
             {activeRunStalled ? (
               <p className="text-xs text-danger">
