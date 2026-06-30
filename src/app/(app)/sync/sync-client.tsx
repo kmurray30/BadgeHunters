@@ -25,6 +25,55 @@ interface SyncClientProps {
   initialLatestFinished: SyncRunStatus | null;
 }
 
+function SyncErrorEntry({ entry }: { entry: ScoreSyncErrorDetail }) {
+  return (
+    <div className="rounded-lg border border-border bg-background px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+        {entry.context}
+      </p>
+      {entry.name ? (
+        <p className="mt-1 text-[10px] font-medium text-muted">{entry.name}</p>
+      ) : null}
+      <p className="mt-1 whitespace-pre-wrap break-words text-xs text-foreground">
+        {entry.message}
+      </p>
+      {entry.cause ? (
+        <p className="mt-1 whitespace-pre-wrap break-words text-xs text-muted">
+          Cause: {entry.cause}
+        </p>
+      ) : null}
+      {entry.url ? (
+        <p className="mt-1 break-all text-xs text-muted">
+          URL:{" "}
+          <a
+            href={entry.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-accent hover:underline"
+          >
+            {entry.url}
+          </a>
+        </p>
+      ) : null}
+      {entry.at ? (
+        <p className="mt-1 text-[10px] text-muted">
+          {new Date(entry.at).toLocaleString()}
+        </p>
+      ) : null}
+      {entry.stack ? (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-[10px] font-medium text-accent hover:underline">
+            Stack trace
+          </summary>
+          <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-card px-2 py-1 text-[10px] leading-relaxed text-muted">
+            {entry.stack}
+          </pre>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
 function SyncErrorDetails({
   errorDetails,
   errorMessage,
@@ -51,7 +100,7 @@ function SyncErrorDetails({
       {errorMessage ? (
         <div className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-danger">
-            Fatal error
+            Summary
           </p>
           <p className="mt-1 whitespace-pre-wrap break-words text-xs text-foreground">
             {errorMessage}
@@ -59,17 +108,7 @@ function SyncErrorDetails({
         </div>
       ) : null}
       {errorDetails.map((entry, index) => (
-        <div
-          key={`${entry.context}-${index}`}
-          className="rounded-lg border border-border bg-background px-3 py-2"
-        >
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-            {entry.context}
-          </p>
-          <p className="mt-1 whitespace-pre-wrap break-words text-xs text-foreground">
-            {entry.message}
-          </p>
-        </div>
+        <SyncErrorEntry key={`${entry.context}-${index}`} entry={entry} />
       ))}
     </div>
   );

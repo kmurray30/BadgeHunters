@@ -4,7 +4,7 @@ import {
   PLAYER_STEP_TIMEOUT_MS,
   withTimeout,
 } from "@/lib/activate-browser";
-import { ACTIVATE_ROOM_SLUGS } from "@/lib/activate-config";
+import { ACTIVATE_ROOM_SLUGS, buildPlayerScoresUrl, buildRoomScoresUrl } from "@/lib/activate-config";
 import {
   activateLevelIdToDisplayLevel,
   type ActivateLevelScoreEntry,
@@ -19,6 +19,7 @@ import { getRankColor } from "@/lib/rank";
 import {
   errorDetailsForDb,
   formatSyncError,
+  parseErrorDetails,
   recordSyncError,
   type ScoreSyncErrorDetail,
 } from "@/lib/score-sync-run";
@@ -298,6 +299,7 @@ export async function runScoreSync(
             errorDetails,
             `Room: ${decodeURIComponent(roomSlug)}`,
             roomError,
+            { url: buildRoomScoresUrl(roomUsername, roomSlug) },
           );
         }
 
@@ -369,6 +371,7 @@ export async function runScoreSync(
             errorDetails,
             `Player: ${playerName}`,
             playerError,
+            { url: buildPlayerScoresUrl(playerName) },
           );
         }
 
@@ -472,6 +475,9 @@ async function expireStaleScoreSyncRunIfNeeded(run: {
   status: string;
   startedAt: Date;
   totalSteps: number;
+  completedSteps: number;
+  currentLabel: string | null;
+  errorDetails: unknown;
 }): Promise<boolean> {
   if (!["pending", "running"].includes(run.status)) {
     return false;
@@ -488,6 +494,25 @@ async function expireStaleScoreSyncRunIfNeeded(run: {
     return false;
   }
 
+  const runAgeMinutes = Math.round(runAgeMs / 60_000);
+  const staleLimitMinutes = Math.round(SYNC_STALE_THRESHOLD_MS / 60_000);
+  const progressLabel =
+    run.totalSteps > 0
+      ? `${run.completedSteps}/${run.totalSteps} steps`
+      : "no steps recorded";
+  const lastStepLabel = run.currentLabel ?? "unknown";
+
+  const staleMessage = isPendingStuck
+    ? `Sync never started after ${Math.round(runAgeMs / 1000)}s (stuck in pending). Try again.`
+    : `Sync exceeded ${staleLimitMinutes}m server limit after ${runAgeMinutes}m (${progressLabel}). Last step: ${lastStepLabel}. Individual step errors are listed below.`;
+
+  const existingDetails = parseErrorDetails(run.errorDetails);
+  existingDetails.push({
+    context: isPendingStuck ? "Stale run (never started)" : "Stale run (timed out)",
+    message: staleMessage,
+    at: new Date().toISOString(),
+  });
+
   await prisma.scoreSyncRun.updateMany({
     where: {
       id: run.id,
@@ -495,10 +520,10 @@ async function expireStaleScoreSyncRunIfNeeded(run: {
     },
     data: {
       status: "failed",
-      errorMessage: isPendingStuck
-        ? "Sync never started — try again"
-        : "Sync timed out or was interrupted",
+      errorMessage: staleMessage,
       currentLabel: isPendingStuck ? "Failed to start" : "Timed out",
+      errorDetails: errorDetailsForDb(existingDetails),
+      errorCount: existingDetails.length,
       completedAt: new Date(),
     },
   });

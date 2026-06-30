@@ -1,12 +1,18 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { formatSyncError } from "@/lib/sync-error-format";
+import { buildSyncErrorSnapshot } from "@/lib/sync-error-format";
 
-export { formatSyncError } from "@/lib/sync-error-format";
+export { formatSyncError, buildSyncErrorSnapshot } from "@/lib/sync-error-format";
+export type { SyncErrorSnapshot } from "@/lib/sync-error-format";
 
 export interface ScoreSyncErrorDetail {
   context: string;
   message: string;
+  name?: string;
+  stack?: string;
+  cause?: string;
+  url?: string;
+  at?: string;
 }
 
 export function errorDetailsForDb(
@@ -39,7 +45,23 @@ export function parseErrorDetails(value: unknown): ScoreSyncErrorDetail[] {
       if (typeof context !== "string" || typeof message !== "string") {
         return null;
       }
-      return { context, message };
+      const detail: ScoreSyncErrorDetail = { context, message };
+      if (typeof record.name === "string" && record.name) {
+        detail.name = record.name;
+      }
+      if (typeof record.stack === "string" && record.stack) {
+        detail.stack = record.stack;
+      }
+      if (typeof record.cause === "string" && record.cause) {
+        detail.cause = record.cause;
+      }
+      if (typeof record.url === "string" && record.url) {
+        detail.url = record.url;
+      }
+      if (typeof record.at === "string" && record.at) {
+        detail.at = record.at;
+      }
+      return detail;
     })
     .filter((entry): entry is ScoreSyncErrorDetail => entry != null);
 }
@@ -49,10 +71,17 @@ export async function recordSyncError(
   errorDetails: ScoreSyncErrorDetail[],
   context: string,
   error: unknown,
+  options?: { url?: string },
 ): Promise<number> {
+  const snapshot = buildSyncErrorSnapshot(error, { url: options?.url });
   errorDetails.push({
     context,
-    message: formatSyncError(error),
+    message: snapshot.message,
+    ...(snapshot.name ? { name: snapshot.name } : {}),
+    ...(snapshot.stack ? { stack: snapshot.stack } : {}),
+    ...(snapshot.cause ? { cause: snapshot.cause } : {}),
+    ...(snapshot.url ? { url: snapshot.url } : {}),
+    ...(snapshot.at ? { at: snapshot.at } : {}),
   });
 
   if (runId) {
