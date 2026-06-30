@@ -15,6 +15,7 @@ import {
   fetchRoomPageData,
 } from "@/lib/activate-scraper";
 import { prisma } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 import { getRankColor } from "@/lib/rank";
 import {
   errorDetailsForDb,
@@ -24,12 +25,23 @@ import {
   type ScoreSyncErrorDetail,
 } from "@/lib/score-sync-run";
 
+import {
+  isSyncTimeBudgetExceeded,
+  scheduleSyncContinuation,
+  SYNC_RUN_BUDGET_MS,
+} from "@/lib/sync-continuation";
+
 export type { ScoreSyncErrorDetail } from "@/lib/score-sync-run";
 
 export interface ScoreSyncResult {
   synced: number;
   notFound: number;
   errors: number;
+  continued?: boolean;
+}
+
+interface RunScoreSyncOptions {
+  resume?: boolean;
 }
 
 export class SyncCancelledError extends Error {
@@ -212,11 +224,16 @@ async function upsertUserLevelScores(
 /**
  * Sync PlayActivate scores for all active real users with linked accounts.
  * Fetches 11 room pages (game catalog + global tops) then one page per player.
+ * Automatically continues in additional serverless invocations when needed.
  */
 export async function runScoreSync(
   runId?: string,
   callbacks?: SyncProgressCallbacks,
+  options?: RunScoreSyncOptions,
 ): Promise<ScoreSyncResult> {
+  const resume = options?.resume === true;
+  const runStartedAtMs = Date.now();
+
   const usersToSync = await prisma.user.findMany({
     where: {
       isActive: true,
@@ -234,7 +251,29 @@ export async function runScoreSync(
 
   const totalSteps = ACTIVATE_ROOM_SLUGS.length + usersToSync.length;
 
-  if (runId) {
+  let synced = 0;
+  let notFound = 0;
+  let errors = 0;
+  let completedSteps = 0;
+  const errorDetails: ScoreSyncErrorDetail[] = [];
+
+  if (runId && resume) {
+    const existingRun = await prisma.scoreSyncRun.findUnique({
+      where: { id: runId },
+    });
+
+    if (!existingRun || existingRun.status !== "running") {
+      return { synced: 0, notFound: 0, errors: 0 };
+    }
+
+    completedSteps = existingRun.completedSteps;
+    synced = existingRun.syncedCount ?? 0;
+    notFound = existingRun.notFoundCount ?? 0;
+    errors = existingRun.errorCount ?? 0;
+    errorDetails.push(...parseErrorDetails(existingRun.errorDetails));
+
+    await updateRunProgress(runId, completedSteps, "Resuming sync…", callbacks);
+  } else if (runId) {
     await prisma.scoreSyncRun.update({
       where: { id: runId },
       data: {
@@ -242,15 +281,42 @@ export async function runScoreSync(
         totalSteps,
         completedSteps: 0,
         currentLabel: "Starting sync…",
+        syncedCount: 0,
+        notFoundCount: 0,
+        errorCount: 0,
+        errorDetails: Prisma.DbNull,
+        errorMessage: null,
+        completedAt: null,
       },
     });
   }
 
-  let synced = 0;
-  let notFound = 0;
-  let errors = 0;
-  let completedSteps = 0;
-  const errorDetails: ScoreSyncErrorDetail[] = [];
+  async function pauseForContinuation(currentLabel: string): Promise<ScoreSyncResult> {
+    if (runId) {
+      await prisma.scoreSyncRun.update({
+        where: { id: runId },
+        data: {
+          status: "running",
+          completedSteps,
+          currentLabel,
+          syncedCount: synced,
+          notFoundCount: notFound,
+          errorCount: errors,
+          errorDetails: errorDetailsForDb(errorDetails),
+        },
+      });
+      await scheduleSyncContinuation(runId);
+    }
+
+    return { synced, notFound, errors, continued: true };
+  }
+
+  async function ensureTimeBudget(): Promise<ScoreSyncResult | null> {
+    if (!isSyncTimeBudgetExceeded(runStartedAtMs)) {
+      return null;
+    }
+    return pauseForContinuation("Continuing in next batch…");
+  }
 
   if (!roomUsername) {
     const result = { synced: 0, notFound: 0, errors: 0 };
@@ -276,7 +342,15 @@ export async function runScoreSync(
     const session = await ActivateBrowserSession.create();
     let knownGameIds = await loadKnownGameIds();
     try {
-      for (const roomSlug of ACTIVATE_ROOM_SLUGS) {
+      for (let roomIndex = 0; roomIndex < ACTIVATE_ROOM_SLUGS.length; roomIndex++) {
+        const roomSlug = ACTIVATE_ROOM_SLUGS[roomIndex];
+        if (roomIndex < completedSteps) {
+          continue;
+        }
+
+        const budgetPause = await ensureTimeBudget();
+        if (budgetPause) return budgetPause;
+
         await assertSyncNotCancelled(runId);
 
         const label = `Fetching ${decodeURIComponent(roomSlug)} scores…`;
@@ -308,11 +382,20 @@ export async function runScoreSync(
         await delay(FETCH_DELAY_MS);
       }
 
-      for (const user of usersToSync) {
-        await assertSyncNotCancelled(runId);
+      for (let playerIndex = 0; playerIndex < usersToSync.length; playerIndex++) {
+        const user = usersToSync[playerIndex];
+        const globalStepIndex = ACTIVATE_ROOM_SLUGS.length + playerIndex;
+        if (globalStepIndex < completedSteps) {
+          continue;
+        }
 
         const playerName = user.activatePlayerName!;
         const fetchLabel = `Fetching ${playerName}…`;
+
+        const budgetPause = await ensureTimeBudget();
+        if (budgetPause) return budgetPause;
+
+        await assertSyncNotCancelled(runId);
         await updateRunProgress(runId, completedSteps, fetchLabel, callbacks);
 
         try {
@@ -468,6 +551,7 @@ export async function cancelScoreSyncRun(runId: string): Promise<boolean> {
 }
 
 const SYNC_STALE_THRESHOLD_MS = 4 * 60 * 1000;
+const SYNC_IN_PROGRESS_STALE_THRESHOLD_MS = 20 * 60 * 1000;
 const SYNC_PENDING_STALE_THRESHOLD_MS = 45 * 1000;
 
 async function expireStaleScoreSyncRunIfNeeded(run: {
@@ -488,23 +572,34 @@ async function expireStaleScoreSyncRunIfNeeded(run: {
     run.status === "pending" &&
     run.totalSteps === 0 &&
     runAgeMs > SYNC_PENDING_STALE_THRESHOLD_MS;
-  const isRunningStale = runAgeMs > SYNC_STALE_THRESHOLD_MS;
+  const isInProgress =
+    run.status === "running" &&
+    run.totalSteps > 0 &&
+    run.completedSteps > 0 &&
+    run.completedSteps < run.totalSteps;
+  const isRunningStale = runAgeMs > (isInProgress
+    ? SYNC_IN_PROGRESS_STALE_THRESHOLD_MS
+    : SYNC_STALE_THRESHOLD_MS);
 
   if (!isPendingStuck && !isRunningStale) {
     return false;
   }
 
   const runAgeMinutes = Math.round(runAgeMs / 60_000);
-  const staleLimitMinutes = Math.round(SYNC_STALE_THRESHOLD_MS / 60_000);
   const progressLabel =
     run.totalSteps > 0
       ? `${run.completedSteps}/${run.totalSteps} steps`
       : "no steps recorded";
   const lastStepLabel = run.currentLabel ?? "unknown";
-
+  const staleLimitMinutes = Math.round(
+    (isInProgress ? SYNC_IN_PROGRESS_STALE_THRESHOLD_MS : SYNC_STALE_THRESHOLD_MS) /
+      60_000,
+  );
   const staleMessage = isPendingStuck
     ? `Sync never started after ${Math.round(runAgeMs / 1000)}s (stuck in pending). Try again.`
-    : `Sync exceeded ${staleLimitMinutes}m server limit after ${runAgeMinutes}m (${progressLabel}). Last step: ${lastStepLabel}. Individual step errors are listed below.`;
+    : isInProgress
+      ? `Sync stopped making progress after ${runAgeMinutes}m (${progressLabel}). Last step: ${lastStepLabel}. Individual step errors are listed below.`
+      : `Sync exceeded ${staleLimitMinutes}m limit after ${runAgeMinutes}m (${progressLabel}). Last step: ${lastStepLabel}. Individual step errors are listed below.`;
 
   const existingDetails = parseErrorDetails(run.errorDetails);
   existingDetails.push({

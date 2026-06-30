@@ -7,13 +7,13 @@ import puppeteer, { type Browser, type Page } from "puppeteer-core";
 import { formatSyncError } from "@/lib/sync-error-format";
 
 const BROWSER_IDLE_TIMEOUT_MS = 120_000;
-const CLOUDFLARE_WAIT_TIMEOUT_MS = 30_000;
-const PAGE_NAVIGATION_TIMEOUT_MS = 30_000;
-const PAGE_EVALUATE_TIMEOUT_MS = 15_000;
-const FETCH_RETRY_COUNT = 1;
+const CLOUDFLARE_WAIT_TIMEOUT_MS = 60_000;
+const PAGE_NAVIGATION_TIMEOUT_MS = 45_000;
+const PAGE_EVALUATE_TIMEOUT_MS = 20_000;
+const FETCH_RETRY_COUNT = 2;
 const FETCH_DELAY_MS = 500;
-export const FETCH_OPERATION_TIMEOUT_MS = 55_000;
-export const PLAYER_STEP_TIMEOUT_MS = 75_000;
+export const FETCH_OPERATION_TIMEOUT_MS = 70_000;
+export const PLAYER_STEP_TIMEOUT_MS = 90_000;
 export const BROWSER_SHUTDOWN_TIMEOUT_MS = 10_000;
 
 const BLOCKED_RESOURCE_TYPES = new Set(["image", "font", "media"]);
@@ -58,14 +58,17 @@ export function useBrowserless(): boolean {
 function buildBrowserlessEndpoints(): string[] {
   const browserlessToken = process.env.BROWSERLESS_TOKEN!;
   const host = process.env.BROWSERLESS_HOST ?? "production-sfo.browserless.io";
-  const endpoints = [
+  const useStealth = process.env.BROWSERLESS_USE_STEALTH !== "false";
+  const endpoints: string[] = [];
+
+  if (useStealth) {
+    endpoints.push(`wss://${host}/stealth/chromium?token=${browserlessToken}`);
+  }
+
+  endpoints.push(
     `wss://${host}/chromium?token=${browserlessToken}`,
     `wss://${host}?token=${browserlessToken}`,
-  ];
-
-  if (process.env.BROWSERLESS_USE_STEALTH === "true") {
-    endpoints.unshift(`wss://${host}/stealth/chromium?token=${browserlessToken}`);
-  }
+  );
 
   return endpoints;
 }

@@ -8,7 +8,7 @@ import { runScoreSync } from "@/lib/score-sync";
  * score-sync: ~3s/user × up to ~30 users = ~90s
  * Total with margin: 150s
  */
-export const maxDuration = 150;
+export const maxDuration = 300;
 
 /**
  * POST /api/cron/daily

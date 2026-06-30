@@ -7,13 +7,16 @@
   ],
   "functions": {
     "src/app/api/cron/daily/route.ts": {
-      "maxDuration": 150
+      "maxDuration": 300
     },
     "src/app/api/cron/score-sync/route.ts": {
-      "maxDuration": 150
+      "maxDuration": 300
     },
     "src/app/api/sync/start/route.ts": {
-      "maxDuration": 150
+      "maxDuration": 300
+    },
+    "src/app/api/sync/continue/route.ts": {
+      "maxDuration": 300
     },
     "src/app/api/admin/real-users/route.ts": {
       "maxDuration": 60

@@ -6,7 +6,7 @@ import { runScoreSync } from "@/lib/score-sync";
  * Puppeteer takes ~2-3s per user. With up to ~30 users this comfortably
  * fits in 120s. Bump to 300 on Vercel Pro if the group grows significantly.
  */
-export const maxDuration = 150;
+export const maxDuration = 300;
 
 /**
  * POST /api/cron/score-sync

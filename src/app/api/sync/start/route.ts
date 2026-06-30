@@ -7,7 +7,7 @@ import {
   runScoreSync,
 } from "@/lib/score-sync";
 
-export const maxDuration = 150;
+export const maxDuration = 300;
 
 export async function POST() {
   const session = await auth();
