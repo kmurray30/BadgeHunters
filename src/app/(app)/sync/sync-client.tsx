@@ -28,8 +28,16 @@ interface SyncClientProps {
   initialLatestFinished: SyncRunStatus | null;
 }
 
+function syncHasStarted(syncProgress: SyncProgressSnapshot): boolean {
+  return (
+    syncProgress.rooms.some((room) => room.status !== "pending") ||
+    syncProgress.players.some((player) => player.status !== "pending")
+  );
+}
+
 function syncStepStatusLabel(
   status: SyncItemStatus,
+  syncStarted: boolean,
   detailLabel?: string,
 ): { text: string; className: string } {
   if (status === "done") {
@@ -47,27 +55,36 @@ function syncStepStatusLabel(
       className: "text-foreground animate-pulse",
     };
   }
+  if (syncStarted) {
+    return { text: "", className: "" };
+  }
   return { text: "Waiting…", className: "text-muted" };
 }
 
 function SyncStepList({ syncProgress }: { syncProgress: SyncProgressSnapshot }) {
+  const syncStarted = syncHasStarted(syncProgress);
+
   return (
     <ul className="mt-3 max-h-64 space-y-0.5 overflow-y-auto text-xs">
       {syncProgress.rooms.map((room) => {
-        const status = syncStepStatusLabel(room.status);
+        const status = syncStepStatusLabel(room.status, syncStarted);
         return (
           <li key={`room-${room.slug}`} className="flex items-center justify-between gap-3">
             <span className="truncate text-foreground">Room: {room.label}</span>
-            <span className={`shrink-0 ${status.className}`}>{status.text}</span>
+            <span className={`inline-block min-w-[5.5rem] shrink-0 text-right ${status.className}`}>
+              {status.text || "\u00A0"}
+            </span>
           </li>
         );
       })}
       {syncProgress.players.map((player) => {
-        const status = syncStepStatusLabel(player.status, player.label);
+        const status = syncStepStatusLabel(player.status, syncStarted, player.label);
         return (
           <li key={`player-${player.userId}`} className="flex items-center justify-between gap-3">
             <span className="truncate text-foreground">Player: {player.playerName}</span>
-            <span className={`shrink-0 ${status.className}`}>{status.text}</span>
+            <span className={`inline-block min-w-[5.5rem] shrink-0 text-right ${status.className}`}>
+              {status.text || "\u00A0"}
+            </span>
           </li>
         );
       })}
@@ -422,7 +439,11 @@ export function SyncClient({
         {isRunning && activeRun && (
           <div className="mt-5 space-y-2">
             <div className="flex items-center justify-between text-xs text-muted">
-              <span>{activeRun.currentLabel ?? "Working…"}</span>
+              {activeRun.syncProgress ? (
+                <span>Sync progress</span>
+              ) : (
+                <span>{activeRun.currentLabel ?? "Working…"}</span>
+              )}
               <span>
                 {activeRun.completedSteps} / {activeRun.totalSteps} ({progressPercent}%)
               </span>
