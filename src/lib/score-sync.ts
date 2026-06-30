@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import { withActivateBrowserSession } from "@/lib/activate-browser";
 import { ACTIVATE_ROOM_SLUGS } from "@/lib/activate-config";
 import {
@@ -15,6 +14,13 @@ import {
 } from "@/lib/activate-scraper";
 import { prisma } from "@/lib/db";
 import { getRankColor } from "@/lib/rank";
+import {
+  errorDetailsForDb,
+  recordSyncError,
+  type ScoreSyncErrorDetail,
+} from "@/lib/score-sync-run";
+
+export type { ScoreSyncErrorDetail } from "@/lib/score-sync-run";
 
 export interface ScoreSyncResult {
   synced: number;
@@ -22,24 +28,8 @@ export interface ScoreSyncResult {
   errors: number;
 }
 
-export interface ScoreSyncErrorDetail {
-  context: string;
-  message: string;
-}
-
-function errorDetailsForDb(
-  details: ScoreSyncErrorDetail[],
-): Prisma.InputJsonValue | undefined {
-  if (details.length === 0) return undefined;
-  return details as unknown as Prisma.InputJsonValue;
-}
-
 interface SyncProgressCallbacks {
   onProgress?: (completedSteps: number, currentLabel: string) => Promise<void>;
-}
-
-function formatSyncError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 async function updateRunProgress(
@@ -286,11 +276,12 @@ export async function runScoreSync(
           await upsertGlobalTopScores(roomSlug, roomName, roomData.roomScores);
         } catch (roomError) {
           console.error(`[score-sync] Room fetch failed (${roomSlug}):`, roomError);
-          errors++;
-          errorDetails.push({
-            context: `Room: ${decodeURIComponent(roomSlug)}`,
-            message: formatSyncError(roomError),
-          });
+          errors = await recordSyncError(
+            runId,
+            errorDetails,
+            `Room: ${decodeURIComponent(roomSlug)}`,
+            roomError,
+          );
         }
 
         completedSteps++;
@@ -337,11 +328,12 @@ export async function runScoreSync(
           synced++;
         } catch (playerError) {
           console.error(`[score-sync] Player sync failed (${playerName}):`, playerError);
-          errors++;
-          errorDetails.push({
-            context: `Player: ${playerName}`,
-            message: formatSyncError(playerError),
-          });
+          errors = await recordSyncError(
+            runId,
+            errorDetails,
+            `Player: ${playerName}`,
+            playerError,
+          );
         }
 
         completedSteps++;
@@ -370,6 +362,8 @@ export async function runScoreSync(
     console.error("[score-sync] Fatal error:", fatalError);
 
     if (runId) {
+      errors = await recordSyncError(runId, errorDetails, "Fatal", fatalError);
+
       await prisma.scoreSyncRun.update({
         where: { id: runId },
         data: {
@@ -377,7 +371,7 @@ export async function runScoreSync(
           errorMessage,
           syncedCount: synced,
           notFoundCount: notFound,
-          errorCount: errors + 1,
+          errorCount: errors,
           errorDetails: errorDetailsForDb(errorDetails),
           completedAt: new Date(),
         },

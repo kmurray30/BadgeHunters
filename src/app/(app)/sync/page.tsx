@@ -2,56 +2,9 @@ import { requireUser } from "@/lib/session-helpers";
 import {
   getActiveScoreSyncRun,
   getLatestFinishedScoreSyncRun,
-  type ScoreSyncErrorDetail,
 } from "@/lib/score-sync";
+import { toSyncRunStatus } from "@/lib/score-sync-run";
 import { SyncClient } from "./sync-client";
-
-function parseErrorDetails(value: unknown): ScoreSyncErrorDetail[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter(
-    (entry): entry is ScoreSyncErrorDetail =>
-      typeof entry === "object" &&
-      entry != null &&
-      typeof (entry as ScoreSyncErrorDetail).context === "string" &&
-      typeof (entry as ScoreSyncErrorDetail).message === "string",
-  );
-}
-
-function toRunStatus(run: {
-  id: string;
-  status: string;
-  completedSteps: number;
-  totalSteps: number;
-  currentLabel: string | null;
-  errorMessage: string | null;
-  errorDetails: unknown;
-  syncedCount: number | null;
-  notFoundCount: number | null;
-  errorCount: number | null;
-  startedAt: Date;
-  completedAt: Date | null;
-}) {
-  const percent =
-    run.totalSteps > 0
-      ? Math.round((run.completedSteps / run.totalSteps) * 100)
-      : 0;
-
-  return {
-    id: run.id,
-    status: run.status,
-    completedSteps: run.completedSteps,
-    totalSteps: run.totalSteps,
-    currentLabel: run.currentLabel,
-    percent,
-    errorMessage: run.errorMessage,
-    errorDetails: parseErrorDetails(run.errorDetails),
-    syncedCount: run.syncedCount,
-    notFoundCount: run.notFoundCount,
-    errorCount: run.errorCount,
-    startedAt: run.startedAt.toISOString(),
-    completedAt: run.completedAt?.toISOString() ?? null,
-  };
-}
 
 export default async function SyncPage() {
   await requireUser();
@@ -68,9 +21,9 @@ export default async function SyncPage() {
         Pull the latest scores from playactivate.com for everyone in the group.
       </p>
       <SyncClient
-        initialActiveRun={activeRun ? toRunStatus(activeRun) : null}
+        initialActiveRun={activeRun ? toSyncRunStatus(activeRun) : null}
         initialLatestFinished={
-          latestFinished ? toRunStatus(latestFinished) : null
+          latestFinished ? toSyncRunStatus(latestFinished) : null
         }
       />
     </div>

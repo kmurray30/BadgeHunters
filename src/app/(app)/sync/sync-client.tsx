@@ -28,15 +28,21 @@ interface SyncClientProps {
 function SyncErrorDetails({
   errorDetails,
   errorMessage,
+  errorCount,
 }: {
   errorDetails: ScoreSyncErrorDetail[];
   errorMessage?: string | null;
+  errorCount?: number | null;
 }) {
-  const hasErrors = errorDetails.length > 0 || Boolean(errorMessage);
+  const hasStoredDetails = errorDetails.length > 0 || Boolean(errorMessage);
 
-  if (!hasErrors) {
+  if (!hasStoredDetails) {
     return (
-      <p className="mt-3 text-xs text-muted">No error details were recorded.</p>
+      <p className="mt-3 text-xs text-muted">
+        {errorCount && errorCount > 0
+          ? "No error details were saved for this run. Run sync again to capture logs."
+          : "No error details were recorded."}
+      </p>
     );
   }
 
@@ -80,6 +86,7 @@ export function SyncClient({
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
+  const [isLoadingErrorDetails, setIsLoadingErrorDetails] = useState(false);
 
   const pollStatus = useCallback(async (runId: string) => {
     const response = await fetch(`/api/sync/status?runId=${runId}`);
@@ -151,6 +158,26 @@ export function SyncClient({
       latestFinished.status === "failed" ||
       (latestFinished.errorDetails?.length ?? 0) > 0);
 
+  async function toggleErrorDetails() {
+    if (!latestFinished) return;
+
+    if (showErrorDetails) {
+      setShowErrorDetails(false);
+      return;
+    }
+
+    setIsLoadingErrorDetails(true);
+    try {
+      const status = await pollStatus(latestFinished.id);
+      if (status) {
+        setLatestFinished(status);
+      }
+      setShowErrorDetails(true);
+    } finally {
+      setIsLoadingErrorDetails(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-border bg-card p-5">
@@ -213,10 +240,15 @@ export function SyncClient({
                     (
                     <button
                       type="button"
-                      onClick={() => setShowErrorDetails((previous) => !previous)}
-                      className="text-accent hover:underline"
+                      onClick={toggleErrorDetails}
+                      disabled={isLoadingErrorDetails}
+                      className="text-accent hover:underline disabled:opacity-50"
                     >
-                      {showErrorDetails ? "Hide details" : "View details"}
+                      {isLoadingErrorDetails
+                        ? "Loading…"
+                        : showErrorDetails
+                          ? "Hide details"
+                          : "View details"}
                     </button>
                     )
                   </>
@@ -228,6 +260,7 @@ export function SyncClient({
               <SyncErrorDetails
                 errorDetails={latestFinished.errorDetails ?? []}
                 errorMessage={latestFinished.errorMessage}
+                errorCount={latestFinished.errorCount}
               />
             ) : null}
 
