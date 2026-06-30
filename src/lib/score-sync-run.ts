@@ -90,6 +90,7 @@ export async function recordSyncError(
       data: {
         errorCount: errorDetails.length,
         errorDetails: errorDetailsForDb(errorDetails),
+        lastProgressAt: new Date(),
       },
     });
   }
@@ -109,6 +110,7 @@ export function toSyncRunStatus(run: {
   notFoundCount: number | null;
   errorCount: number | null;
   startedAt: Date;
+  lastProgressAt: Date;
   completedAt: Date | null;
 }) {
   const percent =
@@ -129,6 +131,7 @@ export function toSyncRunStatus(run: {
     notFoundCount: run.notFoundCount,
     errorCount: run.errorCount,
     startedAt: run.startedAt.toISOString(),
+    lastProgressAt: run.lastProgressAt.toISOString(),
     completedAt: run.completedAt?.toISOString() ?? null,
   };
 }

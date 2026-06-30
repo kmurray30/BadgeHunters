@@ -2,6 +2,7 @@ import {
   ActivateBrowserSession,
   FETCH_DELAY_MS,
   PLAYER_STEP_TIMEOUT_MS,
+  ROOM_STEP_TIMEOUT_MS,
   withTimeout,
 } from "@/lib/activate-browser";
 import { ACTIVATE_ROOM_SLUGS, buildPlayerScoresUrl, buildRoomScoresUrl } from "@/lib/activate-config";
@@ -86,7 +87,7 @@ async function updateRunProgress(
   if (runId) {
     await prisma.scoreSyncRun.update({
       where: { id: runId },
-      data: { completedSteps, currentLabel },
+      data: { completedSteps, currentLabel, lastProgressAt: new Date() },
     });
   }
 }
@@ -287,6 +288,7 @@ export async function runScoreSync(
         errorDetails: Prisma.DbNull,
         errorMessage: null,
         completedAt: null,
+        lastProgressAt: new Date(),
       },
     });
   }
@@ -303,6 +305,7 @@ export async function runScoreSync(
           notFoundCount: notFound,
           errorCount: errors,
           errorDetails: errorDetailsForDb(errorDetails),
+          lastProgressAt: new Date(),
         },
       });
       await scheduleSyncContinuation(runId);
@@ -357,15 +360,22 @@ export async function runScoreSync(
         await updateRunProgress(runId, completedSteps, label, callbacks);
 
         try {
-          const roomData = await session.withPage((page) =>
-            fetchRoomPageData(page, roomUsername, roomSlug),
+          await withTimeout(
+            (async () => {
+              const roomData = await session.withPage((page) =>
+                fetchRoomPageData(page, roomUsername, roomSlug),
+              );
+              const roomName = roomData.roomInfo?.name ?? decodeURIComponent(roomSlug);
+              await upsertRoomCatalog(roomSlug, roomName, roomData.roomGames);
+              await upsertGlobalTopScores(roomSlug, roomName, roomData.roomScores);
+              for (const game of roomData.roomGames) {
+                knownGameIds.add(game.id);
+              }
+            })(),
+            ROOM_STEP_TIMEOUT_MS,
+            `Room ${decodeURIComponent(roomSlug)}`,
+            () => session.forceResetPage(),
           );
-          const roomName = roomData.roomInfo?.name ?? decodeURIComponent(roomSlug);
-          await upsertRoomCatalog(roomSlug, roomName, roomData.roomGames);
-          await upsertGlobalTopScores(roomSlug, roomName, roomData.roomScores);
-          for (const game of roomData.roomGames) {
-            knownGameIds.add(game.id);
-          }
         } catch (roomError) {
           console.error(`[score-sync] Room fetch failed (${roomSlug}):`, roomError);
           errors = await recordSyncError(
@@ -551,13 +561,14 @@ export async function cancelScoreSyncRun(runId: string): Promise<boolean> {
 }
 
 const SYNC_STALE_THRESHOLD_MS = 4 * 60 * 1000;
-const SYNC_IN_PROGRESS_STALE_THRESHOLD_MS = 20 * 60 * 1000;
+const SYNC_PROGRESS_STALL_THRESHOLD_MS = 3 * 60 * 1000;
 const SYNC_PENDING_STALE_THRESHOLD_MS = 45 * 1000;
 
 async function expireStaleScoreSyncRunIfNeeded(run: {
   id: string;
   status: string;
   startedAt: Date;
+  lastProgressAt: Date;
   totalSteps: number;
   completedSteps: number;
   currentLabel: string | null;
@@ -568,42 +579,40 @@ async function expireStaleScoreSyncRunIfNeeded(run: {
   }
 
   const runAgeMs = Date.now() - run.startedAt.getTime();
+  const progressAgeMs = Date.now() - run.lastProgressAt.getTime();
   const isPendingStuck =
     run.status === "pending" &&
     run.totalSteps === 0 &&
     runAgeMs > SYNC_PENDING_STALE_THRESHOLD_MS;
-  const isInProgress =
-    run.status === "running" &&
-    run.totalSteps > 0 &&
-    run.completedSteps > 0 &&
-    run.completedSteps < run.totalSteps;
-  const isRunningStale = runAgeMs > (isInProgress
-    ? SYNC_IN_PROGRESS_STALE_THRESHOLD_MS
-    : SYNC_STALE_THRESHOLD_MS);
+  const isProgressStalled =
+    run.status === "running" && progressAgeMs > SYNC_PROGRESS_STALL_THRESHOLD_MS;
+  const isRunningStale = runAgeMs > SYNC_STALE_THRESHOLD_MS;
 
-  if (!isPendingStuck && !isRunningStale) {
+  if (!isPendingStuck && !isProgressStalled && !isRunningStale) {
     return false;
   }
 
   const runAgeMinutes = Math.round(runAgeMs / 60_000);
+  const progressAgeMinutes = Math.round(progressAgeMs / 60_000);
   const progressLabel =
     run.totalSteps > 0
       ? `${run.completedSteps}/${run.totalSteps} steps`
       : "no steps recorded";
   const lastStepLabel = run.currentLabel ?? "unknown";
-  const staleLimitMinutes = Math.round(
-    (isInProgress ? SYNC_IN_PROGRESS_STALE_THRESHOLD_MS : SYNC_STALE_THRESHOLD_MS) /
-      60_000,
-  );
+
   const staleMessage = isPendingStuck
     ? `Sync never started after ${Math.round(runAgeMs / 1000)}s (stuck in pending). Try again.`
-    : isInProgress
-      ? `Sync stopped making progress after ${runAgeMinutes}m (${progressLabel}). Last step: ${lastStepLabel}. Individual step errors are listed below.`
-      : `Sync exceeded ${staleLimitMinutes}m limit after ${runAgeMinutes}m (${progressLabel}). Last step: ${lastStepLabel}. Individual step errors are listed below.`;
+    : isProgressStalled
+      ? `Sync stalled on "${lastStepLabel}" with no progress for ${progressAgeMinutes}m (${progressLabel}). The server may have been interrupted — try again or cancel and restart.`
+      : `Sync exceeded time limit after ${runAgeMinutes}m (${progressLabel}). Last step: ${lastStepLabel}. Individual step errors are listed below.`;
 
   const existingDetails = parseErrorDetails(run.errorDetails);
   existingDetails.push({
-    context: isPendingStuck ? "Stale run (never started)" : "Stale run (timed out)",
+    context: isPendingStuck
+      ? "Stale run (never started)"
+      : isProgressStalled
+        ? "Stale run (stalled)"
+        : "Stale run (timed out)",
     message: staleMessage,
     at: new Date().toISOString(),
   });
@@ -652,4 +661,4 @@ export async function getLatestCompletedScoreSyncRun() {
   return getLatestFinishedScoreSyncRun();
 }
 
-export { expireStaleScoreSyncRunIfNeeded, SYNC_STALE_THRESHOLD_MS, SYNC_PENDING_STALE_THRESHOLD_MS };
+export { expireStaleScoreSyncRunIfNeeded, SYNC_STALE_THRESHOLD_MS, SYNC_PENDING_STALE_THRESHOLD_MS, SYNC_PROGRESS_STALL_THRESHOLD_MS };

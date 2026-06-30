@@ -12,16 +12,24 @@ export async function scheduleSyncContinuation(runId: string): Promise<void> {
     : process.env.NEXTAUTH_URL;
 
   if (cronSecret && baseUrl) {
-    void fetch(`${baseUrl}/api/sync/continue`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${cronSecret}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ runId }),
-    }).catch((error) => {
+    try {
+      const response = await fetch(`${baseUrl}/api/sync/continue`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${cronSecret}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ runId }),
+      });
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        console.error(
+          `[score-sync] Continuation request failed (${response.status}): ${body}`,
+        );
+      }
+    } catch (error) {
       console.error("[score-sync] Continuation fetch failed:", error);
-    });
+    }
     return;
   }
 

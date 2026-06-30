@@ -17,6 +17,7 @@ interface SyncRunStatus {
   notFoundCount?: number | null;
   errorCount?: number | null;
   startedAt?: string;
+  lastProgressAt?: string;
   completedAt?: string | null;
 }
 
@@ -126,6 +127,7 @@ export function SyncClient({
   const [isCancelling, setIsCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
+  const [showActiveErrors, setShowActiveErrors] = useState(false);
   const [isLoadingErrorDetails, setIsLoadingErrorDetails] = useState(false);
 
   const pollStatus = useCallback(async (runId: string) => {
@@ -183,10 +185,19 @@ export function SyncClient({
   const isRunning =
     activeRun != null && ["pending", "running"].includes(activeRun.status);
 
+  const activeRunHasErrors =
+    activeRun != null &&
+    ((activeRun.errorCount ?? 0) > 0 || (activeRun.errorDetails?.length ?? 0) > 0);
+
+  const activeRunStalled =
+    activeRun?.lastProgressAt != null &&
+    Date.now() - new Date(activeRun.lastProgressAt).getTime() > 90_000;
+
   async function handleStartSync() {
     setIsStarting(true);
     setError(null);
     setShowErrorDetails(false);
+    setShowActiveErrors(false);
 
     try {
       const response = await fetch("/api/sync/start", { method: "POST" });
@@ -340,6 +351,35 @@ export function SyncClient({
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
+
+            {activeRunStalled ? (
+              <p className="text-xs text-danger">
+                No progress for 90+ seconds — this step may be stuck. Use Cancel sync and
+                try again, or wait for the stall timeout.
+              </p>
+            ) : null}
+
+            {activeRunHasErrors ? (
+              <div className="pt-1">
+                <p className="text-xs text-foreground">
+                  {activeRun.errorCount ?? activeRun.errorDetails?.length ?? 0} errors so
+                  far{" "}
+                  <button
+                    type="button"
+                    onClick={() => setShowActiveErrors((visible) => !visible)}
+                    className="text-accent hover:underline"
+                  >
+                    {showActiveErrors ? "Hide details" : "View details"}
+                  </button>
+                </p>
+                {showActiveErrors ? (
+                  <SyncErrorDetails
+                    errorDetails={activeRun.errorDetails ?? []}
+                    errorCount={activeRun.errorCount}
+                  />
+                ) : null}
+              </div>
+            ) : null}
           </div>
         )}
 

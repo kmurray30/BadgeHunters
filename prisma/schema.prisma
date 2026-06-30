@@ -446,6 +446,7 @@ model ScoreSyncRun {
   notFoundCount   Int?             @map("not_found_count")
   errorCount      Int?             @map("error_count")
   startedAt       DateTime         @default(now()) @map("started_at")
+  lastProgressAt  DateTime         @default(now()) @map("last_progress_at")
   completedAt     DateTime?        @map("completed_at")
 
   startedBy User @relation(fields: [startedByUserId], references: [id], onDelete: Cascade)
