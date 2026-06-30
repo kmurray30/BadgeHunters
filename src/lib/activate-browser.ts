@@ -10,11 +10,11 @@ const BROWSER_IDLE_TIMEOUT_MS = 120_000;
 const CLOUDFLARE_WAIT_TIMEOUT_MS = 60_000;
 const PAGE_NAVIGATION_TIMEOUT_MS = 45_000;
 const PAGE_EVALUATE_TIMEOUT_MS = 20_000;
-const FETCH_RETRY_COUNT = 2;
+const FETCH_RETRY_COUNT = 1;
 const FETCH_DELAY_MS = 500;
-export const FETCH_OPERATION_TIMEOUT_MS = 70_000;
-export const ROOM_STEP_TIMEOUT_MS = 90_000;
-export const PLAYER_STEP_TIMEOUT_MS = 90_000;
+export const FETCH_OPERATION_TIMEOUT_MS = 60_000;
+export const ROOM_STEP_TIMEOUT_MS = 75_000;
+export const PLAYER_STEP_TIMEOUT_MS = 75_000;
 export const BROWSER_SHUTDOWN_TIMEOUT_MS = 10_000;
 
 const BLOCKED_RESOURCE_TYPES = new Set(["image", "font", "media"]);
@@ -248,9 +248,10 @@ export async function withTimeout<T>(
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
       timedOut = true;
-      void Promise.resolve(onTimeout?.()).finally(() => {
-        reject(new Error(`${operationLabel} timed out after ${timeoutMs}ms`));
-      });
+      if (onTimeout) {
+        void Promise.resolve(onTimeout()).catch(() => {});
+      }
+      reject(new Error(`${operationLabel} timed out after ${timeoutMs}ms`));
     }, timeoutMs);
   });
 
@@ -259,7 +260,6 @@ export async function withTimeout<T>(
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
     if (timedOut) {
-      // Give abort handlers a moment to run before callers continue.
       await delay(50);
     }
   }
@@ -304,13 +304,17 @@ export class ActivateBrowserSession {
   }
 
   private async recreatePage(): Promise<Page> {
-    await this.page.close().catch(() => {});
+    void this.page.close().catch(() => {});
 
     try {
-      this.page = await createLightweightPage(this.browser);
+      this.page = await withTimeout(
+        createLightweightPage(this.browser),
+        10_000,
+        "Recreate page",
+      );
       return this.page;
     } catch {
-      await releaseBrowser(this.browser);
+      void releaseBrowser(this.browser);
       this.browser = await connectBrowserWithTimeout();
       this.page = await createLightweightPage(this.browser);
       return this.page;
@@ -318,26 +322,36 @@ export class ActivateBrowserSession {
   }
 
   async forceResetPage(): Promise<void> {
+    void this.page.close().catch(() => {});
     try {
-      await this.page.close().catch(() => {});
-      this.page = await createLightweightPage(this.browser);
+      this.page = await withTimeout(
+        createLightweightPage(this.browser),
+        10_000,
+        "Create page after reset",
+      );
     } catch (resetError) {
       console.error(
         "[activate-browser] forceResetPage failed:",
         formatSyncError(resetError),
         resetError,
       );
-      try {
-        await releaseBrowser(this.browser);
-        this.browser = await connectBrowserWithTimeout();
-        this.page = await createLightweightPage(this.browser);
-      } catch (reconnectError) {
-        console.error(
-          "[activate-browser] forceResetPage reconnect failed:",
-          formatSyncError(reconnectError),
-          reconnectError,
-        );
-      }
+      await this.forceKill();
+    }
+  }
+
+  /** Immediately drop the browser connection and start fresh. Used on step timeout. */
+  async forceKill(): Promise<void> {
+    void this.page.close().catch(() => {});
+    void releaseBrowser(this.browser);
+    try {
+      this.browser = await connectBrowserWithTimeout();
+      this.page = await createLightweightPage(this.browser);
+    } catch (reconnectError) {
+      console.error(
+        "[activate-browser] forceKill reconnect failed:",
+        formatSyncError(reconnectError),
+        reconnectError,
+      );
     }
   }
 
@@ -361,15 +375,19 @@ export class ActivateBrowserSession {
           callback(activePage),
           FETCH_OPERATION_TIMEOUT_MS,
           "Browser fetch",
-          async () => {
-            await activePage.close().catch(() => {});
+          () => {
+            void activePage.close().catch(() => {});
           },
         );
       } catch (error) {
         lastError = error;
-        await this.page.close().catch(() => {});
+        void this.page.close().catch(() => {});
         if (attempt < maxAttempts - 1 && isRecoverableBrowserError(error)) {
-          await this.recreatePage();
+          try {
+            await withTimeout(this.recreatePage(), 15_000, "Recreate page after error");
+          } catch {
+            await this.forceKill();
+          }
           continue;
         }
         throw error;

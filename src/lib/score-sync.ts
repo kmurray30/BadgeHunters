@@ -374,7 +374,7 @@ export async function runScoreSync(
             })(),
             ROOM_STEP_TIMEOUT_MS,
             `Room ${decodeURIComponent(roomSlug)}`,
-            () => session.forceResetPage(),
+            () => session.forceKill(),
           );
         } catch (roomError) {
           console.error(`[score-sync] Room fetch failed (${roomSlug}):`, roomError);
@@ -455,7 +455,7 @@ export async function runScoreSync(
             })(),
             PLAYER_STEP_TIMEOUT_MS,
             `Sync ${playerName}`,
-            () => session.forceResetPage(),
+            () => session.forceKill(),
           );
         } catch (playerError) {
           console.error(`[score-sync] Player sync failed (${playerName}):`, playerError);
@@ -561,7 +561,7 @@ export async function cancelScoreSyncRun(runId: string): Promise<boolean> {
 }
 
 const SYNC_STALE_THRESHOLD_MS = 4 * 60 * 1000;
-const SYNC_PROGRESS_STALL_THRESHOLD_MS = 3 * 60 * 1000;
+const SYNC_PROGRESS_STALL_THRESHOLD_MS = 90 * 1000;
 const SYNC_PENDING_STALE_THRESHOLD_MS = 45 * 1000;
 
 async function expireStaleScoreSyncRunIfNeeded(run: {

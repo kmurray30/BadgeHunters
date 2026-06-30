@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { ScoreSyncErrorDetail } from "@/lib/score-sync";
 
@@ -129,6 +129,21 @@ export function SyncClient({
   const [showErrorDetails, setShowErrorDetails] = useState(false);
   const [showActiveErrors, setShowActiveErrors] = useState(false);
   const [isLoadingErrorDetails, setIsLoadingErrorDetails] = useState(false);
+  const [clientStalled, setClientStalled] = useState(false);
+  const lastProgressRef = useRef<{ steps: number; at: number } | null>(null);
+
+  useEffect(() => {
+    if (!activeRun) {
+      lastProgressRef.current = null;
+      setClientStalled(false);
+      return;
+    }
+
+    lastProgressRef.current = {
+      steps: activeRun.completedSteps,
+      at: Date.now(),
+    };
+  }, [activeRun?.id]);
 
   const pollStatus = useCallback(async (runId: string) => {
     const response = await fetch(`/api/sync/status?runId=${runId}`);
@@ -163,6 +178,21 @@ export function SyncClient({
 
         setActiveRun(status);
 
+        const progressSnapshot = {
+          steps: status.completedSteps,
+          at: Date.now(),
+        };
+        const previousProgress = lastProgressRef.current;
+        if (
+          previousProgress == null ||
+          previousProgress.steps !== status.completedSteps
+        ) {
+          lastProgressRef.current = progressSnapshot;
+          setClientStalled(false);
+        } else if (Date.now() - previousProgress.at > 90_000) {
+          setClientStalled(true);
+        }
+
         if (
           status.status === "completed" ||
           status.status === "failed" ||
@@ -190,14 +220,17 @@ export function SyncClient({
     ((activeRun.errorCount ?? 0) > 0 || (activeRun.errorDetails?.length ?? 0) > 0);
 
   const activeRunStalled =
-    activeRun?.lastProgressAt != null &&
-    Date.now() - new Date(activeRun.lastProgressAt).getTime() > 90_000;
+    clientStalled ||
+    (activeRun?.lastProgressAt != null &&
+      Date.now() - new Date(activeRun.lastProgressAt).getTime() > 90_000);
 
   async function handleStartSync() {
     setIsStarting(true);
     setError(null);
     setShowErrorDetails(false);
     setShowActiveErrors(false);
+    lastProgressRef.current = null;
+    setClientStalled(false);
 
     try {
       const response = await fetch("/api/sync/start", { method: "POST" });
