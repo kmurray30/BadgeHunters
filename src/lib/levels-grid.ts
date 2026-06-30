@@ -191,7 +191,7 @@ export function myScoreCellBackground(
 ): string {
   if (score <= 0) return "#ffffff";
   if (topScore != null && topScore > 0 && score >= topScore) {
-    return "#60a5fa";
+    return "#d946ef";
   }
 
   if (topScore == null || topScore <= 0) {
