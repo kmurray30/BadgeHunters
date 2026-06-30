@@ -440,6 +440,7 @@ model ScoreSyncRun {
   completedSteps  Int              @default(0) @map("completed_steps")
   currentLabel    String?          @map("current_label")
   errorMessage    String?          @map("error_message") @db.Text
+  errorDetails    Json?            @map("error_details")
   syncedCount     Int?             @map("synced_count")
   notFoundCount   Int?             @map("not_found_count")
   errorCount      Int?             @map("error_count")

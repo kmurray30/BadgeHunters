@@ -1,9 +1,21 @@
 import { requireUser } from "@/lib/session-helpers";
 import {
   getActiveScoreSyncRun,
-  getLatestCompletedScoreSyncRun,
+  getLatestFinishedScoreSyncRun,
+  type ScoreSyncErrorDetail,
 } from "@/lib/score-sync";
 import { SyncClient } from "./sync-client";
+
+function parseErrorDetails(value: unknown): ScoreSyncErrorDetail[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (entry): entry is ScoreSyncErrorDetail =>
+      typeof entry === "object" &&
+      entry != null &&
+      typeof (entry as ScoreSyncErrorDetail).context === "string" &&
+      typeof (entry as ScoreSyncErrorDetail).message === "string",
+  );
+}
 
 function toRunStatus(run: {
   id: string;
@@ -12,6 +24,7 @@ function toRunStatus(run: {
   totalSteps: number;
   currentLabel: string | null;
   errorMessage: string | null;
+  errorDetails: unknown;
   syncedCount: number | null;
   notFoundCount: number | null;
   errorCount: number | null;
@@ -31,6 +44,7 @@ function toRunStatus(run: {
     currentLabel: run.currentLabel,
     percent,
     errorMessage: run.errorMessage,
+    errorDetails: parseErrorDetails(run.errorDetails),
     syncedCount: run.syncedCount,
     notFoundCount: run.notFoundCount,
     errorCount: run.errorCount,
@@ -42,9 +56,9 @@ function toRunStatus(run: {
 export default async function SyncPage() {
   await requireUser();
 
-  const [activeRun, latestCompleted] = await Promise.all([
+  const [activeRun, latestFinished] = await Promise.all([
     getActiveScoreSyncRun(),
-    getLatestCompletedScoreSyncRun(),
+    getLatestFinishedScoreSyncRun(),
   ]);
 
   return (
@@ -55,8 +69,8 @@ export default async function SyncPage() {
       </p>
       <SyncClient
         initialActiveRun={activeRun ? toRunStatus(activeRun) : null}
-        initialLatestCompleted={
-          latestCompleted ? toRunStatus(latestCompleted) : null
+        initialLatestFinished={
+          latestFinished ? toRunStatus(latestFinished) : null
         }
       />
     </div>

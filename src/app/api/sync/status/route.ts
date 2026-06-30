@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import type { ScoreSyncErrorDetail } from "@/lib/score-sync";
+
+function parseErrorDetails(value: unknown): ScoreSyncErrorDetail[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (entry): entry is ScoreSyncErrorDetail =>
+      typeof entry === "object" &&
+      entry != null &&
+      typeof (entry as ScoreSyncErrorDetail).context === "string" &&
+      typeof (entry as ScoreSyncErrorDetail).message === "string",
+  );
+}
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -31,6 +43,7 @@ export async function GET(request: NextRequest) {
     currentLabel: run.currentLabel,
     percent,
     errorMessage: run.errorMessage,
+    errorDetails: parseErrorDetails(run.errorDetails),
     syncedCount: run.syncedCount,
     notFoundCount: run.notFoundCount,
     errorCount: run.errorCount,

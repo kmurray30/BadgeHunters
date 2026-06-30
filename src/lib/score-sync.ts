@@ -21,8 +21,17 @@ export interface ScoreSyncResult {
   errors: number;
 }
 
+export interface ScoreSyncErrorDetail {
+  context: string;
+  message: string;
+}
+
 interface SyncProgressCallbacks {
   onProgress?: (completedSteps: number, currentLabel: string) => Promise<void>;
+}
+
+function formatSyncError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 async function updateRunProgress(
@@ -234,6 +243,7 @@ export async function runScoreSync(
   let notFound = 0;
   let errors = 0;
   let completedSteps = 0;
+  const errorDetails: ScoreSyncErrorDetail[] = [];
 
   if (!roomUsername) {
     const result = { synced: 0, notFound: 0, errors: 0 };
@@ -269,6 +279,10 @@ export async function runScoreSync(
         } catch (roomError) {
           console.error(`[score-sync] Room fetch failed (${roomSlug}):`, roomError);
           errors++;
+          errorDetails.push({
+            context: `Room: ${decodeURIComponent(roomSlug)}`,
+            message: formatSyncError(roomError),
+          });
         }
 
         completedSteps++;
@@ -316,6 +330,10 @@ export async function runScoreSync(
         } catch (playerError) {
           console.error(`[score-sync] Player sync failed (${playerName}):`, playerError);
           errors++;
+          errorDetails.push({
+            context: `Player: ${playerName}`,
+            message: formatSyncError(playerError),
+          });
         }
 
         completedSteps++;
@@ -333,6 +351,7 @@ export async function runScoreSync(
           syncedCount: synced,
           notFoundCount: notFound,
           errorCount: errors,
+          errorDetails: errorDetails.length > 0 ? errorDetails : undefined,
           completedAt: new Date(),
         },
       });
@@ -351,6 +370,7 @@ export async function runScoreSync(
           syncedCount: synced,
           notFoundCount: notFound,
           errorCount: errors + 1,
+          errorDetails: errorDetails.length > 0 ? errorDetails : undefined,
           completedAt: new Date(),
         },
       });
@@ -368,9 +388,14 @@ export async function getActiveScoreSyncRun() {
   });
 }
 
-export async function getLatestCompletedScoreSyncRun() {
+export async function getLatestFinishedScoreSyncRun() {
   return prisma.scoreSyncRun.findFirst({
-    where: { status: "completed" },
+    where: { status: { in: ["completed", "failed"] } },
     orderBy: { completedAt: "desc" },
   });
+}
+
+/** @deprecated Use getLatestFinishedScoreSyncRun */
+export async function getLatestCompletedScoreSyncRun() {
+  return getLatestFinishedScoreSyncRun();
 }
