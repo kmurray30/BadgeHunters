@@ -8,7 +8,7 @@ export interface ScoreSyncErrorDetail {
 
 export function formatSyncError(error: unknown): string {
   if (error instanceof Error) {
-    return error.stack ?? error.message;
+    return error.message;
   }
   return String(error);
 }

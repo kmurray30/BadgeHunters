@@ -1,4 +1,4 @@
-import { withActivateBrowserSession } from "@/lib/activate-browser";
+import { ActivateBrowserSession, FETCH_DELAY_MS } from "@/lib/activate-browser";
 import { ACTIVATE_ROOM_SLUGS } from "@/lib/activate-config";
 import {
   activateLevelIdToDisplayLevel,
@@ -30,6 +30,10 @@ export interface ScoreSyncResult {
 
 interface SyncProgressCallbacks {
   onProgress?: (completedSteps: number, currentLabel: string) => Promise<void>;
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function updateRunProgress(
@@ -264,13 +268,16 @@ export async function runScoreSync(
   }
 
   try {
-    await withActivateBrowserSession(async (_browser, page) => {
+    const session = await ActivateBrowserSession.create();
+    try {
       for (const roomSlug of ACTIVATE_ROOM_SLUGS) {
         const label = `Fetching ${decodeURIComponent(roomSlug)} scores…`;
         await updateRunProgress(runId, completedSteps, label, callbacks);
 
         try {
-          const roomData = await fetchRoomPageData(page, roomUsername, roomSlug);
+          const roomData = await session.withPage((page) =>
+            fetchRoomPageData(page, roomUsername, roomSlug),
+          );
           const roomName = roomData.roomInfo?.name ?? decodeURIComponent(roomSlug);
           await upsertRoomCatalog(roomSlug, roomName, roomData.roomGames);
           await upsertGlobalTopScores(roomSlug, roomName, roomData.roomScores);
@@ -286,6 +293,7 @@ export async function runScoreSync(
 
         completedSteps++;
         await updateRunProgress(runId, completedSteps, label, callbacks);
+        await delay(FETCH_DELAY_MS);
       }
 
       for (const user of usersToSync) {
@@ -294,13 +302,16 @@ export async function runScoreSync(
         await updateRunProgress(runId, completedSteps, label, callbacks);
 
         try {
-          const playerData = await fetchPlayerPageData(page, playerName);
+          const playerData = await session.withPage((page) =>
+            fetchPlayerPageData(page, playerName),
+          );
           const overall = extractOverallStats(playerData.bodyText, playerData);
 
           if (overall.score === null) {
             notFound++;
             completedSteps++;
             await updateRunProgress(runId, completedSteps, label, callbacks);
+            await delay(FETCH_DELAY_MS);
             continue;
           }
 
@@ -338,8 +349,11 @@ export async function runScoreSync(
 
         completedSteps++;
         await updateRunProgress(runId, completedSteps, label, callbacks);
+        await delay(FETCH_DELAY_MS);
       }
-    });
+    } finally {
+      await session.close();
+    }
 
     if (runId) {
       await prisma.scoreSyncRun.update({

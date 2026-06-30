@@ -6,8 +6,12 @@
 import puppeteer, { type Browser, type Page } from "puppeteer-core";
 
 const BROWSER_IDLE_TIMEOUT_MS = 120_000;
+const CLOUDFLARE_WAIT_TIMEOUT_MS = 45_000;
+const PAGE_NAVIGATION_TIMEOUT_MS = 45_000;
+const FETCH_RETRY_COUNT = 2;
+const FETCH_DELAY_MS = 500;
 
-const BLOCKED_RESOURCE_TYPES = new Set(["image", "stylesheet", "font", "media"]);
+const BLOCKED_RESOURCE_TYPES = new Set(["image", "font", "media"]);
 
 const LOCAL_CHROME_PATHS: Record<string, string[]> = {
   darwin: [
@@ -49,7 +53,7 @@ export function useBrowserless(): boolean {
 async function connectBrowserless(): Promise<Browser> {
   const browserlessToken = process.env.BROWSERLESS_TOKEN!;
   return puppeteer.connect({
-    browserWSEndpoint: `wss://production-sfo.browserless.io?token=${browserlessToken}`,
+    browserWSEndpoint: `wss://production-sfo.browserless.io/chromium?token=${browserlessToken}&stealth`,
   });
 }
 
@@ -144,8 +148,10 @@ export async function createLightweightPage(browser: Browser): Promise<Page> {
 export async function waitForCloudflare(page: Page): Promise<string | null> {
   try {
     await page.waitForFunction(
-      `document.title !== "Just a moment..." && !document.title.includes("moment")`,
-      { timeout: 20000 },
+      `document.title !== "Just a moment..." &&
+       !document.title.includes("moment") &&
+       !(document.body?.innerText || "").includes("Verify you are human")`,
+      { timeout: CLOUDFLARE_WAIT_TIMEOUT_MS },
     );
     return null;
   } catch {
@@ -157,13 +163,115 @@ export async function waitForActivateData(page: Page): Promise<boolean> {
   try {
     await page.waitForFunction(
       `Array.from(document.querySelectorAll('script:not([src])')).some(s => (s.textContent || '').includes('playerLocation'))`,
-      { timeout: 20000 },
+      { timeout: CLOUDFLARE_WAIT_TIMEOUT_MS },
     );
     return true;
   } catch {
     return false;
   }
 }
+
+export function isRecoverableBrowserError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const lowerMessage = message.toLowerCase();
+  return (
+    lowerMessage.includes("detached frame") ||
+    lowerMessage.includes("target closed") ||
+    lowerMessage.includes("session closed") ||
+    lowerMessage.includes("protocol error") ||
+    lowerMessage.includes("execution context was destroyed") ||
+    lowerMessage.includes("timed out waiting for cloudflare") ||
+    lowerMessage.includes("navigation timeout") ||
+    lowerMessage.includes("net::err_") ||
+    lowerMessage.includes("activate data not found")
+  );
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+export class ActivateBrowserSession {
+  private browser: Browser;
+  private page: Page;
+
+  private constructor(browser: Browser, page: Page) {
+    this.browser = browser;
+    this.page = page;
+  }
+
+  static async create(): Promise<ActivateBrowserSession> {
+    const browser = await getOrLaunchBrowser();
+    const page = await createLightweightPage(browser);
+    return new ActivateBrowserSession(browser, page);
+  }
+
+  private async isPageHealthy(): Promise<boolean> {
+    if (this.page.isClosed()) return false;
+    try {
+      await this.page.evaluate(() => true);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async recreatePage(): Promise<Page> {
+    await this.page.close().catch(() => {});
+
+    try {
+      this.page = await createLightweightPage(this.browser);
+      return this.page;
+    } catch {
+      await releaseBrowser(this.browser);
+      this.browser = await getOrLaunchBrowser();
+      this.page = await createLightweightPage(this.browser);
+      return this.page;
+    }
+  }
+
+  async withPage<T>(
+    callback: (page: Page) => Promise<T>,
+    maxAttempts = FETCH_RETRY_COUNT + 1,
+  ): Promise<T> {
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (!(await this.isPageHealthy())) {
+        await this.recreatePage();
+      }
+
+      try {
+        if (attempt > 0) {
+          await delay(FETCH_DELAY_MS * attempt);
+        }
+        return await callback(this.page);
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxAttempts - 1 && isRecoverableBrowserError(error)) {
+          await this.recreatePage();
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw lastError instanceof Error
+      ? lastError
+      : new Error(String(lastError ?? "Browser fetch failed"));
+  }
+
+  async close(): Promise<void> {
+    await this.page.close().catch(() => {});
+    await releaseBrowser(this.browser);
+  }
+
+  getBrowser(): Browser {
+    return this.browser;
+  }
+}
+
+export { PAGE_NAVIGATION_TIMEOUT_MS, FETCH_DELAY_MS };
 
 export async function releaseBrowser(browser: Browser): Promise<void> {
   if (useBrowserless()) {
@@ -176,12 +284,12 @@ export async function releaseBrowser(browser: Browser): Promise<void> {
 export async function withActivateBrowserSession<T>(
   callback: (browser: Browser, page: Page) => Promise<T>,
 ): Promise<T> {
-  const browser = await getOrLaunchBrowser();
-  const page = await createLightweightPage(browser);
+  const session = await ActivateBrowserSession.create();
   try {
-    return await callback(browser, page);
+    return await session.withPage((page) =>
+      callback(session.getBrowser(), page),
+    );
   } finally {
-    await page.close().catch(() => {});
-    await releaseBrowser(browser);
+    await session.close();
   }
 }

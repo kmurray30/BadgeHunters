@@ -4,6 +4,7 @@ import {
   buildRoomScoresUrl,
 } from "@/lib/activate-config";
 import {
+  PAGE_NAVIGATION_TIMEOUT_MS,
   waitForActivateData,
   waitForCloudflare,
 } from "@/lib/activate-browser";
@@ -16,7 +17,10 @@ import {
 } from "@/lib/activate-parser";
 
 async function fetchInlineScriptText(page: Page, targetUrl: string): Promise<string> {
-  await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.goto(targetUrl, {
+    waitUntil: "domcontentloaded",
+    timeout: PAGE_NAVIGATION_TIMEOUT_MS,
+  });
 
   const cloudflareError = await waitForCloudflare(page);
   if (cloudflareError) {
