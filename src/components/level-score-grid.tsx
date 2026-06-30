@@ -69,7 +69,7 @@ function MyScoreCell({
     longPressTimerRef.current = window.setTimeout(revealTopScore, LONG_PRESS_MS);
   }
 
-  const backgroundColor = myScoreCellBackground(level, score, topScore);
+  const cellBackground = myScoreCellBackground(level, score, topScore);
   const hasTopScore = topScore != null && topScore > 0;
   const isGlobalTop = myScoreIsGlobalTop(score, topScore);
 
@@ -77,7 +77,10 @@ function MyScoreCell({
     <td
       ref={cellRef}
       className={`relative px-1 py-1.5 text-center tabular-nums${isGlobalTop ? " font-bold" : ""}`}
-      style={{ backgroundColor, color: "#000000" }}
+      style={{
+        background: cellBackground,
+        color: isGlobalTop ? "#ffffff" : "#000000",
+      }}
       onMouseEnter={revealTopScore}
       onMouseLeave={hideTopScore}
       onTouchStart={handleTouchStart}

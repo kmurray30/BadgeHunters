@@ -183,6 +183,10 @@ export function computeScorePotential(
   return Math.min(1, Math.max(0, adjustedScore / adjustedTop));
 }
 
+/** Matches Complete Session button (`from-highlight to-pink-500`). */
+export const GLOBAL_TOP_SCORE_CELL_BACKGROUND =
+  "linear-gradient(to right, var(--highlight), #ec4899)";
+
 /** Background color for My Scores cells (gradient driven by score potential %) */
 export function myScoreCellBackground(
   level: number,
@@ -191,7 +195,7 @@ export function myScoreCellBackground(
 ): string {
   if (score <= 0) return "#ffffff";
   if (topScore != null && topScore > 0 && score >= topScore) {
-    return "#d946ef";
+    return GLOBAL_TOP_SCORE_CELL_BACKGROUND;
   }
 
   if (topScore == null || topScore <= 0) {
