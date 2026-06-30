@@ -4,7 +4,7 @@
  */
 
 import puppeteer, { type Browser, type Page } from "puppeteer-core";
-import { formatSyncError } from "@/lib/score-sync-run";
+import { formatSyncError } from "@/lib/sync-error-format";
 
 const BROWSER_IDLE_TIMEOUT_MS = 120_000;
 const CLOUDFLARE_WAIT_TIMEOUT_MS = 30_000;
@@ -55,11 +55,45 @@ export function useBrowserless(): boolean {
   return !!process.env.BROWSERLESS_TOKEN;
 }
 
-async function connectBrowserless(): Promise<Browser> {
+function buildBrowserlessEndpoints(): string[] {
   const browserlessToken = process.env.BROWSERLESS_TOKEN!;
-  return puppeteer.connect({
-    browserWSEndpoint: `wss://production-sfo.browserless.io/chromium?token=${browserlessToken}&stealth&timeout=120000`,
-  });
+  const host = process.env.BROWSERLESS_HOST ?? "production-sfo.browserless.io";
+  const endpoints = [
+    `wss://${host}/chromium?token=${browserlessToken}`,
+    `wss://${host}?token=${browserlessToken}`,
+  ];
+
+  if (process.env.BROWSERLESS_USE_STEALTH === "true") {
+    endpoints.unshift(`wss://${host}/stealth/chromium?token=${browserlessToken}`);
+  }
+
+  return endpoints;
+}
+
+async function connectBrowserless(): Promise<Browser> {
+  const endpoints = buildBrowserlessEndpoints();
+  let lastError: unknown;
+
+  for (const browserWSEndpoint of endpoints) {
+    try {
+      return await puppeteer.connect({ browserWSEndpoint });
+    } catch (error) {
+      lastError = error;
+      const errorText = formatSyncError(error).toLowerCase();
+      const isEndpointMismatch =
+        errorText.includes("unexpected server response: 400") ||
+        errorText.includes("unexpected server response: 404") ||
+        errorText.includes("not found");
+
+      if (!isEndpointMismatch) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error(
+    `Browserless connection failed after trying ${endpoints.length} endpoint(s): ${formatSyncError(lastError)}. Check BROWSERLESS_TOKEN and remove invalid query parameters from the connection URL.`,
+  );
 }
 
 async function getChromiumExecutablePath(): Promise<string> {
@@ -179,8 +213,7 @@ export async function waitForActivateData(page: Page): Promise<boolean> {
 }
 
 export function isRecoverableBrowserError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  const lowerMessage = message.toLowerCase();
+  const lowerMessage = formatSyncError(error).toLowerCase();
   return (
     lowerMessage.includes("detached frame") ||
     lowerMessage.includes("target closed") ||

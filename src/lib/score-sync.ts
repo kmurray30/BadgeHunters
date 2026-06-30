@@ -465,16 +465,26 @@ export async function cancelScoreSyncRun(runId: string): Promise<boolean> {
 }
 
 const SYNC_STALE_THRESHOLD_MS = 4 * 60 * 1000;
+const SYNC_PENDING_STALE_THRESHOLD_MS = 45 * 1000;
 
 async function expireStaleScoreSyncRunIfNeeded(run: {
   id: string;
   status: string;
   startedAt: Date;
+  totalSteps: number;
 }): Promise<boolean> {
   if (!["pending", "running"].includes(run.status)) {
     return false;
   }
-  if (Date.now() - run.startedAt.getTime() <= SYNC_STALE_THRESHOLD_MS) {
+
+  const runAgeMs = Date.now() - run.startedAt.getTime();
+  const isPendingStuck =
+    run.status === "pending" &&
+    run.totalSteps === 0 &&
+    runAgeMs > SYNC_PENDING_STALE_THRESHOLD_MS;
+  const isRunningStale = runAgeMs > SYNC_STALE_THRESHOLD_MS;
+
+  if (!isPendingStuck && !isRunningStale) {
     return false;
   }
 
@@ -485,8 +495,10 @@ async function expireStaleScoreSyncRunIfNeeded(run: {
     },
     data: {
       status: "failed",
-      errorMessage: "Sync timed out or was interrupted",
-      currentLabel: "Timed out",
+      errorMessage: isPendingStuck
+        ? "Sync never started — try again"
+        : "Sync timed out or was interrupted",
+      currentLabel: isPendingStuck ? "Failed to start" : "Timed out",
       completedAt: new Date(),
     },
   });
@@ -520,4 +532,4 @@ export async function getLatestCompletedScoreSyncRun() {
   return getLatestFinishedScoreSyncRun();
 }
 
-export { expireStaleScoreSyncRunIfNeeded, SYNC_STALE_THRESHOLD_MS };
+export { expireStaleScoreSyncRunIfNeeded, SYNC_STALE_THRESHOLD_MS, SYNC_PENDING_STALE_THRESHOLD_MS };

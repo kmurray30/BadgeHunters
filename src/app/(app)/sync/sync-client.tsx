@@ -91,8 +91,24 @@ export function SyncClient({
 
   const pollStatus = useCallback(async (runId: string) => {
     const response = await fetch(`/api/sync/status?runId=${runId}`);
-    if (!response.ok) return null;
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      throw new Error(
+        typeof data?.error === "string"
+          ? data.error
+          : `Failed to load sync status (${response.status})`,
+      );
+    }
     return (await response.json()) as SyncRunStatus;
+  }, []);
+
+  const applyFinishedRun = useCallback((status: SyncRunStatus) => {
+    setLatestFinished(status);
+    setActiveRun(null);
+    setShowErrorDetails(false);
+    if (status.status === "failed" && status.errorMessage) {
+      setError(status.errorMessage);
+    }
   }, []);
 
   useEffect(() => {
@@ -101,27 +117,29 @@ export function SyncClient({
     }
 
     const intervalId = setInterval(async () => {
-      const status = await pollStatus(activeRun.id);
-      if (!status) return;
+      try {
+        const status = await pollStatus(activeRun.id);
 
-      setActiveRun(status);
+        setActiveRun(status);
 
-      if (
-        status.status === "completed" ||
-        status.status === "failed" ||
-        status.status === "cancelled"
-      ) {
-        setLatestFinished(status);
-        setActiveRun(null);
-        setShowErrorDetails(false);
-        if (status.status === "failed" && status.errorMessage) {
-          setError(status.errorMessage);
+        if (
+          status.status === "completed" ||
+          status.status === "failed" ||
+          status.status === "cancelled"
+        ) {
+          applyFinishedRun(status);
         }
+      } catch (pollError) {
+        setError(
+          pollError instanceof Error
+            ? pollError.message
+            : "Failed to load sync status",
+        );
       }
     }, 1000);
 
     return () => clearInterval(intervalId);
-  }, [activeRun, pollStatus]);
+  }, [activeRun, applyFinishedRun, pollStatus]);
 
   const isRunning =
     activeRun != null && ["pending", "running"].includes(activeRun.status);
@@ -133,25 +151,47 @@ export function SyncClient({
 
     try {
       const response = await fetch("/api/sync/start", { method: "POST" });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (response.status === 409 && data.runId) {
         const status = await pollStatus(data.runId);
-        if (status) setActiveRun(status);
+        if (["pending", "running"].includes(status.status)) {
+          setActiveRun(status);
+          setError("A sync is already in progress.");
+        } else {
+          applyFinishedRun(status);
+        }
         return;
       }
 
       if (!response.ok) {
-        setError(data.error ?? "Failed to start sync");
+        setError(
+          typeof data.error === "string" ? data.error : "Failed to start sync",
+        );
+        return;
+      }
+
+      if (typeof data.runId !== "string") {
+        setError("Sync started but no run id was returned.");
         return;
       }
 
       const status = await pollStatus(data.runId);
-      if (status) {
-        setActiveRun(status);
+      setActiveRun(status);
+
+      if (
+        status.status === "completed" ||
+        status.status === "failed" ||
+        status.status === "cancelled"
+      ) {
+        applyFinishedRun(status);
       }
-    } catch {
-      setError("Failed to start sync");
+    } catch (startError) {
+      setError(
+        startError instanceof Error
+          ? startError.message
+          : "Failed to start sync",
+      );
     } finally {
       setIsStarting(false);
     }
