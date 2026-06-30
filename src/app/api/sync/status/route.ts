@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { toSyncRunStatus } from "@/lib/score-sync-run";
+import { expireStaleScoreSyncRunIfNeeded } from "@/lib/score-sync";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -14,9 +15,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "runId is required" }, { status: 400 });
   }
 
-  const run = await prisma.scoreSyncRun.findUnique({ where: { id: runId } });
+  let run = await prisma.scoreSyncRun.findUnique({ where: { id: runId } });
   if (!run) {
     return NextResponse.json({ error: "Run not found" }, { status: 404 });
+  }
+
+  if (await expireStaleScoreSyncRunIfNeeded(run)) {
+    run = await prisma.scoreSyncRun.findUnique({ where: { id: runId } });
+    if (!run) {
+      return NextResponse.json({ error: "Run not found" }, { status: 404 });
+    }
   }
 
   return NextResponse.json(toSyncRunStatus(run));

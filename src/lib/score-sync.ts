@@ -1,4 +1,9 @@
-import { ActivateBrowserSession, FETCH_DELAY_MS } from "@/lib/activate-browser";
+import {
+  ActivateBrowserSession,
+  FETCH_DELAY_MS,
+  PLAYER_STEP_TIMEOUT_MS,
+  withTimeout,
+} from "@/lib/activate-browser";
 import { ACTIVATE_ROOM_SLUGS } from "@/lib/activate-config";
 import {
   activateLevelIdToDisplayLevel,
@@ -308,50 +313,54 @@ export async function runScoreSync(
         await updateRunProgress(runId, completedSteps, fetchLabel, callbacks);
 
         try {
-          const playerData = await session.withPage((page) =>
-            fetchPlayerPageData(page, playerName),
+          await withTimeout(
+            (async () => {
+              const playerData = await session.withPage((page) =>
+                fetchPlayerPageData(page, playerName),
+              );
+              const overall = extractOverallStats(playerData);
+
+              if (overall.score === null) {
+                notFound++;
+                return;
+              }
+
+              const saveLabel = `Saving ${playerName}…`;
+              await updateRunProgress(runId, completedSteps, saveLabel, callbacks);
+
+              const rankColor = getRankColor(overall.score);
+              await prisma.user.update({
+                where: { id: user.id },
+                data: {
+                  currentScore: overall.score,
+                  rankColor,
+                  lastScoreSource: "scrape",
+                  lastSyncedAt: new Date(),
+                  lastGoodScoreAt: new Date(),
+                  ...(overall.rank != null ? { activateRank: overall.rank } : {}),
+                  ...(overall.leaderboardPosition
+                    ? { leaderboardPosition: overall.leaderboardPosition }
+                    : {}),
+                  ...(overall.levelsBeat ? { levelsBeat: overall.levelsBeat } : {}),
+                  ...(overall.coins != null ? { coins: overall.coins } : {}),
+                },
+              });
+
+              await ensureGamesExistForScores(
+                playerData.playerLocation.scores,
+                knownGameIds,
+              );
+              await upsertUserLevelScores(
+                user.id,
+                playerData.playerLocation.scores,
+                knownGameIds,
+              );
+              synced++;
+            })(),
+            PLAYER_STEP_TIMEOUT_MS,
+            `Sync ${playerName}`,
+            () => session.forceResetPage(),
           );
-          const overall = extractOverallStats(playerData);
-
-          if (overall.score === null) {
-            notFound++;
-            completedSteps++;
-            await updateRunProgress(runId, completedSteps, fetchLabel, callbacks);
-            await delay(FETCH_DELAY_MS);
-            continue;
-          }
-
-          const saveLabel = `Saving ${playerName}…`;
-          await updateRunProgress(runId, completedSteps, saveLabel, callbacks);
-
-          const rankColor = getRankColor(overall.score);
-          await prisma.user.update({
-            where: { id: user.id },
-            data: {
-              currentScore: overall.score,
-              rankColor,
-              lastScoreSource: "scrape",
-              lastSyncedAt: new Date(),
-              lastGoodScoreAt: new Date(),
-              ...(overall.rank != null ? { activateRank: overall.rank } : {}),
-              ...(overall.leaderboardPosition
-                ? { leaderboardPosition: overall.leaderboardPosition }
-                : {}),
-              ...(overall.levelsBeat ? { levelsBeat: overall.levelsBeat } : {}),
-              ...(overall.coins != null ? { coins: overall.coins } : {}),
-            },
-          });
-
-          await ensureGamesExistForScores(
-            playerData.playerLocation.scores,
-            knownGameIds,
-          );
-          await upsertUserLevelScores(
-            user.id,
-            playerData.playerLocation.scores,
-            knownGameIds,
-          );
-          synced++;
         } catch (playerError) {
           console.error(`[score-sync] Player sync failed (${playerName}):`, playerError);
           errors = await recordSyncError(
@@ -447,11 +456,48 @@ export async function cancelScoreSyncRun(runId: string): Promise<boolean> {
   return result.count > 0;
 }
 
+const SYNC_STALE_THRESHOLD_MS = 4 * 60 * 1000;
+
+async function expireStaleScoreSyncRunIfNeeded(run: {
+  id: string;
+  status: string;
+  startedAt: Date;
+}): Promise<boolean> {
+  if (!["pending", "running"].includes(run.status)) {
+    return false;
+  }
+  if (Date.now() - run.startedAt.getTime() <= SYNC_STALE_THRESHOLD_MS) {
+    return false;
+  }
+
+  await prisma.scoreSyncRun.updateMany({
+    where: {
+      id: run.id,
+      status: { in: ["pending", "running"] },
+    },
+    data: {
+      status: "failed",
+      errorMessage: "Sync timed out or was interrupted",
+      currentLabel: "Timed out",
+      completedAt: new Date(),
+    },
+  });
+  return true;
+}
+
 export async function getActiveScoreSyncRun() {
-  return prisma.scoreSyncRun.findFirst({
+  const activeRun = await prisma.scoreSyncRun.findFirst({
     where: { status: { in: ["pending", "running"] } },
     orderBy: { startedAt: "desc" },
   });
+
+  if (!activeRun) return null;
+
+  if (await expireStaleScoreSyncRunIfNeeded(activeRun)) {
+    return null;
+  }
+
+  return activeRun;
 }
 
 export async function getLatestFinishedScoreSyncRun() {
@@ -465,3 +511,5 @@ export async function getLatestFinishedScoreSyncRun() {
 export async function getLatestCompletedScoreSyncRun() {
   return getLatestFinishedScoreSyncRun();
 }
+
+export { expireStaleScoreSyncRunIfNeeded, SYNC_STALE_THRESHOLD_MS };

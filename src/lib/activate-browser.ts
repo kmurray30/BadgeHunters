@@ -6,12 +6,14 @@
 import puppeteer, { type Browser, type Page } from "puppeteer-core";
 
 const BROWSER_IDLE_TIMEOUT_MS = 120_000;
-const CLOUDFLARE_WAIT_TIMEOUT_MS = 45_000;
-const PAGE_NAVIGATION_TIMEOUT_MS = 45_000;
+const CLOUDFLARE_WAIT_TIMEOUT_MS = 30_000;
+const PAGE_NAVIGATION_TIMEOUT_MS = 30_000;
 const PAGE_EVALUATE_TIMEOUT_MS = 15_000;
-const FETCH_RETRY_COUNT = 2;
+const FETCH_RETRY_COUNT = 1;
 const FETCH_DELAY_MS = 500;
-export const FETCH_OPERATION_TIMEOUT_MS = 120_000;
+export const FETCH_OPERATION_TIMEOUT_MS = 55_000;
+export const PLAYER_STEP_TIMEOUT_MS = 75_000;
+export const BROWSER_SHUTDOWN_TIMEOUT_MS = 10_000;
 
 const BLOCKED_RESOURCE_TYPES = new Set(["image", "font", "media"]);
 
@@ -55,7 +57,7 @@ export function useBrowserless(): boolean {
 async function connectBrowserless(): Promise<Browser> {
   const browserlessToken = process.env.BROWSERLESS_TOKEN!;
   return puppeteer.connect({
-    browserWSEndpoint: `wss://production-sfo.browserless.io/chromium?token=${browserlessToken}&stealth`,
+    browserWSEndpoint: `wss://production-sfo.browserless.io/chromium?token=${browserlessToken}&stealth&timeout=120000`,
   });
 }
 
@@ -133,6 +135,8 @@ export async function getOrLaunchBrowser(): Promise<Browser> {
 
 export async function createLightweightPage(browser: Browser): Promise<Page> {
   const page = await browser.newPage();
+  page.setDefaultTimeout(PAGE_NAVIGATION_TIMEOUT_MS);
+  page.setDefaultNavigationTimeout(PAGE_NAVIGATION_TIMEOUT_MS);
   await page.setUserAgent(
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   );
@@ -198,12 +202,17 @@ export async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
   operationLabel: string,
+  onTimeout?: () => void | Promise<void>,
 ): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
 
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
-      reject(new Error(`${operationLabel} timed out after ${timeoutMs}ms`));
+      timedOut = true;
+      void Promise.resolve(onTimeout?.()).finally(() => {
+        reject(new Error(`${operationLabel} timed out after ${timeoutMs}ms`));
+      });
     }, timeoutMs);
   });
 
@@ -211,6 +220,10 @@ export async function withTimeout<T>(
     return await Promise.race([promise, timeoutPromise]);
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
+    if (timedOut) {
+      // Give abort handlers a moment to run before callers continue.
+      await delay(50);
+    }
   }
 }
 
@@ -266,6 +279,17 @@ export class ActivateBrowserSession {
     }
   }
 
+  async forceResetPage(): Promise<void> {
+    await this.page.close().catch(() => {});
+    try {
+      this.page = await createLightweightPage(this.browser);
+    } catch {
+      await releaseBrowser(this.browser);
+      this.browser = await connectBrowserWithTimeout();
+      this.page = await createLightweightPage(this.browser);
+    }
+  }
+
   async withPage<T>(
     callback: (page: Page) => Promise<T>,
     maxAttempts = FETCH_RETRY_COUNT + 1,
@@ -281,13 +305,18 @@ export class ActivateBrowserSession {
         if (attempt > 0) {
           await delay(FETCH_DELAY_MS * attempt);
         }
+        const activePage = this.page;
         return await withTimeout(
-          callback(this.page),
+          callback(activePage),
           FETCH_OPERATION_TIMEOUT_MS,
           "Browser fetch",
+          async () => {
+            await activePage.close().catch(() => {});
+          },
         );
       } catch (error) {
         lastError = error;
+        await this.page.close().catch(() => {});
         if (attempt < maxAttempts - 1 && isRecoverableBrowserError(error)) {
           await this.recreatePage();
           continue;
@@ -302,8 +331,16 @@ export class ActivateBrowserSession {
   }
 
   async close(): Promise<void> {
-    await this.page.close().catch(() => {});
-    await releaseBrowser(this.browser);
+    await withTimeout(
+      (async () => {
+        await this.page.close().catch(() => {});
+        await releaseBrowser(this.browser);
+      })(),
+      BROWSER_SHUTDOWN_TIMEOUT_MS,
+      "Browser shutdown",
+    ).catch(() => {
+      void releaseBrowser(this.browser);
+    });
   }
 
   getBrowser(): Browser {
@@ -311,7 +348,11 @@ export class ActivateBrowserSession {
   }
 }
 
-export { PAGE_NAVIGATION_TIMEOUT_MS, FETCH_DELAY_MS, PAGE_EVALUATE_TIMEOUT_MS };
+export {
+  PAGE_NAVIGATION_TIMEOUT_MS,
+  FETCH_DELAY_MS,
+  PAGE_EVALUATE_TIMEOUT_MS,
+};
 
 export async function releaseBrowser(browser: Browser): Promise<void> {
   if (useBrowserless()) {
