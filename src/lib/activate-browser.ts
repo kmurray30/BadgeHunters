@@ -8,8 +8,10 @@ import puppeteer, { type Browser, type Page } from "puppeteer-core";
 const BROWSER_IDLE_TIMEOUT_MS = 120_000;
 const CLOUDFLARE_WAIT_TIMEOUT_MS = 45_000;
 const PAGE_NAVIGATION_TIMEOUT_MS = 45_000;
+const PAGE_EVALUATE_TIMEOUT_MS = 15_000;
 const FETCH_RETRY_COUNT = 2;
 const FETCH_DELAY_MS = 500;
+export const FETCH_OPERATION_TIMEOUT_MS = 120_000;
 
 const BLOCKED_RESOURCE_TYPES = new Set(["image", "font", "media"]);
 
@@ -182,6 +184,7 @@ export function isRecoverableBrowserError(error: unknown): boolean {
     lowerMessage.includes("execution context was destroyed") ||
     lowerMessage.includes("timed out waiting for cloudflare") ||
     lowerMessage.includes("navigation timeout") ||
+    lowerMessage.includes("timed out after") ||
     lowerMessage.includes("net::err_") ||
     lowerMessage.includes("activate data not found")
   );
@@ -189,6 +192,39 @@ export function isRecoverableBrowserError(error: unknown): boolean {
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+export async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  operationLabel: string,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`${operationLabel} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+export async function evaluatePageWithTimeout<T>(
+  page: Page,
+  pageFunction: () => T,
+  operationLabel: string,
+  timeoutMs = PAGE_EVALUATE_TIMEOUT_MS,
+): Promise<T> {
+  return withTimeout(page.evaluate(pageFunction), timeoutMs, operationLabel);
+}
+
+export async function connectBrowserWithTimeout(): Promise<Browser> {
+  return withTimeout(getOrLaunchBrowser(), 30_000, "Browser connection");
 }
 
 export class ActivateBrowserSession {
@@ -201,7 +237,7 @@ export class ActivateBrowserSession {
   }
 
   static async create(): Promise<ActivateBrowserSession> {
-    const browser = await getOrLaunchBrowser();
+    const browser = await connectBrowserWithTimeout();
     const page = await createLightweightPage(browser);
     return new ActivateBrowserSession(browser, page);
   }
@@ -209,7 +245,7 @@ export class ActivateBrowserSession {
   private async isPageHealthy(): Promise<boolean> {
     if (this.page.isClosed()) return false;
     try {
-      await this.page.evaluate(() => true);
+      await withTimeout(this.page.evaluate(() => true), 5_000, "Page health check");
       return true;
     } catch {
       return false;
@@ -224,7 +260,7 @@ export class ActivateBrowserSession {
       return this.page;
     } catch {
       await releaseBrowser(this.browser);
-      this.browser = await getOrLaunchBrowser();
+      this.browser = await connectBrowserWithTimeout();
       this.page = await createLightweightPage(this.browser);
       return this.page;
     }
@@ -245,7 +281,11 @@ export class ActivateBrowserSession {
         if (attempt > 0) {
           await delay(FETCH_DELAY_MS * attempt);
         }
-        return await callback(this.page);
+        return await withTimeout(
+          callback(this.page),
+          FETCH_OPERATION_TIMEOUT_MS,
+          "Browser fetch",
+        );
       } catch (error) {
         lastError = error;
         if (attempt < maxAttempts - 1 && isRecoverableBrowserError(error)) {
@@ -271,7 +311,7 @@ export class ActivateBrowserSession {
   }
 }
 
-export { PAGE_NAVIGATION_TIMEOUT_MS, FETCH_DELAY_MS };
+export { PAGE_NAVIGATION_TIMEOUT_MS, FETCH_DELAY_MS, PAGE_EVALUATE_TIMEOUT_MS };
 
 export async function releaseBrowser(browser: Browser): Promise<void> {
   if (useBrowserless()) {

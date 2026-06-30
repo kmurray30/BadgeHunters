@@ -4,12 +4,12 @@ import {
   buildRoomScoresUrl,
 } from "@/lib/activate-config";
 import {
+  evaluatePageWithTimeout,
   PAGE_NAVIGATION_TIMEOUT_MS,
   waitForActivateData,
   waitForCloudflare,
 } from "@/lib/activate-browser";
 import {
-  parseOverallStatsFromBody,
   parsePlayerPageScript,
   parseRoomPageScript,
   type ActivatePlayerPageData,
@@ -32,12 +32,18 @@ async function fetchInlineScriptText(page: Page, targetUrl: string): Promise<str
     throw new Error(`Activate data not found on page: ${targetUrl}`);
   }
 
-  const scriptText = await page.evaluate(() => {
-    const inlineScript = Array.from(document.querySelectorAll("script:not([src])")).find(
-      (scriptElement) => (scriptElement.textContent || "").includes("playerLocation"),
-    );
-    return inlineScript?.textContent || "";
-  });
+  const scriptText = await evaluatePageWithTimeout(
+    page,
+    () => {
+      const inlineScript = Array.from(
+        document.querySelectorAll("script:not([src])"),
+      ).find((scriptElement) =>
+        (scriptElement.textContent || "").includes("playerLocation"),
+      );
+      return inlineScript?.textContent || "";
+    },
+    "Extract Activate inline script",
+  );
 
   if (!scriptText) {
     throw new Error(`Could not extract inline script from: ${targetUrl}`);
@@ -49,7 +55,7 @@ async function fetchInlineScriptText(page: Page, targetUrl: string): Promise<str
 export async function fetchPlayerPageData(
   page: Page,
   username: string,
-): Promise<ActivatePlayerPageData & { bodyText: string; scriptText: string }> {
+): Promise<ActivatePlayerPageData & { scriptText: string }> {
   const targetUrl = buildPlayerScoresUrl(username);
   const scriptText = await fetchInlineScriptText(page, targetUrl);
   const parsed = parsePlayerPageScript(scriptText);
@@ -58,8 +64,7 @@ export async function fetchPlayerPageData(
     throw new Error(`Failed to parse player data for: ${username}`);
   }
 
-  const bodyText = await page.evaluate(() => document.body.innerText);
-  return { ...parsed, bodyText, scriptText };
+  return { ...parsed, scriptText };
 }
 
 export async function fetchRoomPageData(
@@ -78,17 +83,15 @@ export async function fetchRoomPageData(
   return parsed;
 }
 
-export function extractOverallStats(bodyText: string, playerData: ActivatePlayerPageData) {
-  const fromBody = parseOverallStatsFromBody(bodyText);
+export function extractOverallStats(playerData: ActivatePlayerPageData) {
   const playerLocation = playerData.playerLocation;
 
   return {
-    score: fromBody.score ?? playerLocation.totalScore ?? null,
-    rank: fromBody.rank ?? playerLocation.playerRank ?? null,
+    score: playerLocation.totalScore ?? null,
+    rank: playerLocation.playerRank ?? null,
     leaderboardPosition:
-      fromBody.leaderboardPosition ??
-      (playerLocation.standing != null ? `#${playerLocation.standing}` : null),
-    levelsBeat: fromBody.levelsBeat ?? null,
-    coins: fromBody.coins ?? null,
+      playerLocation.standing != null ? `#${playerLocation.standing}` : null,
+    levelsBeat: null,
+    coins: null,
   };
 }

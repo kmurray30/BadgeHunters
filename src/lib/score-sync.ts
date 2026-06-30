@@ -2,9 +2,6 @@ import { ActivateBrowserSession, FETCH_DELAY_MS } from "@/lib/activate-browser";
 import { ACTIVATE_ROOM_SLUGS } from "@/lib/activate-config";
 import {
   activateLevelIdToDisplayLevel,
-  parseAllGamesFromScript,
-  parseRoomsListFromScript,
-  roomNameToSlug,
   type ActivateLevelScoreEntry,
 } from "@/lib/activate-parser";
 import {
@@ -100,35 +97,6 @@ async function ensureActivateGameExists(
   });
 }
 
-async function upsertGameCatalogFromScript(scriptText: string) {
-  const rooms = parseRoomsListFromScript(scriptText);
-  const roomNameById = new Map(rooms.map((room) => [room.id, room.name]));
-  const allGames = parseAllGamesFromScript(scriptText);
-
-  for (const game of allGames) {
-    const roomName = roomNameById.get(game.roomId) ?? "Other";
-    const roomSlug = roomNameToSlug(roomName);
-    await prisma.activateGame.upsert({
-      where: { id: game.id },
-      create: {
-        id: game.id,
-        name: game.name,
-        roomSlug,
-        roomName,
-        roomId: game.roomId,
-        sortIndex: game.roomIndex,
-      },
-      update: {
-        name: game.name,
-        roomSlug,
-        roomName,
-        roomId: game.roomId,
-        sortIndex: game.roomIndex,
-      },
-    });
-  }
-}
-
 async function upsertGlobalTopScores(
   roomSlug: string,
   roomName: string,
@@ -156,7 +124,15 @@ async function upsertGlobalTopScores(
   }
 }
 
-async function ensureGamesExistForScores(scores: ActivateLevelScoreEntry[]) {
+async function loadKnownGameIds(): Promise<Set<number>> {
+  const games = await prisma.activateGame.findMany({ select: { id: true } });
+  return new Set(games.map((game) => game.id));
+}
+
+async function ensureGamesExistForScores(
+  scores: ActivateLevelScoreEntry[],
+  knownGameIds: Set<number>,
+) {
   const gameIds = [
     ...new Set(
       scores.filter((entry) => entry.highScore > 0).map((entry) => entry.gameId),
@@ -164,17 +140,17 @@ async function ensureGamesExistForScores(scores: ActivateLevelScoreEntry[]) {
   ];
 
   for (const gameId of gameIds) {
+    if (knownGameIds.has(gameId)) continue;
     await ensureActivateGameExists(gameId, "unknown", "Other");
+    knownGameIds.add(gameId);
   }
 }
 
 async function upsertUserLevelScores(
   userId: string,
   scores: ActivateLevelScoreEntry[],
+  knownGameIds: Set<number>,
 ) {
-  const knownGames = await prisma.activateGame.findMany({ select: { id: true } });
-  const knownGameIds = new Set(knownGames.map((game) => game.id));
-
   const scoreRows = scores
     .filter((entry) => entry.highScore > 0 && knownGameIds.has(entry.gameId))
     .map((entry) => ({
@@ -269,6 +245,7 @@ export async function runScoreSync(
 
   try {
     const session = await ActivateBrowserSession.create();
+    let knownGameIds = await loadKnownGameIds();
     try {
       for (const roomSlug of ACTIVATE_ROOM_SLUGS) {
         const label = `Fetching ${decodeURIComponent(roomSlug)} scores…`;
@@ -281,6 +258,9 @@ export async function runScoreSync(
           const roomName = roomData.roomInfo?.name ?? decodeURIComponent(roomSlug);
           await upsertRoomCatalog(roomSlug, roomName, roomData.roomGames);
           await upsertGlobalTopScores(roomSlug, roomName, roomData.roomScores);
+          for (const game of roomData.roomGames) {
+            knownGameIds.add(game.id);
+          }
         } catch (roomError) {
           console.error(`[score-sync] Room fetch failed (${roomSlug}):`, roomError);
           errors = await recordSyncError(
@@ -298,22 +278,25 @@ export async function runScoreSync(
 
       for (const user of usersToSync) {
         const playerName = user.activatePlayerName!;
-        const label = `Syncing ${playerName}…`;
-        await updateRunProgress(runId, completedSteps, label, callbacks);
+        const fetchLabel = `Fetching ${playerName}…`;
+        await updateRunProgress(runId, completedSteps, fetchLabel, callbacks);
 
         try {
           const playerData = await session.withPage((page) =>
             fetchPlayerPageData(page, playerName),
           );
-          const overall = extractOverallStats(playerData.bodyText, playerData);
+          const overall = extractOverallStats(playerData);
 
           if (overall.score === null) {
             notFound++;
             completedSteps++;
-            await updateRunProgress(runId, completedSteps, label, callbacks);
+            await updateRunProgress(runId, completedSteps, fetchLabel, callbacks);
             await delay(FETCH_DELAY_MS);
             continue;
           }
+
+          const saveLabel = `Saving ${playerName}…`;
+          await updateRunProgress(runId, completedSteps, saveLabel, callbacks);
 
           const rankColor = getRankColor(overall.score);
           await prisma.user.update({
@@ -333,9 +316,15 @@ export async function runScoreSync(
             },
           });
 
-          await upsertGameCatalogFromScript(playerData.scriptText);
-          await ensureGamesExistForScores(playerData.playerLocation.scores);
-          await upsertUserLevelScores(user.id, playerData.playerLocation.scores);
+          await ensureGamesExistForScores(
+            playerData.playerLocation.scores,
+            knownGameIds,
+          );
+          await upsertUserLevelScores(
+            user.id,
+            playerData.playerLocation.scores,
+            knownGameIds,
+          );
           synced++;
         } catch (playerError) {
           console.error(`[score-sync] Player sync failed (${playerName}):`, playerError);
@@ -348,7 +337,12 @@ export async function runScoreSync(
         }
 
         completedSteps++;
-        await updateRunProgress(runId, completedSteps, label, callbacks);
+        await updateRunProgress(
+          runId,
+          completedSteps,
+          `Synced ${playerName}`,
+          callbacks,
+        );
         await delay(FETCH_DELAY_MS);
       }
     } finally {

@@ -45,7 +45,7 @@ export async function lookupActivatePlayer(
   try {
     return await withActivateBrowserSession(async (_browser, page) => {
       const playerData = await fetchPlayerPageData(page, trimmedName);
-      const overall = extractOverallStats(playerData.bodyText, playerData);
+      const overall = extractOverallStats(playerData);
       const activateUsername =
         playerData.playerLocation.playerName?.trim() || trimmedName;
 
