@@ -11,32 +11,32 @@ import type { ColumnHeader } from "./badge-table";
  * `undefined` — spread will overwrite the default.
  *
  * ── Sizing model ─────────────────────────────────────────────────────────
- * Name: `minmax(6rem, max-content)` + `measureMax: true`. BadgeTable
- *   measures the widest Name cell across every row (in a hidden nowrap
- *   clone) and substitutes the resulting pixel value for the `max-content`
- *   keyword before it hits grid-template-columns. So every row gets the
- *   SAME Name track width at the SAME viewport size (cells align), AND
- *   the track still flexes between 6rem and the measured max as the
- *   viewport narrows/widens. Tooltip/info icon never overlaps because at
- *   max the track is wide enough for the widest name + icon on one line.
- * Description: `minmax(8rem, 1fr)`. Description is the flex track that
- *   absorbs all leftover container width once Name has reached its
- *   measured-pixel max. On wide viewports it extends to the screen edge;
- *   on narrow viewports it shrinks toward its 8rem floor.
+ * Both Name and Description are flex tracks (`1fr` / `3fr`), so as the
+ * viewport widens BOTH columns grow at the same time (simultaneously) —
+ * Description just grows 3× faster than Name since description text is
+ * the longer of the two. Shrinking works in reverse: both shrink together,
+ * with Name hitting its 8rem floor first (and forcing horizontal scroll)
+ * once Description has shrunk to its 10rem floor.
  *
- * ── Tuning the minimums ──────────────────────────────────────────────────
- * Change the `6rem` / `8rem` values below to raise/lower the column
- * floors globally. Those are the ONLY spots — every table reads through
- * these factories.
+ * Because both are flex tracks, every row's grid computes the SAME track
+ * width at a given container width (flex distribution is container-based,
+ * not content-based), so cells naturally align across all rows with no
+ * JS measurement needed.
+ *
+ * ── Tuning ───────────────────────────────────────────────────────────────
+ * - Change `8rem` / `10rem` to raise/lower the column floors.
+ * - Change the fr ratio (currently `1fr` vs `3fr`) to rebalance who
+ *   absorbs more of the viewport slack as the window grows — e.g. bump
+ *   Name to `2fr` to make Name grow faster, or flatten both to `1fr`
+ *   to split slack 50/50.
  */
 
 export function nameColumn(overrides?: Partial<ColumnHeader>): ColumnHeader {
   return {
     label: "Name",
-    width: "minmax(8rem, max-content)",
+    width: "minmax(8rem, 1fr)",
     sortField: "name",
     sticky: true,
-    measureMax: true,
     ...overrides,
   };
 }
@@ -44,7 +44,7 @@ export function nameColumn(overrides?: Partial<ColumnHeader>): ColumnHeader {
 export function descriptionColumn(overrides?: Partial<ColumnHeader>): ColumnHeader {
   return {
     label: "Description",
-    width: "minmax(10rem, 1fr)",
+    width: "minmax(10rem, 3fr)",
     ...overrides,
   };
 }

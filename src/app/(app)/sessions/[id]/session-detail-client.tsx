@@ -28,32 +28,32 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useOptimistic, useState, useTransition } from "react";
 
 const YOUR_BADGES_COLUMNS: ColumnHeader[] = [
-  { label: "Group %", width: "1.5rem", align: "center", vertical: true, sticky: true },
   nameColumn(),
   descriptionColumn(),
-  { label: "Difficulty", width: "5rem", align: "right", sortField: "difficulty" },
-  { label: "# Players", width: "4rem", align: "right", sortField: "players" },
+  { label: "Difficulty", width: "4rem", align: "right", sortField: "difficulty" },
+  { label: "# Players", width: "3rem", align: "right", sortField: "players" },
+  { label: "Group %", width: "1.5rem", align: "center", vertical: true },
 ];
 
 function buildGroupBadgeColumns(members: { id: string; displayName: string }[], currentUserId: string): ColumnHeader[] {
-  // Member name columns live at the far right and are non-sticky. "You"
-  // appears as the first member column so the current user reads first.
+  // "You" appears as the first member column so the current user reads
+  // first among the per-member completion indicators.
   const sortedMembersForHeader = [...members].sort((memberA, memberB) => {
     if (memberA.id === currentUserId) return -1;
     if (memberB.id === currentUserId) return 1;
     return 0;
   });
   return [
-    { label: "Votes", width: "1.0rem", align: "center", vertical: true, sticky: true },
-    { label: "Group %", width: "1.5rem", align: "center", vertical: true, sticky: true, labelShift: "-10px"  },
     { label: "Done", width: "1.5rem", align: "center", vertical: true, sticky: true, tooltip: "Your completion — click to toggle", labelShift: "-4px" },
     nameColumn({ sortField: undefined }),
     descriptionColumn(),
-    { label: "Difficulty", width: "5rem", align: "right" },
-    { label: "# Players", width: "4rem", align: "right" },
+    { label: "Difficulty", width: "4rem", align: "right" },
+    { label: "# Players", width: "3rem", align: "right" },
+    { label: "Votes", width: "1.0rem", align: "center", vertical: true },
+    { label: "Group %", width: "1.5rem", align: "center", vertical: true, labelShift: "-10px" },
     ...sortedMembersForHeader.map((member) => ({
       label: member.id === currentUserId ? "You" : member.displayName.slice(0, 4),
-      width: "1.25rem",
+      width: "1rem",
       align: "center" as const,
       vertical: true,
       bold: member.id === currentUserId,
@@ -1205,8 +1205,7 @@ export function SessionDetailClient({
                   className: rowClassName,
                   onMouseDown: () => handleBadgeSelect(badge.id),
                   cells: [
-                    <span className={`min-w-0 text-center text-[11px] tabular-nums ${memberCount > 0 && badge.totalUncompletedCount === 0 ? "text-success font-semibold" : "text-muted"}`}>{memberCount > 0 ? Math.round(((memberCount - badge.totalUncompletedCount) / memberCount) * 100) : 0}%</span>,
-                    <span className="flex w-full items-center gap-1 min-w-0 pr-1">
+                    <span className="flex w-full items-center gap-2 min-w-0 pr-2">
                       <span className="min-w-0 flex-1 text-sm font-medium text-foreground">{badge.name}</span>
                       <button
                         type="button"
@@ -1222,6 +1221,7 @@ export function SessionDetailClient({
                     <span className="block min-w-0 text-xs text-muted">{badge.description}</span>,
                     <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
                     <span className={`min-w-0 text-center text-[11px] ${resolvePlayerCount(badge).color}`}>{resolvePlayerCount(badge).label}</span>,
+                    <span className={`min-w-0 text-center text-[11px] tabular-nums ${memberCount > 0 && badge.totalUncompletedCount === 0 ? "text-success font-semibold" : "text-muted"}`}>{memberCount > 0 ? Math.round(((memberCount - badge.totalUncompletedCount) / memberCount) * 100) : 0}%</span>,
                   ],
                   footer: undefined,
                 };
@@ -1367,13 +1367,13 @@ function buildGroupBadgeRows(
       className: rowClassName,
       onMouseDown: () => onBadgeInfoClick(entry.selection.badgeId),
       cells: [
-        votesCell,
-        fractionCell,
         doneCell,
         <span className="min-w-0 text-sm font-medium text-foreground">{entry.selection.badgeName}</span>,
         <span className="block min-w-0 text-xs text-muted">{entry.selection.badgeDescription}</span>,
         <span className={`min-w-0 text-center text-[11px] font-medium ${diffInfo.color}`}>{diffInfo.label}</span>,
         <span className={`min-w-0 text-center text-[11px] ${playerCountResolved.color}`}>{playerCountResolved.label}</span>,
+        votesCell,
+        fractionCell,
         ...memberCells,
       ],
       footer: undefined,
