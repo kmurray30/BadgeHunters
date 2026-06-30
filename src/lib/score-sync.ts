@@ -18,6 +18,7 @@ import { prisma } from "@/lib/db";
 import { getRankColor } from "@/lib/rank";
 import {
   errorDetailsForDb,
+  formatSyncError,
   recordSyncError,
   type ScoreSyncErrorDetail,
 } from "@/lib/score-sync-run";
@@ -381,7 +382,15 @@ export async function runScoreSync(
         await delay(FETCH_DELAY_MS);
       }
     } finally {
-      await session.close();
+      try {
+        await session.close();
+      } catch (closeError) {
+        console.error(
+          "[score-sync] Browser shutdown failed:",
+          formatSyncError(closeError),
+          closeError,
+        );
+      }
     }
 
     if (runId) {
@@ -406,9 +415,8 @@ export async function runScoreSync(
       return { synced, notFound, errors };
     }
 
-    const errorMessage =
-      fatalError instanceof Error ? fatalError.message : String(fatalError);
-    console.error("[score-sync] Fatal error:", fatalError);
+    const errorMessage = formatSyncError(fatalError);
+    console.error("[score-sync] Fatal error:", errorMessage, fatalError);
 
     if (runId) {
       const existingRun = await prisma.scoreSyncRun.findUnique({

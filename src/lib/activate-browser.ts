@@ -4,6 +4,7 @@
  */
 
 import puppeteer, { type Browser, type Page } from "puppeteer-core";
+import { formatSyncError } from "@/lib/score-sync-run";
 
 const BROWSER_IDLE_TIMEOUT_MS = 120_000;
 const CLOUDFLARE_WAIT_TIMEOUT_MS = 30_000;
@@ -280,13 +281,26 @@ export class ActivateBrowserSession {
   }
 
   async forceResetPage(): Promise<void> {
-    await this.page.close().catch(() => {});
     try {
+      await this.page.close().catch(() => {});
       this.page = await createLightweightPage(this.browser);
-    } catch {
-      await releaseBrowser(this.browser);
-      this.browser = await connectBrowserWithTimeout();
-      this.page = await createLightweightPage(this.browser);
+    } catch (resetError) {
+      console.error(
+        "[activate-browser] forceResetPage failed:",
+        formatSyncError(resetError),
+        resetError,
+      );
+      try {
+        await releaseBrowser(this.browser);
+        this.browser = await connectBrowserWithTimeout();
+        this.page = await createLightweightPage(this.browser);
+      } catch (reconnectError) {
+        console.error(
+          "[activate-browser] forceResetPage reconnect failed:",
+          formatSyncError(reconnectError),
+          reconnectError,
+        );
+      }
     }
   }
 
