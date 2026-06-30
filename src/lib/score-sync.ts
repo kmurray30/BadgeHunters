@@ -31,7 +31,7 @@ function errorDetailsForDb(
   details: ScoreSyncErrorDetail[],
 ): Prisma.InputJsonValue | undefined {
   if (details.length === 0) return undefined;
-  return details as Prisma.InputJsonValue;
+  return details as unknown as Prisma.InputJsonValue;
 }
 
 interface SyncProgressCallbacks {
