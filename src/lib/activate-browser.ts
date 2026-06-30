@@ -355,6 +355,24 @@ export class ActivateBrowserSession {
     }
   }
 
+  async runOnDedicatedPage<T>(
+    callback: (page: Page) => Promise<T>,
+  ): Promise<T> {
+    const page = await createLightweightPage(this.browser);
+    try {
+      return await withTimeout(
+        callback(page),
+        FETCH_OPERATION_TIMEOUT_MS,
+        "Browser fetch",
+        () => {
+          void page.close().catch(() => {});
+        },
+      );
+    } finally {
+      void page.close().catch(() => {});
+    }
+  }
+
   async withPage<T>(
     callback: (page: Page) => Promise<T>,
     maxAttempts = FETCH_RETRY_COUNT + 1,

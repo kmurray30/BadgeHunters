@@ -1,11 +1,22 @@
 import {
   ActivateBrowserSession,
-  FETCH_DELAY_MS,
   PLAYER_STEP_TIMEOUT_MS,
   ROOM_STEP_TIMEOUT_MS,
   withTimeout,
 } from "@/lib/activate-browser";
-import { ACTIVATE_ROOM_SLUGS, buildPlayerScoresUrl, buildRoomScoresUrl } from "@/lib/activate-config";
+import { ACTIVATE_ROOM_SLUGS, buildPlayerScoresUrl, buildRoomScoresUrl, decodeRoomSlug } from "@/lib/activate-config";
+import {
+  mapWithConcurrency,
+  resolveSyncFetchConcurrency,
+} from "@/lib/sync-parallel";
+import {
+  countCompletedSteps,
+  createInitialSyncProgress,
+  overallProgressLabel,
+  parseSyncProgress,
+  syncProgressForDb,
+  type SyncProgressSnapshot,
+} from "@/lib/sync-progress";
 import {
   activateLevelIdToDisplayLevel,
   type ActivateLevelScoreEntry,
@@ -32,7 +43,8 @@ import {
   SYNC_RUN_BUDGET_MS,
 } from "@/lib/sync-continuation";
 
-export type { ScoreSyncErrorDetail } from "@/lib/score-sync-run";
+export type { ScoreSyncErrorDetail, SyncProgressSnapshot } from "@/lib/score-sync-run";
+export type { SyncPlayerProgressItem, SyncRoomProgressItem, SyncItemStatus } from "@/lib/sync-progress";
 
 export interface ScoreSyncResult {
   synced: number;
@@ -56,8 +68,115 @@ interface SyncProgressCallbacks {
   onProgress?: (completedSteps: number, currentLabel: string) => Promise<void>;
 }
 
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+class SyncTimeBudgetExceededError extends Error {
+  constructor() {
+    super("Sync time budget exceeded");
+    this.name = "SyncTimeBudgetExceededError";
+  }
+}
+
+function resetRunningItemsToPending(snapshot: SyncProgressSnapshot) {
+  for (const room of snapshot.rooms) {
+    if (room.status === "running") room.status = "pending";
+  }
+  for (const player of snapshot.players) {
+    if (player.status === "running") player.status = "pending";
+  }
+}
+
+type SyncTask =
+  | { kind: "room"; roomIndex: number }
+  | { kind: "player"; playerIndex: number };
+
+function collectPendingSyncTasks(snapshot: SyncProgressSnapshot): SyncTask[] {
+  const tasks: SyncTask[] = [];
+
+  for (let roomIndex = 0; roomIndex < snapshot.rooms.length; roomIndex += 1) {
+    if (snapshot.rooms[roomIndex].status === "pending") {
+      tasks.push({ kind: "room", roomIndex });
+    }
+  }
+
+  for (let playerIndex = 0; playerIndex < snapshot.players.length; playerIndex += 1) {
+    if (snapshot.players[playerIndex].status === "pending") {
+      tasks.push({ kind: "player", playerIndex });
+    }
+  }
+
+  return tasks;
+}
+
+class SyncProgressTracker {
+  private snapshot: SyncProgressSnapshot;
+  private persistLock = Promise.resolve();
+
+  constructor(
+    snapshot: SyncProgressSnapshot,
+    private runId: string | undefined,
+    private callbacks: SyncProgressCallbacks | undefined,
+  ) {
+    this.snapshot = snapshot;
+  }
+
+  getSnapshot(): SyncProgressSnapshot {
+    return this.snapshot;
+  }
+
+  private async lockedPersist(): Promise<void> {
+    await assertSyncNotCancelled(this.runId);
+    const completedSteps = countCompletedSteps(this.snapshot);
+    const currentLabel = overallProgressLabel(this.snapshot);
+
+    if (this.callbacks?.onProgress) {
+      await this.callbacks.onProgress(completedSteps, currentLabel);
+    }
+    if (this.runId) {
+      await prisma.scoreSyncRun.update({
+        where: { id: this.runId },
+        data: {
+          completedSteps,
+          currentLabel,
+          syncProgress: syncProgressForDb(this.snapshot),
+          lastProgressAt: new Date(),
+        },
+      });
+    }
+  }
+
+  async persist(): Promise<void> {
+    this.persistLock = this.persistLock.then(() => this.lockedPersist());
+    await this.persistLock;
+  }
+
+  async setRoomStatus(
+    roomIndex: number,
+    status: SyncProgressSnapshot["rooms"][number]["status"],
+  ): Promise<void> {
+    this.snapshot.rooms[roomIndex].status = status;
+    await this.persist();
+  }
+
+  async setPlayerStatus(
+    playerIndex: number,
+    status: SyncProgressSnapshot["players"][number]["status"],
+    label?: string,
+  ): Promise<void> {
+    this.snapshot.players[playerIndex].status = status;
+    if (label !== undefined) {
+      this.snapshot.players[playerIndex].label = label;
+    }
+    await this.persist();
+  }
+
+  async setPhase(phase: SyncProgressSnapshot["phase"]): Promise<void> {
+    this.snapshot.phase = phase;
+    await this.persist();
+  }
+
+  async markComplete(): Promise<void> {
+    this.snapshot.phase = "complete";
+    await this.persist();
+  }
 }
 
 async function assertSyncNotCancelled(runId: string | undefined) {
@@ -70,25 +189,6 @@ async function assertSyncNotCancelled(runId: string | undefined) {
 
   if (run?.status === "cancelled") {
     throw new SyncCancelledError();
-  }
-}
-
-async function updateRunProgress(
-  runId: string | undefined,
-  completedSteps: number,
-  currentLabel: string,
-  callbacks?: SyncProgressCallbacks,
-) {
-  await assertSyncNotCancelled(runId);
-
-  if (callbacks?.onProgress) {
-    await callbacks.onProgress(completedSteps, currentLabel);
-  }
-  if (runId) {
-    await prisma.scoreSyncRun.update({
-      where: { id: runId },
-      data: { completedSteps, currentLabel, lastProgressAt: new Date() },
-    });
   }
 }
 
@@ -224,8 +324,8 @@ async function upsertUserLevelScores(
 
 /**
  * Sync PlayActivate scores for all active real users with linked accounts.
- * Fetches 11 room pages (game catalog + global tops) then one page per player.
- * Automatically continues in additional serverless invocations when needed.
+ * Fetches 11 room pages (game catalog + global tops) and one page per player.
+ * All pending steps run in parallel (concurrency = step count unless capped via env).
  */
 export async function runScoreSync(
   runId?: string,
@@ -247,16 +347,32 @@ export async function runScoreSync(
     },
   });
 
-  const roomUsername =
-    usersToSync.find((user) => user.activatePlayerName)?.activatePlayerName ?? null;
+  const linkedUsers = usersToSync.flatMap((user) => {
+    if (!user.activatePlayerName) return [];
+    return [{ id: user.id, activatePlayerName: user.activatePlayerName }];
+  });
 
-  const totalSteps = ACTIVATE_ROOM_SLUGS.length + usersToSync.length;
+  const roomUsername = linkedUsers[0]?.activatePlayerName ?? null;
+  const totalSteps = ACTIVATE_ROOM_SLUGS.length + linkedUsers.length;
 
   let synced = 0;
   let notFound = 0;
   let errors = 0;
-  let completedSteps = 0;
   const errorDetails: ScoreSyncErrorDetail[] = [];
+  let errorRecordLock = Promise.resolve();
+
+  async function recordSyncErrorLocked(
+    context: string,
+    error: unknown,
+    options?: { url?: string },
+  ) {
+    errorRecordLock = errorRecordLock.then(async () => {
+      errors = await recordSyncError(runId, errorDetails, context, error, options);
+    });
+    await errorRecordLock;
+  }
+
+  let syncProgress = createInitialSyncProgress(linkedUsers);
 
   if (runId && resume) {
     const existingRun = await prisma.scoreSyncRun.findUnique({
@@ -267,13 +383,14 @@ export async function runScoreSync(
       return { synced: 0, notFound: 0, errors: 0 };
     }
 
-    completedSteps = existingRun.completedSteps;
     synced = existingRun.syncedCount ?? 0;
     notFound = existingRun.notFoundCount ?? 0;
     errors = existingRun.errorCount ?? 0;
     errorDetails.push(...parseErrorDetails(existingRun.errorDetails));
-
-    await updateRunProgress(runId, completedSteps, "Resuming sync…", callbacks);
+    syncProgress =
+      parseSyncProgress(existingRun.syncProgress) ??
+      createInitialSyncProgress(linkedUsers);
+    resetRunningItemsToPending(syncProgress);
   } else if (runId) {
     await prisma.scoreSyncRun.update({
       where: { id: runId },
@@ -286,6 +403,7 @@ export async function runScoreSync(
         notFoundCount: 0,
         errorCount: 0,
         errorDetails: Prisma.DbNull,
+        syncProgress: syncProgressForDb(syncProgress),
         errorMessage: null,
         completedAt: null,
         lastProgressAt: new Date(),
@@ -293,18 +411,21 @@ export async function runScoreSync(
     });
   }
 
-  async function pauseForContinuation(currentLabel: string): Promise<ScoreSyncResult> {
+  const progressTracker = new SyncProgressTracker(syncProgress, runId, callbacks);
+
+  async function pauseForContinuation(): Promise<ScoreSyncResult> {
     if (runId) {
       await prisma.scoreSyncRun.update({
         where: { id: runId },
         data: {
           status: "running",
-          completedSteps,
-          currentLabel,
+          completedSteps: countCompletedSteps(progressTracker.getSnapshot()),
+          currentLabel: "Continuing in next batch…",
           syncedCount: synced,
           notFoundCount: notFound,
           errorCount: errors,
           errorDetails: errorDetailsForDb(errorDetails),
+          syncProgress: syncProgressForDb(progressTracker.getSnapshot()),
           lastProgressAt: new Date(),
         },
       });
@@ -314,11 +435,10 @@ export async function runScoreSync(
     return { synced, notFound, errors, continued: true };
   }
 
-  async function ensureTimeBudget(): Promise<ScoreSyncResult | null> {
-    if (!isSyncTimeBudgetExceeded(runStartedAtMs)) {
-      return null;
+  function assertTimeBudgetAvailable() {
+    if (isSyncTimeBudgetExceeded(runStartedAtMs)) {
+      throw new SyncTimeBudgetExceededError();
     }
-    return pauseForContinuation("Continuing in next batch…");
   }
 
   if (!roomUsername) {
@@ -344,139 +464,165 @@ export async function runScoreSync(
   try {
     const session = await ActivateBrowserSession.create();
     let knownGameIds = await loadKnownGameIds();
+
     try {
-      for (let roomIndex = 0; roomIndex < ACTIVATE_ROOM_SLUGS.length; roomIndex++) {
-        const roomSlug = ACTIVATE_ROOM_SLUGS[roomIndex];
-        if (roomIndex < completedSteps) {
-          continue;
-        }
+      const pendingTasks = collectPendingSyncTasks(progressTracker.getSnapshot());
 
-        const budgetPause = await ensureTimeBudget();
-        if (budgetPause) return budgetPause;
+      if (pendingTasks.length > 0) {
+        assertTimeBudgetAvailable();
 
-        await assertSyncNotCancelled(runId);
+        const hasPendingRooms = progressTracker
+          .getSnapshot()
+          .rooms.some((room) => room.status === "pending");
+        await progressTracker.setPhase(hasPendingRooms ? "rooms" : "players");
 
-        const label = `Fetching ${decodeURIComponent(roomSlug)} scores…`;
-        await updateRunProgress(runId, completedSteps, label, callbacks);
+        const taskResults = await mapWithConcurrency(
+          pendingTasks,
+          resolveSyncFetchConcurrency(pendingTasks.length),
+          async (task) => {
+            assertTimeBudgetAvailable();
+            await assertSyncNotCancelled(runId);
 
-        try {
-          await withTimeout(
-            (async () => {
-              const roomData = await session.withPage((page) =>
-                fetchRoomPageData(page, roomUsername, roomSlug),
-              );
-              const roomName = roomData.roomInfo?.name ?? decodeURIComponent(roomSlug);
-              await upsertRoomCatalog(roomSlug, roomName, roomData.roomGames);
-              await upsertGlobalTopScores(roomSlug, roomName, roomData.roomScores);
-              for (const game of roomData.roomGames) {
-                knownGameIds.add(game.id);
+            if (task.kind === "room") {
+              const roomIndex = task.roomIndex;
+              const roomSlug = ACTIVATE_ROOM_SLUGS[roomIndex];
+              await progressTracker.setRoomStatus(roomIndex, "running");
+
+              try {
+                const roomData = await withTimeout(
+                  session.runOnDedicatedPage((page) =>
+                    fetchRoomPageData(page, roomUsername, roomSlug),
+                  ),
+                  ROOM_STEP_TIMEOUT_MS,
+                  `Room ${decodeRoomSlug(roomSlug)}`,
+                  () => session.forceKill(),
+                );
+
+                const roomName = roomData.roomInfo?.name ?? decodeRoomSlug(roomSlug);
+                await upsertRoomCatalog(roomSlug, roomName, roomData.roomGames);
+                await upsertGlobalTopScores(roomSlug, roomName, roomData.roomScores);
+
+                await progressTracker.setRoomStatus(roomIndex, "done");
+                return {
+                  kind: "room" as const,
+                  gameIds: roomData.roomGames.map((game) => game.id),
+                  synced: 0,
+                  notFound: 0,
+                };
+              } catch (roomError) {
+                console.error(`[score-sync] Room fetch failed (${roomSlug}):`, roomError);
+                await progressTracker.setRoomStatus(roomIndex, "error");
+                await recordSyncErrorLocked(
+                  `Room: ${decodeRoomSlug(roomSlug)}`,
+                  roomError,
+                  { url: buildRoomScoresUrl(roomUsername, roomSlug) },
+                );
+                return {
+                  kind: "room" as const,
+                  gameIds: [],
+                  synced: 0,
+                  notFound: 0,
+                };
               }
-            })(),
-            ROOM_STEP_TIMEOUT_MS,
-            `Room ${decodeURIComponent(roomSlug)}`,
-            () => session.forceKill(),
-          );
-        } catch (roomError) {
-          console.error(`[score-sync] Room fetch failed (${roomSlug}):`, roomError);
-          errors = await recordSyncError(
-            runId,
-            errorDetails,
-            `Room: ${decodeURIComponent(roomSlug)}`,
-            roomError,
-            { url: buildRoomScoresUrl(roomUsername, roomSlug) },
-          );
-        }
+            }
 
-        completedSteps++;
-        await updateRunProgress(runId, completedSteps, label, callbacks);
-        await delay(FETCH_DELAY_MS);
-      }
+            const playerIndex = task.playerIndex;
+            const user = linkedUsers[playerIndex];
+            const playerName = user.activatePlayerName;
+            await progressTracker.setPlayerStatus(playerIndex, "running", "Fetching…");
 
-      for (let playerIndex = 0; playerIndex < usersToSync.length; playerIndex++) {
-        const user = usersToSync[playerIndex];
-        const globalStepIndex = ACTIVATE_ROOM_SLUGS.length + playerIndex;
-        if (globalStepIndex < completedSteps) {
-          continue;
-        }
+            try {
+              const outcome = await withTimeout(
+                (async () => {
+                  const playerData = await session.runOnDedicatedPage((page) =>
+                    fetchPlayerPageData(page, playerName),
+                  );
+                  const overall = extractOverallStats(playerData);
 
-        const playerName = user.activatePlayerName!;
-        const fetchLabel = `Fetching ${playerName}…`;
+                  if (overall.score === null) {
+                    await progressTracker.setPlayerStatus(
+                      playerIndex,
+                      "done",
+                      "Not found",
+                    );
+                    return { synced: 0, notFound: 1 };
+                  }
 
-        const budgetPause = await ensureTimeBudget();
-        if (budgetPause) return budgetPause;
+                  await progressTracker.setPlayerStatus(
+                    playerIndex,
+                    "running",
+                    "Saving…",
+                  );
 
-        await assertSyncNotCancelled(runId);
-        await updateRunProgress(runId, completedSteps, fetchLabel, callbacks);
+                  const rankColor = getRankColor(overall.score);
+                  await prisma.user.update({
+                    where: { id: user.id },
+                    data: {
+                      currentScore: overall.score,
+                      rankColor,
+                      lastScoreSource: "scrape",
+                      lastSyncedAt: new Date(),
+                      lastGoodScoreAt: new Date(),
+                      ...(overall.rank != null ? { activateRank: overall.rank } : {}),
+                      ...(overall.leaderboardPosition
+                        ? { leaderboardPosition: overall.leaderboardPosition }
+                        : {}),
+                      ...(overall.levelsBeat ? { levelsBeat: overall.levelsBeat } : {}),
+                      ...(overall.coins != null ? { coins: overall.coins } : {}),
+                    },
+                  });
 
-        try {
-          await withTimeout(
-            (async () => {
-              const playerData = await session.withPage((page) =>
-                fetchPlayerPageData(page, playerName),
+                  await ensureGamesExistForScores(
+                    playerData.playerLocation.scores,
+                    knownGameIds,
+                  );
+                  await upsertUserLevelScores(
+                    user.id,
+                    playerData.playerLocation.scores,
+                    knownGameIds,
+                  );
+                  await progressTracker.setPlayerStatus(playerIndex, "done", "Synced");
+                  return { synced: 1, notFound: 0 };
+                })(),
+                PLAYER_STEP_TIMEOUT_MS,
+                `Sync ${playerName}`,
+                () => session.forceKill(),
               );
-              const overall = extractOverallStats(playerData);
-
-              if (overall.score === null) {
-                notFound++;
-                return;
-              }
-
-              const saveLabel = `Saving ${playerName}…`;
-              await updateRunProgress(runId, completedSteps, saveLabel, callbacks);
-
-              const rankColor = getRankColor(overall.score);
-              await prisma.user.update({
-                where: { id: user.id },
-                data: {
-                  currentScore: overall.score,
-                  rankColor,
-                  lastScoreSource: "scrape",
-                  lastSyncedAt: new Date(),
-                  lastGoodScoreAt: new Date(),
-                  ...(overall.rank != null ? { activateRank: overall.rank } : {}),
-                  ...(overall.leaderboardPosition
-                    ? { leaderboardPosition: overall.leaderboardPosition }
-                    : {}),
-                  ...(overall.levelsBeat ? { levelsBeat: overall.levelsBeat } : {}),
-                  ...(overall.coins != null ? { coins: overall.coins } : {}),
-                },
-              });
-
-              await ensureGamesExistForScores(
-                playerData.playerLocation.scores,
-                knownGameIds,
+              return { kind: "player" as const, gameIds: [], ...outcome };
+            } catch (playerError) {
+              console.error(`[score-sync] Player sync failed (${playerName}):`, playerError);
+              await progressTracker.setPlayerStatus(playerIndex, "error", "Failed");
+              await recordSyncErrorLocked(
+                `Player: ${playerName}`,
+                playerError,
+                { url: buildPlayerScoresUrl(playerName) },
               );
-              await upsertUserLevelScores(
-                user.id,
-                playerData.playerLocation.scores,
-                knownGameIds,
-              );
-              synced++;
-            })(),
-            PLAYER_STEP_TIMEOUT_MS,
-            `Sync ${playerName}`,
-            () => session.forceKill(),
-          );
-        } catch (playerError) {
-          console.error(`[score-sync] Player sync failed (${playerName}):`, playerError);
-          errors = await recordSyncError(
-            runId,
-            errorDetails,
-            `Player: ${playerName}`,
-            playerError,
-            { url: buildPlayerScoresUrl(playerName) },
-          );
-        }
-
-        completedSteps++;
-        await updateRunProgress(
-          runId,
-          completedSteps,
-          `Synced ${playerName}`,
-          callbacks,
+              return { kind: "player" as const, gameIds: [], synced: 0, notFound: 0 };
+            }
+          },
         );
-        await delay(FETCH_DELAY_MS);
+
+        for (const result of taskResults) {
+          if (result.status === "fulfilled") {
+            synced += result.value.synced;
+            notFound += result.value.notFound;
+            for (const gameId of result.value.gameIds) {
+              knownGameIds.add(gameId);
+            }
+          }
+        }
+        errors = errorDetails.length;
       }
+
+      const hasPendingWork =
+        progressTracker.getSnapshot().rooms.some((room) => room.status === "pending") ||
+        progressTracker.getSnapshot().players.some((player) => player.status === "pending");
+
+      if (hasPendingWork) {
+        return pauseForContinuation();
+      }
+
+      await progressTracker.markComplete();
     } finally {
       try {
         await session.close();
@@ -496,12 +642,13 @@ export async function runScoreSync(
         where: { id: runId },
         data: {
           status: "completed",
-          completedSteps,
+          completedSteps: countCompletedSteps(progressTracker.getSnapshot()),
           currentLabel: "Sync complete",
           syncedCount: synced,
           notFoundCount: notFound,
           errorCount: errors,
           errorDetails: errorDetailsForDb(errorDetails),
+          syncProgress: syncProgressForDb(progressTracker.getSnapshot()),
           completedAt: new Date(),
         },
       });
@@ -509,6 +656,10 @@ export async function runScoreSync(
   } catch (fatalError) {
     if (fatalError instanceof SyncCancelledError) {
       return { synced, notFound, errors };
+    }
+
+    if (fatalError instanceof SyncTimeBudgetExceededError) {
+      return pauseForContinuation();
     }
 
     const errorMessage = formatSyncError(fatalError);
@@ -534,6 +685,7 @@ export async function runScoreSync(
           notFoundCount: notFound,
           errorCount: errors,
           errorDetails: errorDetailsForDb(errorDetails),
+          syncProgress: syncProgressForDb(progressTracker.getSnapshot()),
           completedAt: new Date(),
         },
       });

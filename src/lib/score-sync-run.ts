@@ -1,9 +1,11 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { buildSyncErrorSnapshot } from "@/lib/sync-error-format";
+import { parseSyncProgress, type SyncProgressSnapshot } from "@/lib/sync-progress";
 
 export { formatSyncError, buildSyncErrorSnapshot } from "@/lib/sync-error-format";
 export type { SyncErrorSnapshot } from "@/lib/sync-error-format";
+export type { SyncProgressSnapshot, SyncPlayerProgressItem, SyncRoomProgressItem, SyncItemStatus } from "@/lib/sync-progress";
 
 export interface ScoreSyncErrorDetail {
   context: string;
@@ -106,6 +108,7 @@ export function toSyncRunStatus(run: {
   currentLabel: string | null;
   errorMessage: string | null;
   errorDetails: unknown;
+  syncProgress: unknown;
   syncedCount: number | null;
   notFoundCount: number | null;
   errorCount: number | null;
@@ -127,6 +130,7 @@ export function toSyncRunStatus(run: {
     percent,
     errorMessage: run.errorMessage,
     errorDetails: parseErrorDetails(run.errorDetails),
+    syncProgress: parseSyncProgress(run.syncProgress),
     syncedCount: run.syncedCount,
     notFoundCount: run.notFoundCount,
     errorCount: run.errorCount,

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { ScoreSyncErrorDetail } from "@/lib/score-sync";
+import type { SyncProgressSnapshot } from "@/lib/sync-progress";
 
 interface SyncRunStatus {
   id: string;
@@ -19,6 +20,7 @@ interface SyncRunStatus {
   startedAt?: string;
   lastProgressAt?: string;
   completedAt?: string | null;
+  syncProgress?: SyncProgressSnapshot | null;
 }
 
 interface SyncClientProps {
@@ -344,9 +346,9 @@ export function SyncClient({
     <div className="space-y-6">
       <div className="rounded-xl border border-border bg-card p-5">
         <p className="text-sm text-muted">
-          Syncs overall scores and every level score for all linked players from
-          PlayActivate. Also refreshes global top scores for each level. This
-          updates everyone in the system, not just you.
+          Fetches 11 room pages (catalog + global tops) and one page per linked player.
+          All steps run in parallel — e.g. 18 steps means up to 18 concurrent browser
+          fetches.
         </p>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -378,6 +380,7 @@ export function SyncClient({
                 {activeRun.completedSteps} / {activeRun.totalSteps} ({progressPercent}%)
               </span>
             </div>
+
             <div className="h-2 overflow-hidden rounded-full bg-border">
               <div
                 className="h-full rounded-full bg-accent transition-all duration-300"
