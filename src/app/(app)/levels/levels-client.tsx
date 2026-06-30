@@ -210,6 +210,10 @@ export function GroupCompletionClient({
     setSelectedPlayerIds(new Set(players.map((player) => player.id)));
   }
 
+  function deselectAll() {
+    setSelectedPlayerIds(new Set());
+  }
+
   const picker = (
     <PlayerPicker
       players={players}
@@ -217,6 +221,7 @@ export function GroupCompletionClient({
       isRefreshing={isRefreshing}
       onToggle={togglePlayer}
       onSelectAll={selectAll}
+      onDeselectAll={deselectAll}
     />
   );
 
@@ -312,18 +317,24 @@ function PlayerPicker({
   isRefreshing,
   onToggle,
   onSelectAll,
+  onDeselectAll,
 }: {
   players: GroupCompletionPlayerOption[];
   selectedPlayerIds: Set<string>;
   isRefreshing?: boolean;
   onToggle: (playerId: string) => void;
   onSelectAll: () => void;
+  onDeselectAll: () => void;
 }) {
+  const allSelected =
+    players.length > 0 && selectedPlayerIds.size === players.length;
+  const noneSelected = selectedPlayerIds.size === 0;
+
   return (
     <div className="sticky top-14 z-40 -mx-4 mb-4 border-b border-border bg-card/95 px-4 py-4 backdrop-blur-sm">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-foreground">Players</h2>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {isRefreshing ? (
             <span className="text-xs text-muted">Updating…</span>
           ) : null}
@@ -331,9 +342,19 @@ function PlayerPicker({
             type="button"
             onMouseDown={(event) => event.preventDefault()}
             onClick={onSelectAll}
-            className="text-xs text-accent hover:underline"
+            disabled={allSelected}
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-card-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             Select all
+          </button>
+          <button
+            type="button"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={onDeselectAll}
+            disabled={noneSelected}
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-card-hover disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Deselect all
           </button>
         </div>
       </div>

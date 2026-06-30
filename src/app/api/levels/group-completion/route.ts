@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   const playerIdsParam = request.nextUrl.searchParams.get("playerIds");
   let playerIds: string[];
 
-  if (playerIdsParam) {
+  if (playerIdsParam !== null) {
     const requestedIds = playerIdsParam.split(",").filter(Boolean);
     const allowedPlayers = await prisma.user.findMany({
       where: {

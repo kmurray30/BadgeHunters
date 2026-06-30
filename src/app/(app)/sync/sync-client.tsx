@@ -28,18 +28,13 @@ interface SyncClientProps {
   initialLatestFinished: SyncRunStatus | null;
 }
 
-function syncHasStarted(syncProgress: SyncProgressSnapshot): boolean {
-  return (
-    syncProgress.rooms.some((room) => room.status !== "pending") ||
-    syncProgress.players.some((player) => player.status !== "pending")
-  );
-}
-
 function syncStepStatusLabel(
   status: SyncItemStatus,
-  syncStarted: boolean,
   detailLabel?: string,
 ): { text: string; className: string } {
+  if (status === "pending") {
+    return { text: "", className: "" };
+  }
   if (status === "done") {
     return {
       text: detailLabel === "Not found" ? "Not found" : "Done",
@@ -49,25 +44,17 @@ function syncStepStatusLabel(
   if (status === "error") {
     return { text: "Failed", className: "text-danger" };
   }
-  if (status === "running") {
-    return {
-      text: detailLabel ?? "In progress…",
-      className: "text-foreground animate-pulse",
-    };
-  }
-  if (syncStarted) {
-    return { text: "", className: "" };
-  }
-  return { text: "Waiting…", className: "text-muted" };
+  return {
+    text: detailLabel ?? "In progress…",
+    className: "text-foreground animate-pulse",
+  };
 }
 
 function SyncStepList({ syncProgress }: { syncProgress: SyncProgressSnapshot }) {
-  const syncStarted = syncHasStarted(syncProgress);
-
   return (
     <ul className="mt-3 max-h-64 space-y-0.5 overflow-y-auto text-xs">
       {syncProgress.rooms.map((room) => {
-        const status = syncStepStatusLabel(room.status, syncStarted);
+        const status = syncStepStatusLabel(room.status);
         return (
           <li key={`room-${room.slug}`} className="flex items-center justify-between gap-3">
             <span className="truncate text-foreground">Room: {room.label}</span>
@@ -78,7 +65,7 @@ function SyncStepList({ syncProgress }: { syncProgress: SyncProgressSnapshot }) 
         );
       })}
       {syncProgress.players.map((player) => {
-        const status = syncStepStatusLabel(player.status, syncStarted, player.label);
+        const status = syncStepStatusLabel(player.status, player.label);
         return (
           <li key={`player-${player.userId}`} className="flex items-center justify-between gap-3">
             <span className="truncate text-foreground">Player: {player.playerName}</span>
