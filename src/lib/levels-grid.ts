@@ -191,7 +191,7 @@ export function myScoreCellBackground(
 ): string {
   if (score <= 0) return "#ffffff";
   if (topScore != null && topScore > 0 && score >= topScore) {
-    return "#bfdbfe";
+    return "#60a5fa";
   }
 
   if (topScore == null || topScore <= 0) {
@@ -203,6 +203,10 @@ export function myScoreCellBackground(
     Math.min(1, Math.max(0, score / topScore));
 
   return myScoreRatioBackground(potential);
+}
+
+export function myScoreIsGlobalTop(score: number, topScore?: number): boolean {
+  return score > 0 && topScore != null && topScore > 0 && score >= topScore;
 }
 
 type RgbTriplet = readonly [number, number, number];

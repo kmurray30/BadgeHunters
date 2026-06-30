@@ -8,6 +8,7 @@ import {
   groupCompletionCellBackground,
   groupCompletionTextColor,
   myScoreCellBackground,
+  myScoreIsGlobalTop,
 } from "@/lib/levels-grid";
 
 export type LevelGridMode = "my-scores" | "group-completion";
@@ -70,11 +71,12 @@ function MyScoreCell({
 
   const backgroundColor = myScoreCellBackground(level, score, topScore);
   const hasTopScore = topScore != null && topScore > 0;
+  const isGlobalTop = myScoreIsGlobalTop(score, topScore);
 
   return (
     <td
       ref={cellRef}
-      className="relative px-1 py-1.5 text-center tabular-nums"
+      className={`relative px-1 py-1.5 text-center tabular-nums${isGlobalTop ? " font-bold" : ""}`}
       style={{ backgroundColor, color: "#000000" }}
       onMouseEnter={revealTopScore}
       onMouseLeave={hideTopScore}
