@@ -57,11 +57,6 @@ export function OnboardingClient({ googleName }: Props) {
         body: JSON.stringify({
           realName: realName.trim(),
           activatePlayerName: isSkipping ? null : (activateName.trim() || null),
-          score: null,
-          activateRank: null,
-          leaderboardPosition: null,
-          levelsBeat: null,
-          coins: null,
         }),
       });
 
@@ -197,7 +192,7 @@ export function OnboardingClient({ googleName }: Props) {
                 disabled={isSubmitting || !realName.trim()}
                 className="flex-1 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
               >
-                {isSubmitting ? "Setting up..." : "Complete Setup"}
+                {isSubmitting ? "Looking up player…" : "Complete Setup"}
               </button>
             </div>
           </div>

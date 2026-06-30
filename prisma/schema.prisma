@@ -71,6 +71,13 @@ enum FeedbackStatus {
   archived
 }
 
+enum ScoreSyncStatus {
+  pending
+  running
+  completed
+  failed
+}
+
 // ─── Tables ─────────────────────────────────────────────────────────────────
 
 model User {
@@ -115,6 +122,8 @@ model User {
   feedbackPosts       FeedbackPost[]
   feedbackReactions   FeedbackReaction[]
   notifications       Notification[]
+  userLevelScores     UserLevelScore[]
+  scoreSyncRunsStarted ScoreSyncRun[]
 
   @@map("users")
 }
@@ -374,4 +383,71 @@ model FeedbackReaction {
 
   @@unique([feedbackPostId, userId, reactionType])
   @@map("feedback_reactions")
+}
+
+// ─── Activate score sync ────────────────────────────────────────────────────
+
+model ActivateGame {
+  id        Int      @id
+  name      String
+  roomSlug  String   @map("room_slug")
+  roomName  String   @map("room_name")
+  roomId    Int      @map("room_id")
+  sortIndex Int      @default(0) @map("sort_index")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  userLevelScores    UserLevelScore[]
+  globalLevelTopScores GlobalLevelTopScore[]
+
+  @@index([roomSlug, sortIndex])
+  @@map("activate_games")
+}
+
+model UserLevelScore {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  gameId    Int      @map("game_id")
+  level     Int
+  score     Int
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game ActivateGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameId, level])
+  @@index([gameId, level])
+  @@map("user_level_scores")
+}
+
+model GlobalLevelTopScore {
+  id        String   @id @default(cuid())
+  gameId    Int      @map("game_id")
+  level     Int
+  topScore  Int      @map("top_score")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  game ActivateGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, level])
+  @@map("global_level_top_scores")
+}
+
+model ScoreSyncRun {
+  id              String           @id @default(cuid())
+  status          ScoreSyncStatus  @default(pending)
+  startedByUserId String           @map("started_by_user_id")
+  totalSteps      Int              @default(0) @map("total_steps")
+  completedSteps  Int              @default(0) @map("completed_steps")
+  currentLabel    String?          @map("current_label")
+  errorMessage    String?          @map("error_message") @db.Text
+  syncedCount     Int?             @map("synced_count")
+  notFoundCount   Int?             @map("not_found_count")
+  errorCount      Int?             @map("error_count")
+  startedAt       DateTime         @default(now()) @map("started_at")
+  completedAt     DateTime?        @map("completed_at")
+
+  startedBy User @relation(fields: [startedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("score_sync_runs")
 }

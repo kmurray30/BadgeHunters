@@ -51,8 +51,11 @@ export function AdminClient({ initialAdminMode }: { initialAdminMode: boolean })
   const [testUsers, setTestUsers] = useState<TestUser[]>([]);
   const [realUsers, setRealUsers] = useState<RealUser[]>([]);
   const [newTestUserName, setNewTestUserName] = useState("");
+  const [newRealUserName, setNewRealUserName] = useState("");
   const [testUserError, setTestUserError] = useState("");
+  const [realUserError, setRealUserError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isCreatingRealUser, setIsCreatingRealUser] = useState(false);
   const [pendingDeleteUser, setPendingDeleteUser] = useState<{ id: string; name: string; isTest: boolean } | null>(null);
 
   // Cron job state
@@ -113,6 +116,38 @@ export function AdminClient({ initialAdminMode }: { initialAdminMode: boolean })
     setAdminMode(false);
     setTestUsers([]);
     setRealUsers([]);
+  }
+
+  async function handleCreateRealUser(nameOverride?: string) {
+    setRealUserError("");
+    const nameToUse = nameOverride ?? newRealUserName;
+    if (!nameToUse.trim()) {
+      setRealUserError("Name is required");
+      return;
+    }
+
+    setIsLoading(true);
+    setIsCreatingRealUser(true);
+    try {
+      const response = await fetch("/api/admin/real-users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: nameToUse.trim() }),
+      });
+
+      if (response.ok) {
+        setNewRealUserName("");
+        fetchRealUsers();
+      } else {
+        const data = await response.json();
+        setRealUserError(data.error || "Failed to create real user");
+      }
+    } catch {
+      setRealUserError("Failed to create real user");
+    } finally {
+      setIsLoading(false);
+      setIsCreatingRealUser(false);
+    }
   }
 
   async function handleCreateTestUser(nameOverride?: string) {
@@ -325,32 +360,62 @@ export function AdminClient({ initialAdminMode }: { initialAdminMode: boolean })
       <div className="space-y-4">
         <h2 className="text-lg font-semibold text-foreground">User Management</h2>
 
-        {/* Create test user */}
-        <div className="rounded-xl border border-border bg-card p-4 space-y-2">
-          <label className="text-xs font-medium text-muted">
-            Create Test User
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newTestUserName}
-              onChange={(event) => setNewTestUserName(event.target.value)}
-              onKeyDown={(event) => event.key === "Enter" && handleCreateTestUser()}
-              placeholder="Activate player name..."
-              className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
-            />
-            <button
-              onClick={() => handleCreateTestUser()}
-              disabled={isLoading}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
-            >
-              Create
-            </button>
+        {/* Create users — side by side */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+            <label className="text-xs font-medium text-muted">
+              Create Real User
+            </label>
+            <p className="text-[10px] text-muted">
+              Looks up playactivate.com and imports score, rank, and stats.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newRealUserName}
+                onChange={(event) => setNewRealUserName(event.target.value)}
+                onKeyDown={(event) => event.key === "Enter" && handleCreateRealUser()}
+                placeholder="Activate player name..."
+                className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+              />
+              <button
+                onClick={() => handleCreateRealUser()}
+                disabled={isLoading}
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+              >
+                {isCreatingRealUser ? "Looking up…" : "Create"}
+              </button>
+            </div>
+            {realUserError && (
+              <p className="text-xs text-danger">{realUserError}</p>
+            )}
           </div>
 
-          {testUserError && (
-            <p className="text-xs text-danger">{testUserError}</p>
-          )}
+          <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+            <label className="text-xs font-medium text-muted">
+              Create Test User
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newTestUserName}
+                onChange={(event) => setNewTestUserName(event.target.value)}
+                onKeyDown={(event) => event.key === "Enter" && handleCreateTestUser()}
+                placeholder="Activate player name..."
+                className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+              />
+              <button
+                onClick={() => handleCreateTestUser()}
+                disabled={isLoading}
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50"
+              >
+                Create
+              </button>
+            </div>
+            {testUserError && (
+              <p className="text-xs text-danger">{testUserError}</p>
+            )}
+          </div>
         </div>
 
         {/* Two-column user list: Real Users | Test Users */}
@@ -362,7 +427,7 @@ export function AdminClient({ initialAdminMode }: { initialAdminMode: boolean })
             </label>
             <div className="max-h-80 space-y-1 overflow-y-auto">
               {realUsers.length === 0 ? (
-                <p className="py-4 text-center text-xs text-muted">No real users yet</p>
+                <p className="py-4 text-center text-xs text-muted">No real users yet — create one above</p>
               ) : (
                 realUsers.map((realUser) => (
                   <div

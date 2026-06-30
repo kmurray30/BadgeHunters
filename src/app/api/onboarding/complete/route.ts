@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { getRankColor } from "@/lib/rank";
+import {
+  lookupActivatePlayer,
+  scrapedFieldsFromLookup,
+} from "@/lib/activate-lookup";
+
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -11,10 +16,25 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { realName, activatePlayerName, score, activateRank, leaderboardPosition, levelsBeat, coins } = body;
+  const { realName, activatePlayerName } = body;
 
   if (!realName) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  }
+
+  let resolvedActivateName: string | null = null;
+  let scrapedFields: ReturnType<typeof scrapedFieldsFromLookup> = {};
+
+  if (activatePlayerName && typeof activatePlayerName === "string" && activatePlayerName.trim()) {
+    const lookup = await lookupActivatePlayer(activatePlayerName.trim());
+    if (!lookup.found) {
+      return NextResponse.json(
+        { error: lookup.error ?? "Player not found on playactivate.com" },
+        { status: 404 },
+      );
+    }
+    resolvedActivateName = lookup.activateUsername ?? activatePlayerName.trim();
+    scrapedFields = scrapedFieldsFromLookup(lookup);
   }
 
   // ─── Pending user path: create User + Account from session data ─────────
@@ -38,20 +58,9 @@ export async function POST(request: NextRequest) {
       onboardingComplete: true,
       isTestUser: false,
       realName: realName.trim(),
-      activatePlayerName: activatePlayerName ? activatePlayerName.trim() : null,
+      activatePlayerName: resolvedActivateName,
+      ...scrapedFields,
     };
-
-    if (typeof score === "number" && score > 0) {
-      userData.currentScore = score;
-      userData.rankColor = getRankColor(score);
-      userData.lastScoreSource = "scrape";
-      userData.lastSyncedAt = new Date();
-      userData.lastGoodScoreAt = new Date();
-    }
-    if (typeof activateRank === "number") userData.activateRank = activateRank;
-    if (typeof leaderboardPosition === "string") userData.leaderboardPosition = leaderboardPosition;
-    if (typeof levelsBeat === "string") userData.levelsBeat = levelsBeat;
-    if (typeof coins === "number") userData.coins = coins;
 
     const newUser = await prisma.user.create({
       data: userData as Parameters<typeof prisma.user.create>[0]["data"],
@@ -86,22 +95,11 @@ export async function POST(request: NextRequest) {
   const updateData: Record<string, unknown> = {
     realName: realName.trim(),
     onboardingComplete: true,
+    ...scrapedFields,
   };
-  if (activatePlayerName) {
-    updateData.activatePlayerName = activatePlayerName.trim();
+  if (resolvedActivateName) {
+    updateData.activatePlayerName = resolvedActivateName;
   }
-
-  if (typeof score === "number" && score > 0) {
-    updateData.currentScore = score;
-    updateData.rankColor = getRankColor(score);
-    updateData.lastScoreSource = "scrape";
-    updateData.lastSyncedAt = new Date();
-    updateData.lastGoodScoreAt = new Date();
-  }
-  if (typeof activateRank === "number") updateData.activateRank = activateRank;
-  if (typeof leaderboardPosition === "string") updateData.leaderboardPosition = leaderboardPosition;
-  if (typeof levelsBeat === "string") updateData.levelsBeat = levelsBeat;
-  if (typeof coins === "number") updateData.coins = coins;
 
   await prisma.user.update({
     where: { id: session.user.id },

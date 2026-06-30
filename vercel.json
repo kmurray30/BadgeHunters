@@ -10,13 +10,16 @@
       "maxDuration": 150
     },
     "src/app/api/cron/score-sync/route.ts": {
-      "maxDuration": 120
+      "maxDuration": 150
     },
-    "src/app/api/admin/activate-lookup/route.ts": {
-      "maxDuration": 30
+    "src/app/api/sync/start/route.ts": {
+      "maxDuration": 150
     },
-    "src/app/api/onboarding/activate-lookup/route.ts": {
-      "maxDuration": 30
+    "src/app/api/admin/real-users/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/onboarding/complete/route.ts": {
+      "maxDuration": 60
     }
   }
 }

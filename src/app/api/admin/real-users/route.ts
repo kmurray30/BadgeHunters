@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
+import { getRankColor } from "@/lib/rank";
+import {
+  lookupActivatePlayer,
+  scrapedFieldsFromLookup,
+} from "@/lib/activate-lookup";
+
+export const maxDuration = 60;
 
 /**
  * List all real (non-test) users — admin mode only.
@@ -46,6 +53,79 @@ export async function GET() {
   }));
 
   return NextResponse.json({ users: serializedUsers });
+}
+
+/**
+ * Create a real user for local dev — admin mode only.
+ * No Google OAuth link; use admin login to sign in as this user.
+ */
+export async function POST(request: NextRequest) {
+  const cookieStore = await cookies();
+  if (cookieStore.get("admin_mode")?.value !== "active") {
+    return NextResponse.json({ error: "Admin mode not active" }, { status: 403 });
+  }
+
+  const body = await request.json();
+  const { displayName } = body;
+
+  if (!displayName || typeof displayName !== "string" || displayName.trim().length === 0) {
+    return NextResponse.json({ error: "Display name required" }, { status: 400 });
+  }
+
+  const trimmedName = displayName.trim();
+
+  const lookup = await lookupActivatePlayer(trimmedName);
+  if (!lookup.found) {
+    return NextResponse.json(
+      { error: lookup.error ?? "Player not found on playactivate.com" },
+      { status: 404 },
+    );
+  }
+
+  const activatePlayerName = lookup.activateUsername ?? trimmedName;
+
+  const existingUser = await prisma.user.findFirst({
+    where: {
+      activatePlayerName: { equals: activatePlayerName, mode: "insensitive" },
+      isTestUser: false,
+    },
+  });
+
+  if (existingUser) {
+    return NextResponse.json(
+      { error: "A real user with that Activate name already exists" },
+      { status: 409 },
+    );
+  }
+
+  const realUser = await prisma.user.create({
+    data: {
+      authType: "google",
+      role: "user",
+      activatePlayerName,
+      realName: activatePlayerName,
+      isTestUser: false,
+      onboardingComplete: true,
+      ...scrapedFieldsFromLookup(lookup),
+      ...(lookup.score === null
+        ? { currentScore: 0, rankColor: getRankColor(0) }
+        : {}),
+    },
+  });
+
+  return NextResponse.json(
+    {
+      user: realUser,
+      lookup: {
+        score: lookup.score,
+        rank: lookup.rank,
+        leaderboardPosition: lookup.leaderboardPosition,
+        levelsBeat: lookup.levelsBeat,
+        coins: lookup.coins,
+      },
+    },
+    { status: 201 },
+  );
 }
 
 /**

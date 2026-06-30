@@ -83,6 +83,13 @@ export function NavUserMenu({ userId, userName, userImage, isTestUser, role, isA
           >
             Settings
           </Link>
+          <Link
+            href="/sync"
+            className="block px-4 py-2 text-sm text-foreground hover:bg-card-hover"
+            onClick={() => setIsOpen(false)}
+          >
+            Sync
+          </Link>
           <hr className="my-1 border-border" />
           <button
             onClick={handleSignOut}

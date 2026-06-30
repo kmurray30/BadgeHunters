@@ -43,6 +43,13 @@ export function NavHamburger({ className }: NavHamburgerProps) {
             Players
           </Link>
           <Link
+            href="/levels/scores"
+            className="block px-4 py-2 text-sm text-foreground hover:bg-card-hover transition-colors"
+            onClick={() => setIsOpen(false)}
+          >
+            Levels
+          </Link>
+          <Link
             href="/feedback"
             className="block px-4 py-2 text-sm text-foreground hover:bg-card-hover transition-colors"
             onClick={() => setIsOpen(false)}

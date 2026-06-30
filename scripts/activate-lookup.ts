@@ -4,7 +4,6 @@
  *
  * Usage:
  *   npx tsx scripts/activate-lookup.ts shumsby
- *   npx tsx scripts/activate-lookup.ts someone@gmail.com
  */
 
 import { lookupActivatePlayer } from "../src/lib/activate-lookup";
@@ -13,7 +12,7 @@ async function main() {
   const searchTerm = process.argv[2];
 
   if (!searchTerm) {
-    console.error("Usage: npx tsx scripts/activate-lookup.ts <player-name-or-email>");
+    console.error("Usage: npx tsx scripts/activate-lookup.ts <player-name>");
     process.exit(1);
   }
 
@@ -26,7 +25,6 @@ async function main() {
   if (result.found) {
     console.log("✅ FOUND\n");
     console.log(`  Username:     ${result.activateUsername}`);
-    console.log(`  Search term:  ${result.searchTerm}`);
     console.log(`  Score:        ${result.score?.toLocaleString() ?? "—"}`);
     console.log(`  Rank:         ${result.rank ?? "—"}`);
     console.log(`  Leaderboard:  ${result.leaderboardPosition ?? "—"}`);
@@ -34,14 +32,13 @@ async function main() {
     console.log(`  Coins:        ${result.coins ?? "—"}`);
   } else {
     console.log("❌ NOT FOUND\n");
-    console.log(`  Search term:  ${result.searchTerm}`);
     if (result.error) {
       console.log(`  Error:        ${result.error}`);
     }
   }
 
   console.log(`\n  Took ${elapsed}ms`);
-  process.exit(0);
+  process.exit(result.found ? 0 : 1);
 }
 
 main().catch((error) => {

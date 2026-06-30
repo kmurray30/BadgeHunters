@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/session-helpers";
 import { isolationFilter } from "@/lib/isolation";
 import { getRankColor, RANK_COLOR_HEX } from "@/lib/rank";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { RankPopup } from "@/components/rank-popup";
 import { BackButton } from "@/components/back-button";
 import { parseBackFromQuery } from "@/lib/back-navigation";
@@ -119,6 +120,15 @@ export default async function PlayerDetailPage({ params, searchParams }: Props) 
           <RankPopup currentRank={rankColor} rankHex={rankHex} />
           <p className="text-[9px] sm:text-xs text-muted">Rank</p>
         </div>
+      </div>
+
+      <div className="mt-4">
+        <Link
+          href={`/levels/scores?playerId=${player.id}`}
+          className="inline-flex items-center rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-card-hover"
+        >
+          View Level Scores
+        </Link>
       </div>
 
       {/* Activate details */}

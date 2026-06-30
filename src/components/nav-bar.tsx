@@ -174,6 +174,12 @@ export async function NavBar() {
                 Players
               </Link>
               <Link
+                href="/levels/scores"
+                className="hidden min-[28rem]:block shrink-0 text-xs sm:text-sm text-muted hover:text-foreground transition-colors"
+              >
+                Levels
+              </Link>
+              <Link
                 href="/feedback"
                 className="hidden min-[28rem]:block shrink-0 text-xs sm:text-sm text-muted hover:text-foreground transition-colors"
               >
