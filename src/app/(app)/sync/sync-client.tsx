@@ -84,6 +84,7 @@ export function SyncClient({
     initialLatestFinished,
   );
   const [isStarting, setIsStarting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
   const [isLoadingErrorDetails, setIsLoadingErrorDetails] = useState(false);
@@ -105,8 +106,13 @@ export function SyncClient({
 
       setActiveRun(status);
 
-      if (status.status === "completed" || status.status === "failed") {
+      if (
+        status.status === "completed" ||
+        status.status === "failed" ||
+        status.status === "cancelled"
+      ) {
         setLatestFinished(status);
+        setActiveRun(null);
         setShowErrorDetails(false);
         if (status.status === "failed" && status.errorMessage) {
           setError(status.errorMessage);
@@ -178,6 +184,39 @@ export function SyncClient({
     }
   }
 
+  async function handleCancelSync() {
+    if (!activeRun) return;
+
+    setIsCancelling(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/sync/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId: activeRun.id }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error ?? "Failed to cancel sync");
+        return;
+      }
+
+      if (data.run) {
+        setLatestFinished(data.run);
+      } else {
+        const status = await pollStatus(activeRun.id);
+        if (status) setLatestFinished(status);
+      }
+      setActiveRun(null);
+    } catch {
+      setError("Failed to cancel sync");
+    } finally {
+      setIsCancelling(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-border bg-card p-5">
@@ -187,13 +226,26 @@ export function SyncClient({
           updates everyone in the system, not just you.
         </p>
 
-        <button
-          onClick={handleStartSync}
-          disabled={isRunning || isStarting}
-          className="mt-4 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isRunning ? "Syncing…" : isStarting ? "Starting…" : "Sync Scores"}
-        </button>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleStartSync}
+            disabled={isRunning || isStarting}
+            className="rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-white hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isRunning ? "Syncing…" : isStarting ? "Starting…" : "Sync Scores"}
+          </button>
+
+          {isRunning && activeRun ? (
+            <button
+              type="button"
+              onClick={handleCancelSync}
+              disabled={isCancelling}
+              className="rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-card-hover disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isCancelling ? "Cancelling…" : "Cancel sync"}
+            </button>
+          ) : null}
+        </div>
 
         {isRunning && activeRun && (
           <div className="mt-5 space-y-2">
@@ -219,10 +271,15 @@ export function SyncClient({
 
       {latestFinished &&
         (latestFinished.status === "completed" ||
-          latestFinished.status === "failed") && (
+          latestFinished.status === "failed" ||
+          latestFinished.status === "cancelled") && (
           <div className="rounded-xl border border-border bg-card p-5">
             <h2 className="text-sm font-semibold text-foreground">
-              {latestFinished.status === "failed" ? "Last sync failed" : "Last sync"}
+              {latestFinished.status === "failed"
+                ? "Last sync failed"
+                : latestFinished.status === "cancelled"
+                  ? "Last sync cancelled"
+                  : "Last sync"}
             </h2>
             <p className="mt-1 text-xs text-muted">
               {latestFinished.completedAt

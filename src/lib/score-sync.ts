@@ -25,6 +25,13 @@ export interface ScoreSyncResult {
   errors: number;
 }
 
+export class SyncCancelledError extends Error {
+  constructor() {
+    super("Sync cancelled");
+    this.name = "SyncCancelledError";
+  }
+}
+
 interface SyncProgressCallbacks {
   onProgress?: (completedSteps: number, currentLabel: string) => Promise<void>;
 }
@@ -33,12 +40,27 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+async function assertSyncNotCancelled(runId: string | undefined) {
+  if (!runId) return;
+
+  const run = await prisma.scoreSyncRun.findUnique({
+    where: { id: runId },
+    select: { status: true },
+  });
+
+  if (run?.status === "cancelled") {
+    throw new SyncCancelledError();
+  }
+}
+
 async function updateRunProgress(
   runId: string | undefined,
   completedSteps: number,
   currentLabel: string,
   callbacks?: SyncProgressCallbacks,
 ) {
+  await assertSyncNotCancelled(runId);
+
   if (callbacks?.onProgress) {
     await callbacks.onProgress(completedSteps, currentLabel);
   }
@@ -248,6 +270,8 @@ export async function runScoreSync(
     let knownGameIds = await loadKnownGameIds();
     try {
       for (const roomSlug of ACTIVATE_ROOM_SLUGS) {
+        await assertSyncNotCancelled(runId);
+
         const label = `Fetching ${decodeURIComponent(roomSlug)} scores…`;
         await updateRunProgress(runId, completedSteps, label, callbacks);
 
@@ -277,6 +301,8 @@ export async function runScoreSync(
       }
 
       for (const user of usersToSync) {
+        await assertSyncNotCancelled(runId);
+
         const playerName = user.activatePlayerName!;
         const fetchLabel = `Fetching ${playerName}…`;
         await updateRunProgress(runId, completedSteps, fetchLabel, callbacks);
@@ -350,6 +376,8 @@ export async function runScoreSync(
     }
 
     if (runId) {
+      await assertSyncNotCancelled(runId);
+
       await prisma.scoreSyncRun.update({
         where: { id: runId },
         data: {
@@ -365,11 +393,23 @@ export async function runScoreSync(
       });
     }
   } catch (fatalError) {
+    if (fatalError instanceof SyncCancelledError) {
+      return { synced, notFound, errors };
+    }
+
     const errorMessage =
       fatalError instanceof Error ? fatalError.message : String(fatalError);
     console.error("[score-sync] Fatal error:", fatalError);
 
     if (runId) {
+      const existingRun = await prisma.scoreSyncRun.findUnique({
+        where: { id: runId },
+        select: { status: true },
+      });
+      if (existingRun?.status === "cancelled") {
+        return { synced, notFound, errors };
+      }
+
       errors = await recordSyncError(runId, errorDetails, "Fatal", fatalError);
 
       await prisma.scoreSyncRun.update({
@@ -391,6 +431,22 @@ export async function runScoreSync(
   return { synced, notFound, errors };
 }
 
+export async function cancelScoreSyncRun(runId: string): Promise<boolean> {
+  const result = await prisma.scoreSyncRun.updateMany({
+    where: {
+      id: runId,
+      status: { in: ["pending", "running"] },
+    },
+    data: {
+      status: "cancelled",
+      currentLabel: "Cancelled",
+      completedAt: new Date(),
+    },
+  });
+
+  return result.count > 0;
+}
+
 export async function getActiveScoreSyncRun() {
   return prisma.scoreSyncRun.findFirst({
     where: { status: { in: ["pending", "running"] } },
@@ -400,7 +456,7 @@ export async function getActiveScoreSyncRun() {
 
 export async function getLatestFinishedScoreSyncRun() {
   return prisma.scoreSyncRun.findFirst({
-    where: { status: { in: ["completed", "failed"] } },
+    where: { status: { in: ["completed", "failed", "cancelled"] } },
     orderBy: { completedAt: "desc" },
   });
 }

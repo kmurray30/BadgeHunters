@@ -76,6 +76,7 @@ enum ScoreSyncStatus {
   running
   completed
   failed
+  cancelled
 }
 
 // ─── Tables ─────────────────────────────────────────────────────────────────
