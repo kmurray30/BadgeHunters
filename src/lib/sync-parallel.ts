@@ -28,7 +28,13 @@ export async function mapWithConcurrency<T, R>(
   return results;
 }
 
-/** Default: run all pending steps at once. Set SYNC_FETCH_CONCURRENCY to cap (e.g. 6). */
+/**
+ * Default cap on concurrent browser fetches. Running every step at once overloads
+ * the shared browser and trips PlayActivate's Cloudflare checks.
+ * Override with SYNC_FETCH_CONCURRENCY.
+ */
+const DEFAULT_SYNC_FETCH_CONCURRENCY = 4;
+
 export function resolveSyncFetchConcurrency(itemCount: number): number {
   if (itemCount <= 0) return 1;
 
@@ -40,5 +46,5 @@ export function resolveSyncFetchConcurrency(itemCount: number): number {
     }
   }
 
-  return itemCount;
+  return Math.min(DEFAULT_SYNC_FETCH_CONCURRENCY, itemCount);
 }

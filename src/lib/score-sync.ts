@@ -144,8 +144,10 @@ class SyncProgressTracker {
   }
 
   async persist(): Promise<void> {
-    this.persistLock = this.persistLock.then(() => this.lockedPersist());
-    await this.persistLock;
+    const pending = this.persistLock.then(() => this.lockedPersist());
+    // Keep the chain alive: one failed write must not reject every later persist.
+    this.persistLock = pending.catch(() => {});
+    await pending;
   }
 
   async setRoomStatus(
@@ -366,10 +368,11 @@ export async function runScoreSync(
     error: unknown,
     options?: { url?: string },
   ) {
-    errorRecordLock = errorRecordLock.then(async () => {
+    const pending = errorRecordLock.then(async () => {
       errors = await recordSyncError(runId, errorDetails, context, error, options);
     });
-    await errorRecordLock;
+    errorRecordLock = pending.catch(() => {});
+    await pending;
   }
 
   let syncProgress = createInitialSyncProgress(linkedUsers);
@@ -495,7 +498,6 @@ export async function runScoreSync(
                   ),
                   ROOM_STEP_TIMEOUT_MS,
                   `Room ${decodeRoomSlug(roomSlug)}`,
-                  () => session.forceKill(),
                 );
 
                 const roomName = roomData.roomInfo?.name ?? decodeRoomSlug(roomSlug);
@@ -586,7 +588,6 @@ export async function runScoreSync(
                 })(),
                 PLAYER_STEP_TIMEOUT_MS,
                 `Sync ${playerName}`,
-                () => session.forceKill(),
               );
               return { kind: "player" as const, gameIds: [], ...outcome };
             } catch (playerError) {
@@ -712,7 +713,8 @@ export async function cancelScoreSyncRun(runId: string): Promise<boolean> {
   return result.count > 0;
 }
 
-const SYNC_STALE_THRESHOLD_MS = 4 * 60 * 1000;
+// Runs can span several continuation chunks; hung runs are caught by the progress-stall check.
+const SYNC_STALE_THRESHOLD_MS = 15 * 60 * 1000;
 const SYNC_PROGRESS_STALL_THRESHOLD_MS = 90 * 1000;
 const SYNC_PENDING_STALE_THRESHOLD_MS = 45 * 1000;
 

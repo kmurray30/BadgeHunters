@@ -398,8 +398,7 @@ export function SyncClient({
       <div className="rounded-xl border border-border bg-card p-5">
         <p className="text-sm text-muted">
           Fetches 11 room pages (catalog + global tops) and one page per linked player.
-          All steps run in parallel — e.g. 18 steps means up to 18 concurrent browser
-          fetches.
+          Steps run in parallel, a few at a time.
         </p>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">

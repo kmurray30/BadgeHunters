@@ -355,22 +355,73 @@ export class ActivateBrowserSession {
     }
   }
 
+  /**
+   * Reconnect if the shared browser dropped. Concurrent callers share one
+   * reconnect so parallel steps don't each open (and orphan) a new browser.
+   */
+  private async ensureConnectedBrowser(): Promise<Browser> {
+    if (this.browser.connected) return this.browser;
+
+    if (!this.reconnectPromise) {
+      const staleBrowser = this.browser;
+      this.reconnectPromise = (async () => {
+        void releaseBrowser(staleBrowser);
+        this.browser = await connectBrowserWithTimeout();
+        return this.browser;
+      })().finally(() => {
+        this.reconnectPromise = null;
+      });
+    }
+    return this.reconnectPromise;
+  }
+
+  private reconnectPromise: Promise<Browser> | null = null;
+
+  /**
+   * Run a callback on its own page. Safe to call concurrently: failures and
+   * timeouts only close this page, never the shared browser.
+   */
   async runOnDedicatedPage<T>(
     callback: (page: Page) => Promise<T>,
+    maxAttempts = FETCH_RETRY_COUNT + 1,
   ): Promise<T> {
-    const page = await createLightweightPage(this.browser);
-    try {
-      return await withTimeout(
-        callback(page),
-        FETCH_OPERATION_TIMEOUT_MS,
-        "Browser fetch",
-        () => {
-          void page.close().catch(() => {});
-        },
-      );
-    } finally {
-      void page.close().catch(() => {});
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0) {
+        await delay(FETCH_DELAY_MS * attempt);
+      }
+
+      let page: Page | null = null;
+      try {
+        const browser = await this.ensureConnectedBrowser();
+        page = await withTimeout(
+          createLightweightPage(browser),
+          10_000,
+          "Create page",
+        );
+        const activePage = page;
+        return await withTimeout(
+          callback(activePage),
+          FETCH_OPERATION_TIMEOUT_MS,
+          "Browser fetch",
+          () => {
+            void activePage.close().catch(() => {});
+          },
+        );
+      } catch (error) {
+        lastError = error;
+        if (attempt >= maxAttempts - 1 || !isRecoverableBrowserError(error)) {
+          throw error;
+        }
+      } finally {
+        if (page) void page.close().catch(() => {});
+      }
     }
+
+    throw lastError instanceof Error
+      ? lastError
+      : new Error(String(lastError ?? "Browser fetch failed"));
   }
 
   async withPage<T>(
