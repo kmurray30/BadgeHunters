@@ -11,6 +11,7 @@ interface SyncRunStatus {
   completedSteps: number;
   totalSteps: number;
   currentLabel: string | null;
+  awaitingContinuation?: boolean;
   percent: number;
   errorMessage?: string | null;
   errorDetails?: ScoreSyncErrorDetail[];
@@ -48,6 +49,13 @@ function syncStepStatusLabel(
     text: detailLabel ?? "In progress…",
     className: "text-foreground animate-pulse",
   };
+}
+
+function logRunErrors(status: SyncRunStatus, fromIndex: number) {
+  const newErrors = (status.errorDetails ?? []).slice(fromIndex);
+  for (const entry of newErrors) {
+    console.error(`[sync] ${entry.context}: ${entry.message}`, entry);
+  }
 }
 
 function SyncStepList({ syncProgress }: { syncProgress: SyncProgressSnapshot }) {
@@ -184,6 +192,8 @@ export function SyncClient({
   const [isLoadingErrorDetails, setIsLoadingErrorDetails] = useState(false);
   const [clientStalled, setClientStalled] = useState(false);
   const lastProgressRef = useRef<{ steps: number; at: number } | null>(null);
+  const loggedErrorCountRef = useRef(0);
+  const lastContinueRequestAtRef = useRef(0);
 
   useEffect(() => {
     if (!activeRun) {
@@ -196,7 +206,31 @@ export function SyncClient({
       steps: activeRun.completedSteps,
       at: Date.now(),
     };
+    loggedErrorCountRef.current = 0;
+    console.info(`[sync] Watching run ${activeRun.id}`);
   }, [activeRun?.id]);
+
+  /** Start the next batch from the page; the server self-call is only a fallback. */
+  const requestContinuation = useCallback(async (runId: string) => {
+    if (Date.now() - lastContinueRequestAtRef.current < 5_000) return;
+    lastContinueRequestAtRef.current = Date.now();
+
+    try {
+      const response = await fetch("/api/sync/continue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        console.error(`[sync] Continue request failed (${response.status})`, data);
+      } else if (data?.claimed) {
+        console.info(`[sync] Started next batch for run ${runId}`);
+      }
+    } catch (continueError) {
+      console.error("[sync] Continue request threw", continueError);
+    }
+  }, []);
 
   const pollStatus = useCallback(async (runId: string) => {
     const response = await fetch(`/api/sync/status?runId=${runId}`);
@@ -212,6 +246,12 @@ export function SyncClient({
   }, []);
 
   const applyFinishedRun = useCallback((status: SyncRunStatus) => {
+    const summary = `[sync] Run ${status.id} ${status.status}: ${status.syncedCount ?? 0} synced, ${status.notFoundCount ?? 0} not found, ${status.errorCount ?? 0} errors`;
+    if (status.status === "failed") {
+      console.error(summary, status.errorMessage ?? "", status);
+    } else {
+      console.info(summary, status);
+    }
     setLatestFinished(status);
     setActiveRun(null);
     setShowErrorDetails(false);
@@ -231,6 +271,16 @@ export function SyncClient({
 
         setActiveRun(status);
 
+        const errorCount = status.errorDetails?.length ?? 0;
+        if (errorCount > loggedErrorCountRef.current) {
+          logRunErrors(status, loggedErrorCountRef.current);
+          loggedErrorCountRef.current = errorCount;
+        }
+
+        if (status.awaitingContinuation) {
+          void requestContinuation(status.id);
+        }
+
         const progressSnapshot = {
           steps: status.completedSteps,
           at: Date.now(),
@@ -243,7 +293,15 @@ export function SyncClient({
           lastProgressRef.current = progressSnapshot;
           setClientStalled(false);
         } else if (Date.now() - previousProgress.at > 90_000) {
-          setClientStalled(true);
+          setClientStalled((wasStalled) => {
+            if (!wasStalled) {
+              console.warn(
+                `[sync] No progress for 90s on run ${status.id} (${status.completedSteps}/${status.totalSteps}, "${status.currentLabel ?? ""}")`,
+                status.syncProgress,
+              );
+            }
+            return true;
+          });
         }
 
         if (
@@ -254,6 +312,7 @@ export function SyncClient({
           applyFinishedRun(status);
         }
       } catch (pollError) {
+        console.error("[sync] Status poll failed", pollError);
         setError(
           pollError instanceof Error
             ? pollError.message
@@ -263,7 +322,7 @@ export function SyncClient({
     }, 1000);
 
     return () => clearInterval(intervalId);
-  }, [activeRun, applyFinishedRun, pollStatus]);
+  }, [activeRun, applyFinishedRun, pollStatus, requestContinuation]);
 
   const isRunning =
     activeRun != null && ["pending", "running"].includes(activeRun.status);

@@ -40,6 +40,7 @@ import {
 import {
   isSyncTimeBudgetExceeded,
   scheduleSyncContinuation,
+  SYNC_CONTINUATION_LABEL,
   SYNC_RUN_BUDGET_MS,
 } from "@/lib/sync-continuation";
 
@@ -73,6 +74,21 @@ class SyncTimeBudgetExceededError extends Error {
     super("Sync time budget exceeded");
     this.name = "SyncTimeBudgetExceededError";
   }
+}
+
+function syncLog(runId: string | undefined, message: string) {
+  console.info(`[score-sync]${runId ? ` run=${runId}` : ""} ${message}`);
+}
+
+function describeRunningSteps(snapshot: SyncProgressSnapshot | null): string | null {
+  if (!snapshot) return null;
+  const running = [
+    ...snapshot.rooms.filter((room) => room.status === "running").map((room) => `Room ${room.label}`),
+    ...snapshot.players
+      .filter((player) => player.status === "running")
+      .map((player) => `Player ${player.playerName}`),
+  ];
+  return running.length > 0 ? running.join(", ") : null;
 }
 
 function resetRunningItemsToPending(snapshot: SyncProgressSnapshot) {
@@ -423,7 +439,7 @@ export async function runScoreSync(
         data: {
           status: "running",
           completedSteps: countCompletedSteps(progressTracker.getSnapshot()),
-          currentLabel: "Continuing in next batch…",
+          currentLabel: SYNC_CONTINUATION_LABEL,
           syncedCount: synced,
           notFoundCount: notFound,
           errorCount: errors,
@@ -432,7 +448,19 @@ export async function runScoreSync(
           lastProgressAt: new Date(),
         },
       });
-      await scheduleSyncContinuation(runId);
+      const snapshot = progressTracker.getSnapshot();
+      syncLog(
+        runId,
+        `Chunk paused after ${Math.round((Date.now() - runStartedAtMs) / 1000)}s: ${countCompletedSteps(snapshot)}/${totalSteps} steps done, waiting for next batch`,
+      );
+      const continuationError = await scheduleSyncContinuation(runId);
+      if (continuationError) {
+        // Not counted as a step error: the sync page can still resume the run.
+        await prisma.scoreSyncRun.update({
+          where: { id: runId },
+          data: { errorMessage: continuationError },
+        });
+      }
     }
 
     return { synced, notFound, errors, continued: true };
@@ -466,10 +494,15 @@ export async function runScoreSync(
 
   try {
     const session = await ActivateBrowserSession.create();
-    let knownGameIds = await loadKnownGameIds();
+    const knownGameIds = await loadKnownGameIds();
 
     try {
       const pendingTasks = collectPendingSyncTasks(progressTracker.getSnapshot());
+      const concurrency = resolveSyncFetchConcurrency(pendingTasks.length);
+      syncLog(
+        runId,
+        `${resume ? "Resuming" : "Starting"} chunk: ${pendingTasks.length} pending of ${totalSteps} steps, concurrency=${concurrency}, budget=${SYNC_RUN_BUDGET_MS / 1000}s`,
+      );
 
       if (pendingTasks.length > 0) {
         assertTimeBudgetAvailable();
@@ -481,7 +514,7 @@ export async function runScoreSync(
 
         const taskResults = await mapWithConcurrency(
           pendingTasks,
-          resolveSyncFetchConcurrency(pendingTasks.length),
+          concurrency,
           async (task) => {
             assertTimeBudgetAvailable();
             await assertSyncNotCancelled(runId);
@@ -490,6 +523,8 @@ export async function runScoreSync(
               const roomIndex = task.roomIndex;
               const roomSlug = ACTIVATE_ROOM_SLUGS[roomIndex];
               await progressTracker.setRoomStatus(roomIndex, "running");
+              const stepStartedAtMs = Date.now();
+              syncLog(runId, `Room ${decodeRoomSlug(roomSlug)}: started`);
 
               try {
                 const roomData = await withTimeout(
@@ -505,6 +540,10 @@ export async function runScoreSync(
                 await upsertGlobalTopScores(roomSlug, roomName, roomData.roomScores);
 
                 await progressTracker.setRoomStatus(roomIndex, "done");
+                syncLog(
+                  runId,
+                  `Room ${decodeRoomSlug(roomSlug)}: done in ${Date.now() - stepStartedAtMs}ms`,
+                );
                 return {
                   kind: "room" as const,
                   gameIds: roomData.roomGames.map((game) => game.id),
@@ -512,7 +551,11 @@ export async function runScoreSync(
                   notFound: 0,
                 };
               } catch (roomError) {
-                console.error(`[score-sync] Room fetch failed (${roomSlug}):`, roomError);
+                console.error(
+                  `[score-sync]${runId ? ` run=${runId}` : ""} Room ${decodeRoomSlug(roomSlug)}: failed after ${Date.now() - stepStartedAtMs}ms:`,
+                  formatSyncError(roomError),
+                  roomError,
+                );
                 await progressTracker.setRoomStatus(roomIndex, "error");
                 await recordSyncErrorLocked(
                   `Room: ${decodeRoomSlug(roomSlug)}`,
@@ -532,6 +575,8 @@ export async function runScoreSync(
             const user = linkedUsers[playerIndex];
             const playerName = user.activatePlayerName;
             await progressTracker.setPlayerStatus(playerIndex, "running", "Fetching…");
+            const stepStartedAtMs = Date.now();
+            syncLog(runId, `Player ${playerName}: started`);
 
             try {
               const outcome = await withTimeout(
@@ -589,9 +634,17 @@ export async function runScoreSync(
                 PLAYER_STEP_TIMEOUT_MS,
                 `Sync ${playerName}`,
               );
+              syncLog(
+                runId,
+                `Player ${playerName}: ${outcome.synced ? "synced" : "not found"} in ${Date.now() - stepStartedAtMs}ms`,
+              );
               return { kind: "player" as const, gameIds: [], ...outcome };
             } catch (playerError) {
-              console.error(`[score-sync] Player sync failed (${playerName}):`, playerError);
+              console.error(
+                `[score-sync]${runId ? ` run=${runId}` : ""} Player ${playerName}: failed after ${Date.now() - stepStartedAtMs}ms:`,
+                formatSyncError(playerError),
+                playerError,
+              );
               await progressTracker.setPlayerStatus(playerIndex, "error", "Failed");
               await recordSyncErrorLocked(
                 `Player: ${playerName}`,
@@ -604,6 +657,19 @@ export async function runScoreSync(
         );
 
         for (const result of taskResults) {
+          if (result.status === "rejected") {
+            const reason = result.reason;
+            if (
+              !(reason instanceof SyncTimeBudgetExceededError) &&
+              !(reason instanceof SyncCancelledError)
+            ) {
+              console.error(
+                `[score-sync]${runId ? ` run=${runId}` : ""} Step crashed:`,
+                formatSyncError(reason),
+                reason,
+              );
+            }
+          }
           if (result.status === "fulfilled") {
             synced += result.value.synced;
             notFound += result.value.notFound;
@@ -635,6 +701,11 @@ export async function runScoreSync(
         );
       }
     }
+
+    syncLog(
+      runId,
+      `Sync complete in ${Math.round((Date.now() - runStartedAtMs) / 1000)}s: ${synced} synced, ${notFound} not found, ${errors} errors`,
+    );
 
     if (runId) {
       await assertSyncNotCancelled(runId);
@@ -726,7 +797,9 @@ async function expireStaleScoreSyncRunIfNeeded(run: {
   totalSteps: number;
   completedSteps: number;
   currentLabel: string | null;
+  errorMessage?: string | null;
   errorDetails: unknown;
+  syncProgress?: unknown;
 }): Promise<boolean> {
   if (!["pending", "running"].includes(run.status)) {
     return false;
@@ -754,11 +827,20 @@ async function expireStaleScoreSyncRunIfNeeded(run: {
       : "no steps recorded";
   const lastStepLabel = run.currentLabel ?? "unknown";
 
+  const isWaitingForContinuation = run.currentLabel === SYNC_CONTINUATION_LABEL;
+  const runningSteps = describeRunningSteps(parseSyncProgress(run.syncProgress));
+  const stalledDetail = isWaitingForContinuation
+    ? `The batch finished but the next batch never started (${progressLabel}).${run.errorMessage ? ` ${run.errorMessage}` : " Keep the sync page open so it can resume the run."}`
+    : runningSteps
+      ? `Steps still running when it stalled: ${runningSteps}. The server function was likely killed (Vercel maxDuration or crash) — check the Vercel function logs for [score-sync] run=${run.id}.`
+      : `No steps were running — the server function likely ended between steps. Check the Vercel function logs for [score-sync] run=${run.id}.`;
+
   const staleMessage = isPendingStuck
     ? `Sync never started after ${Math.round(runAgeMs / 1000)}s (stuck in pending). Try again.`
     : isProgressStalled
-      ? `Sync stalled on "${lastStepLabel}" with no progress for ${progressAgeMinutes}m (${progressLabel}). The server may have been interrupted — try again or cancel and restart.`
+      ? `Sync stalled on "${lastStepLabel}" with no progress for ${progressAgeMinutes}m (${progressLabel}). ${stalledDetail}`
       : `Sync exceeded time limit after ${runAgeMinutes}m (${progressLabel}). Last step: ${lastStepLabel}. Individual step errors are listed below.`;
+  console.error(`[score-sync] run=${run.id} marked failed: ${staleMessage}`);
 
   const existingDetails = parseErrorDetails(run.errorDetails);
   existingDetails.push({

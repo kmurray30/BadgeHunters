@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { buildSyncErrorSnapshot } from "@/lib/sync-error-format";
+import { SYNC_CONTINUATION_LABEL } from "@/lib/sync-continuation";
 import { parseSyncProgress, type SyncProgressSnapshot } from "@/lib/sync-progress";
 
 export { formatSyncError, buildSyncErrorSnapshot } from "@/lib/sync-error-format";
@@ -127,6 +128,8 @@ export function toSyncRunStatus(run: {
     completedSteps: run.completedSteps,
     totalSteps: run.totalSteps,
     currentLabel: run.currentLabel,
+    awaitingContinuation:
+      run.status === "running" && run.currentLabel === SYNC_CONTINUATION_LABEL,
     percent,
     errorMessage: run.errorMessage,
     errorDetails: parseErrorDetails(run.errorDetails),
