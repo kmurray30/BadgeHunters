@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import type { ScoreSyncErrorDetail } from "@/lib/score-sync";
 import type { SyncItemStatus, SyncProgressSnapshot } from "@/lib/sync-progress";
@@ -49,6 +49,19 @@ function syncStepStatusLabel(
     text: detailLabel ?? "In progress…",
     className: "text-foreground animate-pulse",
   };
+}
+
+const subscribeNoop = () => () => {};
+
+/** False during SSR and hydration, true after; avoids server/client text mismatches. */
+function useHasMounted(): boolean {
+  return useSyncExternalStore(subscribeNoop, () => true, () => false);
+}
+
+/** Locale/timezone-dependent text must only render on the client. */
+function LocalDateTime({ value, fallback = "" }: { value: string; fallback?: string }) {
+  const hasMounted = useHasMounted();
+  return <>{hasMounted ? new Date(value).toLocaleString() : fallback}</>;
 }
 
 function logRunErrors(status: SyncRunStatus, fromIndex: number) {
@@ -119,7 +132,7 @@ function SyncErrorEntry({ entry }: { entry: ScoreSyncErrorDetail }) {
       ) : null}
       {entry.at ? (
         <p className="mt-1 text-[10px] text-muted">
-          {new Date(entry.at).toLocaleString()}
+          <LocalDateTime value={entry.at} />
         </p>
       ) : null}
       {entry.stack ? (
@@ -192,6 +205,7 @@ export function SyncClient({
   const [isLoadingErrorDetails, setIsLoadingErrorDetails] = useState(false);
   const [clientStalled, setClientStalled] = useState(false);
   const lastProgressRef = useRef<{ steps: number; at: number } | null>(null);
+  const hasMounted = useHasMounted();
   const loggedErrorCountRef = useRef(0);
   const lastContinueRequestAtRef = useRef(0);
 
@@ -333,7 +347,8 @@ export function SyncClient({
 
   const activeRunStalled =
     clientStalled ||
-    (activeRun?.lastProgressAt != null &&
+    (hasMounted &&
+      activeRun?.lastProgressAt != null &&
       Date.now() - new Date(activeRun.lastProgressAt).getTime() > 90_000);
 
   async function handleStartSync() {
@@ -555,7 +570,7 @@ export function SyncClient({
             </h2>
             <p className="mt-1 text-xs text-muted">
               {latestFinished.completedAt
-                ? new Date(latestFinished.completedAt).toLocaleString()
+                ? <LocalDateTime value={latestFinished.completedAt} fallback="Recently" />
                 : "Recently"}
             </p>
             <ul className="mt-3 space-y-1 text-sm text-foreground">
