@@ -10,6 +10,18 @@ const nextConfig: NextConfig = {
     "/api/cron/daily": ["./node_modules/@sparticuz/chromium/**/*"],
     "/api/sync/start": ["./node_modules/@sparticuz/chromium/**/*"],
   },
+  // www is the canonical host (Google sign-in is registered for it), so send
+  // the bare domain there instead of serving the app on two hosts.
+  async redirects() {
+    return [
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "badgebitches.club" }],
+        destination: "https://www.badgebitches.club/:path*",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
