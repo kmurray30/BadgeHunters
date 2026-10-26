@@ -19,13 +19,19 @@ async function main() {
     return;
   }
 
-  // Runs need an owner; attribute scheduled ones to the first superuser so they
-  // show on the sync page like manual runs.
-  const owner = await prisma.user.findFirst({
-    where: { role: "superuser" },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
+  // Runs need an owner; attribute scheduled ones to the first superuser (or the
+  // oldest real user if there is none) so they show on the sync page like manual runs.
+  const owner =
+    (await prisma.user.findFirst({
+      where: { role: "superuser", isTestUser: false },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    })) ??
+    (await prisma.user.findFirst({
+      where: { isTestUser: false },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    }));
 
   const runId = owner
     ? (
@@ -39,7 +45,7 @@ async function main() {
       ).id
     : undefined;
   if (!runId) {
-    console.warn("[cron] No superuser found; running sync without a sync-page record");
+    console.warn("[cron] No users found; running sync without a sync-page record");
   }
 
   const startedAtMs = Date.now();
