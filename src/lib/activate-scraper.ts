@@ -46,6 +46,12 @@ async function fetchInlineScriptText(page: Page, targetUrl: string): Promise<str
   }
 
   const hasData = await waitForActivateData(page, remainingMs());
+  const pageTitle = await page.title().catch(() => "");
+  if (pageTitle.toLowerCase().includes("not found")) {
+    throw new Error(
+      `PlayActivate returned "${pageTitle}" for ${targetUrl} — the scores URL format may have changed [${await describePageState(page)}]`,
+    );
+  }
   if (!hasData) {
     throw new Error(
       `Activate data not found on page after ${elapsedSeconds()}s — page loaded but has no playerLocation script (site layout may have changed) [${await describePageState(page)}]`,

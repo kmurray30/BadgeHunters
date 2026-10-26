@@ -244,8 +244,10 @@ export async function waitForActivateData(
   timeoutMs = CLOUDFLARE_WAIT_TIMEOUT_MS,
 ): Promise<boolean> {
   try {
+    // Also resolves on a 404 page so the caller can fail fast instead of waiting out the timeout.
     await page.waitForFunction(
-      `Array.from(document.querySelectorAll('script:not([src])')).some(s => (s.textContent || '').includes('playerLocation'))`,
+      `Array.from(document.querySelectorAll('script:not([src])')).some(s => (s.textContent || '').includes('playerLocation')) ||
+       document.title.toLowerCase().includes('not found')`,
       { timeout: timeoutMs },
     );
     return true;

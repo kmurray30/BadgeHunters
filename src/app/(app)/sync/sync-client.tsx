@@ -67,7 +67,8 @@ function LocalDateTime({ value, fallback = "" }: { value: string; fallback?: str
 function logRunErrors(status: SyncRunStatus, fromIndex: number) {
   const newErrors = (status.errorDetails ?? []).slice(fromIndex);
   for (const entry of newErrors) {
-    console.error(`[sync] ${entry.context}: ${entry.message}`, entry);
+    // Pass text via %s so "%20" in URLs isn't parsed as a console format specifier.
+    console.error("[sync] %s: %s", entry.context, entry.message, entry);
   }
 }
 
