@@ -12,9 +12,11 @@ const PAGE_NAVIGATION_TIMEOUT_MS = 45_000;
 const PAGE_EVALUATE_TIMEOUT_MS = 20_000;
 const FETCH_RETRY_COUNT = 1;
 const FETCH_DELAY_MS = 500;
-export const FETCH_OPERATION_TIMEOUT_MS = 60_000;
-export const ROOM_STEP_TIMEOUT_MS = 75_000;
-export const PLAYER_STEP_TIMEOUT_MS = 75_000;
+/** Total budget for one page fetch; navigation and waits share it (see activate-scraper). */
+export const FETCH_PAGE_BUDGET_MS = 68_000;
+export const FETCH_OPERATION_TIMEOUT_MS = 70_000;
+export const ROOM_STEP_TIMEOUT_MS = 85_000;
+export const PLAYER_STEP_TIMEOUT_MS = 85_000;
 export const BROWSER_SHUTDOWN_TIMEOUT_MS = 10_000;
 
 const BLOCKED_RESOURCE_TYPES = new Set(["image", "font", "media"]);
@@ -36,6 +38,8 @@ const LOCAL_CHROME_PATHS: Record<string, string[]> = {
 };
 
 let localBrowserInstance: Browser | null = null;
+/** Browserless stealth sessions ship a consistent fingerprint; don't override it. */
+const stealthBrowsers = new WeakSet<Browser>();
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
 function resetIdleTimer() {
@@ -80,7 +84,11 @@ async function connectBrowserless(): Promise<Browser> {
 
   for (const browserWSEndpoint of endpoints) {
     try {
-      return await puppeteer.connect({ browserWSEndpoint });
+      const browser = await puppeteer.connect({ browserWSEndpoint });
+      if (browserWSEndpoint.includes("/stealth/")) {
+        stealthBrowsers.add(browser);
+      }
+      return browser;
     } catch (error) {
       lastError = error;
       const errorText = formatSyncError(error).toLowerCase();
@@ -176,9 +184,15 @@ export async function createLightweightPage(browser: Browser): Promise<Page> {
   const page = await browser.newPage();
   page.setDefaultTimeout(PAGE_NAVIGATION_TIMEOUT_MS);
   page.setDefaultNavigationTimeout(PAGE_NAVIGATION_TIMEOUT_MS);
-  await page.setUserAgent(
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  );
+  if (!stealthBrowsers.has(browser)) {
+    // A UA that doesn't match the real browser version is a Cloudflare bot signal,
+    // so only override it where stealth isn't already providing a consistent one.
+    const browserVersion = await browser.version().catch(() => "");
+    const chromeMajor = /\/(\d+)\./.exec(browserVersion)?.[1] ?? "131";
+    await page.setUserAgent(
+      `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeMajor}.0.0.0 Safari/537.36`,
+    );
+  }
   await page.setRequestInterception(true);
   page.on("request", (request) => {
     if (BLOCKED_RESOURCE_TYPES.has(request.resourceType())) {
@@ -190,13 +204,34 @@ export async function createLightweightPage(browser: Browser): Promise<Page> {
   return page;
 }
 
-export async function waitForCloudflare(page: Page): Promise<string | null> {
+/** Short description of what the page is showing, for error messages. */
+export async function describePageState(page: Page): Promise<string> {
+  try {
+    const state = await withTimeout(
+      page.evaluate(() => ({
+        title: document.title,
+        url: location.href,
+        text: (document.body?.innerText || "").replace(/\s+/g, " ").trim().slice(0, 200),
+      })),
+      3_000,
+      "Describe page",
+    );
+    return `title="${state.title}", url=${state.url}, text="${state.text}"`;
+  } catch (error) {
+    return `page state unavailable (${formatSyncError(error)})`;
+  }
+}
+
+export async function waitForCloudflare(
+  page: Page,
+  timeoutMs = CLOUDFLARE_WAIT_TIMEOUT_MS,
+): Promise<string | null> {
   try {
     await page.waitForFunction(
       `document.title !== "Just a moment..." &&
        !document.title.includes("moment") &&
        !(document.body?.innerText || "").includes("Verify you are human")`,
-      { timeout: CLOUDFLARE_WAIT_TIMEOUT_MS },
+      { timeout: timeoutMs },
     );
     return null;
   } catch {
@@ -204,11 +239,14 @@ export async function waitForCloudflare(page: Page): Promise<string | null> {
   }
 }
 
-export async function waitForActivateData(page: Page): Promise<boolean> {
+export async function waitForActivateData(
+  page: Page,
+  timeoutMs = CLOUDFLARE_WAIT_TIMEOUT_MS,
+): Promise<boolean> {
   try {
     await page.waitForFunction(
       `Array.from(document.querySelectorAll('script:not([src])')).some(s => (s.textContent || '').includes('playerLocation'))`,
-      { timeout: CLOUDFLARE_WAIT_TIMEOUT_MS },
+      { timeout: timeoutMs },
     );
     return true;
   } catch {
@@ -383,7 +421,8 @@ export class ActivateBrowserSession {
    */
   async runOnDedicatedPage<T>(
     callback: (page: Page) => Promise<T>,
-    maxAttempts = FETCH_RETRY_COUNT + 1,
+    // One attempt: a retry can't fit inside the step timeout and would hide the first error.
+    maxAttempts = 1,
   ): Promise<T> {
     let lastError: unknown;
 

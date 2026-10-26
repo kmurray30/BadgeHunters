@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 
 /**
  * Wall-clock budget per serverless invocation before scheduling the next chunk.
- * New steps only start inside this budget, and a step can run up to 75s, so it
+ * New steps only start inside this budget, and a step can run up to 85s, so it
  * must stay well under the 300s maxDuration or the function is killed mid-step.
  */
 export const SYNC_RUN_BUDGET_MS = Number(process.env.SYNC_RUN_BUDGET_SECONDS ?? 200) * 1000;

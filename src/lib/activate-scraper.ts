@@ -4,8 +4,9 @@ import {
   buildRoomScoresUrl,
 } from "@/lib/activate-config";
 import {
+  describePageState,
   evaluatePageWithTimeout,
-  PAGE_NAVIGATION_TIMEOUT_MS,
+  FETCH_PAGE_BUDGET_MS,
   waitForActivateData,
   waitForCloudflare,
 } from "@/lib/activate-browser";
@@ -16,20 +17,39 @@ import {
   type ActivateRoomPageData,
 } from "@/lib/activate-parser";
 
+/**
+ * Navigation and each wait share one deadline, so a slow phase fails with its
+ * own message (and what the page showed) instead of an outer step timeout.
+ */
 async function fetchInlineScriptText(page: Page, targetUrl: string): Promise<string> {
-  await page.goto(targetUrl, {
-    waitUntil: "domcontentloaded",
-    timeout: PAGE_NAVIGATION_TIMEOUT_MS,
-  });
+  const startedAtMs = Date.now();
+  const deadlineMs = startedAtMs + FETCH_PAGE_BUDGET_MS;
+  const remainingMs = () => Math.max(1_000, deadlineMs - Date.now());
+  const elapsedSeconds = () => Math.round((Date.now() - startedAtMs) / 1000);
 
-  const cloudflareError = await waitForCloudflare(page);
-  if (cloudflareError) {
-    throw new Error(cloudflareError);
+  try {
+    await page.goto(targetUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: Math.min(30_000, remainingMs()),
+    });
+  } catch (navigationError) {
+    throw new Error(
+      `Navigation failed after ${elapsedSeconds()}s: ${navigationError instanceof Error ? navigationError.message : String(navigationError)} [${await describePageState(page)}]`,
+    );
   }
 
-  const hasData = await waitForActivateData(page);
+  const cloudflareError = await waitForCloudflare(page, Math.min(35_000, remainingMs()));
+  if (cloudflareError) {
+    throw new Error(
+      `${cloudflareError} after ${elapsedSeconds()}s — PlayActivate's bot check is blocking the browser [${await describePageState(page)}]`,
+    );
+  }
+
+  const hasData = await waitForActivateData(page, remainingMs());
   if (!hasData) {
-    throw new Error(`Activate data not found on page: ${targetUrl}`);
+    throw new Error(
+      `Activate data not found on page after ${elapsedSeconds()}s — page loaded but has no playerLocation script (site layout may have changed) [${await describePageState(page)}]`,
+    );
   }
 
   const scriptText = await evaluatePageWithTimeout(
