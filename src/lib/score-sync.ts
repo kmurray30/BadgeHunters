@@ -1,10 +1,17 @@
 import {
-  ActivateBrowserSession,
   PLAYER_STEP_TIMEOUT_MS,
   ROOM_STEP_TIMEOUT_MS,
   withTimeout,
 } from "@/lib/activate-browser";
-import { ACTIVATE_ROOM_SLUGS, buildPlayerScoresUrl, buildRoomScoresUrl, decodeRoomSlug } from "@/lib/activate-config";
+import {
+  ActivateApiClient,
+  buildApiUrl,
+  extractOverallStats,
+  findRoomForSlug,
+  playerLocationPath,
+  type ActivateLocationCatalog,
+} from "@/lib/activate-api";
+import { ACTIVATE_LOCATION, ACTIVATE_ROOM_SLUGS, decodeRoomSlug } from "@/lib/activate-config";
 import {
   mapWithConcurrency,
   resolveSyncFetchConcurrency,
@@ -21,11 +28,6 @@ import {
   activateLevelIdToDisplayLevel,
   type ActivateLevelScoreEntry,
 } from "@/lib/activate-parser";
-import {
-  extractOverallStats,
-  fetchPlayerPageData,
-  fetchRoomPageData,
-} from "@/lib/activate-scraper";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { getRankColor } from "@/lib/rank";
@@ -493,8 +495,14 @@ export async function runScoreSync(
   }
 
   try {
-    const session = await ActivateBrowserSession.create();
+    const apiClient = new ActivateApiClient();
     const knownGameIds = await loadKnownGameIds();
+    // Rooms + games for the location, fetched once per chunk and shared by room steps.
+    let catalogPromise: Promise<ActivateLocationCatalog> | null = null;
+    const getCatalog = () => {
+      catalogPromise ??= apiClient.getLocationCatalog();
+      return catalogPromise;
+    };
 
     try {
       const pendingTasks = collectPendingSyncTasks(progressTracker.getSnapshot());
@@ -528,14 +536,26 @@ export async function runScoreSync(
 
               try {
                 const roomData = await withTimeout(
-                  session.runOnDedicatedPage((page) =>
-                    fetchRoomPageData(page, roomUsername, roomSlug),
-                  ),
+                  (async () => {
+                    const catalog = await getCatalog();
+                    const room = findRoomForSlug(catalog.rooms, roomSlug);
+                    if (!room) {
+                      throw new Error(
+                        `Room "${decodeRoomSlug(roomSlug)}" not found at Activate location ${ACTIVATE_LOCATION.id}. API rooms: ${catalog.rooms.map((entry) => entry.name).join(", ")}`,
+                      );
+                    }
+                    const roomScores = await apiClient.getRoomHighscores(room.id);
+                    return {
+                      room,
+                      roomGames: catalog.games.filter((game) => game.roomId === room.id),
+                      roomScores,
+                    };
+                  })(),
                   ROOM_STEP_TIMEOUT_MS,
                   `Room ${decodeRoomSlug(roomSlug)}`,
                 );
 
-                const roomName = roomData.roomInfo?.name ?? decodeRoomSlug(roomSlug);
+                const roomName = roomData.room.name;
                 await upsertRoomCatalog(roomSlug, roomName, roomData.roomGames);
                 await upsertGlobalTopScores(roomSlug, roomName, roomData.roomScores);
 
@@ -560,7 +580,7 @@ export async function runScoreSync(
                 await recordSyncErrorLocked(
                   `Room: ${decodeRoomSlug(roomSlug)}`,
                   roomError,
-                  { url: buildRoomScoresUrl(roomUsername, roomSlug) },
+                  { url: buildApiUrl(`/location/${ACTIVATE_LOCATION.id}/rooms`) },
                 );
                 return {
                   kind: "room" as const,
@@ -581,12 +601,9 @@ export async function runScoreSync(
             try {
               const outcome = await withTimeout(
                 (async () => {
-                  const playerData = await session.runOnDedicatedPage((page) =>
-                    fetchPlayerPageData(page, playerName),
-                  );
-                  const overall = extractOverallStats(playerData);
+                  const playerLocation = await apiClient.getPlayerLocation(playerName);
 
-                  if (overall.score === null) {
+                  if (!playerLocation) {
                     await progressTracker.setPlayerStatus(
                       playerIndex,
                       "done",
@@ -601,6 +618,7 @@ export async function runScoreSync(
                     "Saving…",
                   );
 
+                  const overall = extractOverallStats(playerLocation);
                   const rankColor = getRankColor(overall.score);
                   await prisma.user.update({
                     where: { id: user.id },
@@ -620,12 +638,12 @@ export async function runScoreSync(
                   });
 
                   await ensureGamesExistForScores(
-                    playerData.playerLocation.scores,
+                    playerLocation.scores,
                     knownGameIds,
                   );
                   await upsertUserLevelScores(
                     user.id,
-                    playerData.playerLocation.scores,
+                    playerLocation.scores,
                     knownGameIds,
                   );
                   await progressTracker.setPlayerStatus(playerIndex, "done", "Synced");
@@ -649,7 +667,7 @@ export async function runScoreSync(
               await recordSyncErrorLocked(
                 `Player: ${playerName}`,
                 playerError,
-                { url: buildPlayerScoresUrl(playerName) },
+                { url: buildApiUrl(playerLocationPath(playerName)) },
               );
               return { kind: "player" as const, gameIds: [], synced: 0, notFound: 0 };
             }
@@ -692,10 +710,10 @@ export async function runScoreSync(
       await progressTracker.markComplete();
     } finally {
       try {
-        await session.close();
+        await apiClient.close();
       } catch (closeError) {
         console.error(
-          "[score-sync] Browser shutdown failed:",
+          "[score-sync] API client shutdown failed:",
           formatSyncError(closeError),
           closeError,
         );

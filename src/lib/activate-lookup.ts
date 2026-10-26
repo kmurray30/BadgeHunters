@@ -1,13 +1,9 @@
 /**
  * Look up a player on playactivate.com and return overall score stats.
- * Uses headless browser — same path as score sync / CLI activate-lookup.
+ * Uses the Activate JSON API — same path as score sync / CLI activate-lookup.
  */
 
-import { withActivateBrowserSession } from "@/lib/activate-browser";
-import {
-  extractOverallStats,
-  fetchPlayerPageData,
-} from "@/lib/activate-scraper";
+import { ActivateApiClient, extractOverallStats } from "@/lib/activate-api";
 import { getRankColor } from "@/lib/rank";
 import type { ScoreSource } from "@prisma/client";
 
@@ -42,36 +38,39 @@ export async function lookupActivatePlayer(
     return { ...NOT_FOUND, error: "Player name is required" };
   }
 
+  const apiClient = new ActivateApiClient();
   try {
-    return await withActivateBrowserSession(async (_browser, page) => {
-      const playerData = await fetchPlayerPageData(page, trimmedName);
-      const overall = extractOverallStats(playerData);
-      const activateUsername =
-        playerData.playerLocation.playerName?.trim() || trimmedName;
+    const profile = await apiClient.getPlayerProfile(trimmedName);
+    const activateUsername = profile?.playerName?.trim() || trimmedName;
+    const playerLocation = await apiClient.getPlayerLocation(activateUsername);
 
-      if (overall.score === null) {
-        return {
-          ...NOT_FOUND,
-          activateUsername,
-          error: "Could not parse score data — player may not exist",
-        };
-      }
-
+    if (!playerLocation) {
       return {
-        found: true,
-        activateUsername,
-        score: overall.score,
-        rank: overall.rank,
-        leaderboardPosition: overall.leaderboardPosition,
-        levelsBeat: overall.levelsBeat,
-        coins: overall.coins,
-        error: null,
+        ...NOT_FOUND,
+        activateUsername: profile ? activateUsername : null,
+        error: profile
+          ? "Player has no scores at this location"
+          : "Player not found on playactivate.com",
       };
-    });
+    }
+
+    const overall = extractOverallStats(playerLocation);
+    return {
+      found: true,
+      activateUsername,
+      score: overall.score,
+      rank: overall.rank,
+      leaderboardPosition: overall.leaderboardPosition,
+      levelsBeat: overall.levelsBeat,
+      coins: profile?.coins ?? null,
+      error: null,
+    };
   } catch (lookupError) {
     const errorMessage =
       lookupError instanceof Error ? lookupError.message : String(lookupError);
     return { ...NOT_FOUND, error: errorMessage };
+  } finally {
+    await apiClient.close();
   }
 }
 

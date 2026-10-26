@@ -472,8 +472,8 @@ export function SyncClient({
     <div className="space-y-6">
       <div className="rounded-xl border border-border bg-card p-5">
         <p className="text-sm text-muted">
-          Fetches 11 room pages (catalog + global tops) and one page per linked player.
-          Steps run in parallel, a few at a time.
+          Pulls each room&apos;s games and global top scores, plus every linked player&apos;s
+          level scores, from the PlayActivate API.
         </p>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
