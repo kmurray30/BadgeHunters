@@ -377,5 +377,9 @@ export function parseBadgeEarned(status: unknown): boolean | null {
 
 /** Match key for badge names across our catalog and the API ("2 FAST 2 SEE" ≈ "2 Fast 2 See!"). */
 export function normalizeBadgeName(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // fold accents: "DÉJÀ VU" ≈ "Deja Vu"
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
 }

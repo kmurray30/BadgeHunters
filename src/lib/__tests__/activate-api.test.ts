@@ -103,5 +103,6 @@ describe("normalizeBadgeName", () => {
   it("ignores case, spacing and punctuation", () => {
     expect(normalizeBadgeName("2 FAST 2 SEE")).toBe(normalizeBadgeName("2 Fast 2 See!"));
     expect(normalizeBadgeName("15S IN 15S")).toBe("15sin15s");
+    expect(normalizeBadgeName("DÉJÀ VU")).toBe(normalizeBadgeName("Deja Vu"));
   });
 });
