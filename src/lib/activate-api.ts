@@ -66,6 +66,14 @@ export interface ActivatePlayerBadge {
   status: unknown;
 }
 
+/** One badge from /location/{id}/badges. */
+export interface ActivateLocationBadge {
+  id: number;
+  badgeId?: number;
+  name: string;
+  description?: string;
+}
+
 export interface ActivateLocationCatalog {
   rooms: ActivateRoomInfo[];
   games: ActivateRoomGame[];
@@ -183,6 +191,20 @@ export class ActivateApiClient {
     if (badges != null && !Array.isArray(badges)) {
       throw new ActivateApiError(
         `Activate badges response is not a list: ${JSON.stringify(badges).slice(0, 200)}`,
+        200,
+        buildApiUrl(path),
+      );
+    }
+    return badges;
+  }
+
+  /** Every badge that can be earned at our location. */
+  async getLocationBadges(): Promise<ActivateLocationBadge[]> {
+    const path = `/location/${ACTIVATE_LOCATION.id}/badges`;
+    const badges = await this.get<ActivateLocationBadge[]>(path);
+    if (!Array.isArray(badges)) {
+      throw new ActivateApiError(
+        `Activate location badges response is not a list: ${JSON.stringify(badges).slice(0, 200)}`,
         200,
         buildApiUrl(path),
       );

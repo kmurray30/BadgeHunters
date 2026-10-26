@@ -14,6 +14,7 @@ import {
 } from "@/lib/activate-api";
 import { ACTIVATE_LOCATION, ACTIVATE_ROOM_SLUGS, decodeRoomSlug } from "@/lib/activate-config";
 import {
+  addMissingLocationBadges,
   loadBadgeCatalogIndex,
   syncPlayerBadges,
   type BadgeCatalogIndex,
@@ -509,9 +510,29 @@ export async function runScoreSync(
       catalogPromise ??= apiClient.getLocationCatalog();
       return catalogPromise;
     };
+    // Badge catalog for matching completions, topped up with any new badges the
+    // API lists for our location. Built once per chunk and shared by player steps.
     let badgeCatalogPromise: Promise<BadgeCatalogIndex> | null = null;
     const getBadgeCatalog = () => {
-      badgeCatalogPromise ??= loadBadgeCatalogIndex();
+      badgeCatalogPromise ??= (async () => {
+        const catalog = await loadBadgeCatalogIndex();
+        try {
+          const added = await addMissingLocationBadges(apiClient, catalog);
+          if (added.length === 0) return catalog;
+          syncLog(runId, `Added ${added.length} new badge(s) from PlayActivate: ${added.join(", ")}`);
+          return loadBadgeCatalogIndex();
+        } catch (catalogError) {
+          console.error(
+            `[score-sync]${runId ? ` run=${runId}` : ""} Adding new badges failed:`,
+            formatSyncError(catalogError),
+            catalogError,
+          );
+          await recordSyncErrorLocked("Badge catalog", catalogError, {
+            url: buildApiUrl(`/location/${ACTIVATE_LOCATION.id}/badges`),
+          });
+          return loadBadgeCatalogIndex();
+        }
+      })();
       return badgeCatalogPromise;
     };
 

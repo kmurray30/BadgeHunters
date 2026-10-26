@@ -11,6 +11,7 @@ import {
   normalizeBadgeName,
   parseBadgeEarned,
   type ActivateApiClient,
+  type ActivateLocationBadge,
   type ActivatePlayerBadge,
 } from "@/lib/activate-api";
 
@@ -41,6 +42,64 @@ export async function loadBadgeCatalogIndex(): Promise<BadgeCatalogIndex> {
   for (const key of collisions) index.delete(key);
 
   return index;
+}
+
+/**
+ * Badges the API lists for our location that our catalog doesn't have yet.
+ * Throws (adding nothing) when most API badges don't match our catalog, since
+ * that points to a renamed/changed API rather than a few new badges.
+ */
+export function findMissingCatalogBadges(
+  locationBadges: ActivateLocationBadge[],
+  catalog: BadgeCatalogIndex,
+): ActivateLocationBadge[] {
+  const uniqueByName = new Map<string, ActivateLocationBadge>();
+  for (const badge of locationBadges) {
+    if (typeof badge?.name !== "string" || !badge.name.trim()) continue;
+    const key = normalizeBadgeName(badge.name);
+    if (key && !uniqueByName.has(key)) uniqueByName.set(key, badge);
+  }
+  if (uniqueByName.size === 0) return [];
+
+  const missing = [...uniqueByName].filter(([key]) => !catalog.has(key)).map(([, badge]) => badge);
+  const matchedCount = uniqueByName.size - missing.length;
+  if (matchedCount < uniqueByName.size * MIN_CATALOG_MATCH_RATIO) {
+    throw new Error(
+      `Only ${matchedCount} of ${uniqueByName.size} Activate location badges matched our catalog; not adding any. Missing: ${missing.slice(0, 10).map((badge) => badge.name).join(", ")}`,
+    );
+  }
+  return missing;
+}
+
+/**
+ * Add badges the API lists for our location that our catalog lacks, with the
+ * API's name (upper-cased to match the catalog) and description. Rooms, games
+ * and tags start empty for the superuser to fill in. Returns the names added.
+ */
+export async function addMissingLocationBadges(
+  apiClient: ActivateApiClient,
+  catalog: BadgeCatalogIndex,
+): Promise<string[]> {
+  const missing = findMissingCatalogBadges(await apiClient.getLocationBadges(), catalog);
+  if (missing.length === 0) return [];
+
+  const highest = await prisma.badge.aggregate({ _max: { badgeNumber: true } });
+  let nextBadgeNumber = (highest._max.badgeNumber ?? 0) + 1;
+  const added: string[] = [];
+
+  for (const badge of missing) {
+    const name = badge.name.trim().toUpperCase();
+    await prisma.badge.create({
+      data: {
+        badgeNumber: nextBadgeNumber,
+        name,
+        description: badge.description?.trim() ?? "",
+      },
+    });
+    nextBadgeNumber += 1;
+    added.push(name);
+  }
+  return added;
 }
 
 /**
