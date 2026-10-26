@@ -403,53 +403,6 @@ export async function dismissSessionReviewNotification(sessionId: string) {
 }
 
 /**
- * Toggle a badge's completion state within the context of a specific session.
- *
- * Checking: creates a SessionBadgeCompletion record AND marks the badge as persistently
- * completed in BadgeUserStatus, since completing something in a session means you got it.
- *
- * Unchecking: removes the SessionBadgeCompletion record. Optionally also un-completes the
- * badge in BadgeUserStatus if the user explicitly chose that in the confirmation popup.
- */
-export async function toggleSessionBadgeCompletion(
-  sessionId: string,
-  badgeId: string,
-  alsoUncompletePersistently = false,
-) {
-  const user = await requireUser();
-
-  const existing = await prisma.sessionBadgeCompletion.findUnique({
-    where: { sessionId_userId_badgeId: { sessionId, userId: user.id, badgeId } },
-  });
-
-  if (existing) {
-    await prisma.sessionBadgeCompletion.delete({ where: { id: existing.id } });
-
-    if (alsoUncompletePersistently) {
-      await prisma.badgeUserStatus.upsert({
-        where: { userId_badgeId: { userId: user.id, badgeId } },
-        update: { isCompleted: false, completedAt: null },
-        create: { userId: user.id, badgeId, isCompleted: false },
-      });
-    }
-  } else {
-    await prisma.sessionBadgeCompletion.create({
-      data: { sessionId, userId: user.id, badgeId },
-    });
-
-    await prisma.badgeUserStatus.upsert({
-      where: { userId_badgeId: { userId: user.id, badgeId } },
-      update: { isCompleted: true, completedAt: new Date() },
-      create: { userId: user.id, badgeId, isCompleted: true, completedAt: new Date() },
-    });
-  }
-
-  revalidatePath(`/sessions/${sessionId}`);
-  revalidatePath("/badges");
-  revalidatePath(`/badges/${badgeId}`);
-}
-
-/**
  * Delete a session and all related data. Allowed for:
  * - Admin mode users (cookie-based)
  * - The session creator

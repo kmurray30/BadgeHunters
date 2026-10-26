@@ -5,38 +5,6 @@ import { requireUser, requireSuperuser } from "@/lib/session-helpers";
 import { revalidatePath } from "next/cache";
 import type { Difficulty, PlayerCountBucket } from "@prisma/client";
 
-export async function toggleBadgeCompletion(badgeId: string) {
-  const user = await requireUser();
-
-  const existing = await prisma.badgeUserStatus.findUnique({
-    where: { userId_badgeId: { userId: user.id, badgeId } },
-  });
-
-  if (existing) {
-    await prisma.badgeUserStatus.update({
-      where: { id: existing.id },
-      data: {
-        isCompleted: !existing.isCompleted,
-        completedAt: !existing.isCompleted ? new Date() : null,
-        // Completing a badge clears the todo flag — no need to track it anymore.
-        isTodo: existing.isCompleted ? existing.isTodo : false,
-      },
-    });
-  } else {
-    await prisma.badgeUserStatus.create({
-      data: {
-        userId: user.id,
-        badgeId,
-        isCompleted: true,
-        completedAt: new Date(),
-      },
-    });
-  }
-
-  revalidatePath("/badges");
-  revalidatePath(`/badges/${badgeId}`);
-}
-
 export async function toggleBadgeTodo(badgeId: string) {
   const user = await requireUser();
 
@@ -117,40 +85,6 @@ export async function updatePersonalNotes(badgeId: string, notes: string | null)
     },
   });
 
-  revalidatePath(`/badges/${badgeId}`);
-}
-
-export async function superuserToggleBadgeCompletion(
-  badgeId: string,
-  targetUserId: string
-) {
-  await requireSuperuser();
-
-  const existing = await prisma.badgeUserStatus.findUnique({
-    where: { userId_badgeId: { userId: targetUserId, badgeId } },
-  });
-
-  if (existing) {
-    await prisma.badgeUserStatus.update({
-      where: { id: existing.id },
-      data: {
-        isCompleted: !existing.isCompleted,
-        completedAt: !existing.isCompleted ? new Date() : null,
-        isTodo: existing.isCompleted ? existing.isTodo : false,
-      },
-    });
-  } else {
-    await prisma.badgeUserStatus.create({
-      data: {
-        userId: targetUserId,
-        badgeId,
-        isCompleted: true,
-        completedAt: new Date(),
-      },
-    });
-  }
-
-  revalidatePath("/badges");
   revalidatePath(`/badges/${badgeId}`);
 }
 

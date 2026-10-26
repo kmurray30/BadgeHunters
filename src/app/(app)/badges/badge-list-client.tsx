@@ -1,6 +1,6 @@
 "use client";
 
-import { toggleBadgeCompletion, toggleBadgeTodo } from "@/app/actions/badges";
+import { toggleBadgeTodo } from "@/app/actions/badges";
 import { BadgeInfoModal } from "@/components/badge-info-modal";
 import { BadgeCheckbox, BadgeTable, type BadgeTableRow, type ColumnHeader } from "@/components/badge-table";
 import { descriptionColumn, nameColumn } from "@/components/badge-table-columns";
@@ -141,9 +141,7 @@ function getPlayerCountDisplay(badge: BadgeData): { bucket: string; label: strin
   return { bucket: "none", label: "Any", color: "text-muted", sortKey: 2 };
 }
 
-type OptimisticAction =
-  | { type: "toggleCompletion"; badgeId: string }
-  | { type: "toggleTodo"; badgeId: string };
+type OptimisticAction = { type: "toggleTodo"; badgeId: string };
 
 function applyOptimisticOverrides(
   serverBadges: BadgeData[],
@@ -171,19 +169,11 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
       const currentCompleted = existing?.completedByCurrentUser ?? badgeServer?.completedByCurrentUser ?? false;
       const currentTodo = existing?.isTodoByCurrentUser ?? badgeServer?.isTodoByCurrentUser ?? false;
 
-      if (action.type === "toggleCompletion") {
-        const newCompleted = !currentCompleted;
-        next.set(action.badgeId, {
-          completedByCurrentUser: newCompleted,
-          isTodoByCurrentUser: newCompleted ? false : currentTodo,
-        });
-      } else {
-        if (currentCompleted) return currentOverrides;
-        next.set(action.badgeId, {
-          completedByCurrentUser: currentCompleted,
-          isTodoByCurrentUser: !currentTodo,
-        });
-      }
+      if (currentCompleted) return currentOverrides;
+      next.set(action.badgeId, {
+        completedByCurrentUser: currentCompleted,
+        isTodoByCurrentUser: !currentTodo,
+      });
       return next;
     },
   );
@@ -192,14 +182,6 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
     () => applyOptimisticOverrides(badges, optimisticOverrides),
     [badges, optimisticOverrides],
   );
-
-  const handleToggleCompletion = useCallback((badgeId: string) => {
-    startTransition(async () => {
-      applyOptimisticAction({ type: "toggleCompletion", badgeId });
-      await toggleBadgeCompletion(badgeId);
-      router.refresh();
-    });
-  }, [applyOptimisticAction, startTransition, router]);
 
   const handleToggleTodo = useCallback((badgeId: string) => {
     startTransition(async () => {
@@ -393,8 +375,8 @@ export function BadgeListClient({ badges, currentUserId, currentUserRole, allUse
               <div onMouseDown={(event) => event.stopPropagation()}>
                 <BadgeCheckbox
                   checked={badge.completedByCurrentUser}
-                  title={badge.completedByCurrentUser ? "Mark incomplete" : "Mark complete"}
-                  onClick={() => handleToggleCompletion(badge.id)}
+                  readOnly
+                  title={badge.completedByCurrentUser ? "Completed (synced from PlayActivate)" : "Not completed yet (synced from PlayActivate)"}
                 />
               </div>,
               <span className="min-w-0 text-sm font-medium text-foreground">{badge.name}</span>,

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { BackButton } from "@/components/back-button";
 import { CustomSelect } from "@/components/custom-select";
 import {
-  toggleBadgeCompletion,
   updateBadgeDifficulty,
   updateIdealPlayerCount,
   updatePersonalNotes,
@@ -172,16 +171,16 @@ export function BadgeDetailClient({
             <p className="mt-3 text-sm text-muted leading-relaxed">{badge.description}</p>
           </div>
 
-          <button
-            onClick={() => toggleBadgeCompletion(badge.id)}
-            className={`shrink-0 rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${
+          <span
+            title="Completion is synced from PlayActivate"
+            className={`shrink-0 rounded-xl border px-4 py-2 text-sm font-medium ${
               currentUserStatus.isCompleted
-                ? "border-success/30 bg-success/10 text-success hover:bg-success/20"
-                : "border-border text-muted hover:border-accent hover:text-accent"
+                ? "border-success/30 bg-success/10 text-success"
+                : "border-border text-muted"
             }`}
           >
-            {currentUserStatus.isCompleted ? "Completed" : "Mark Complete"}
-          </button>
+            {currentUserStatus.isCompleted ? "Completed" : "Not completed"}
+          </span>
         </div>
 
         {/* Badge metadata pills */}

@@ -11,7 +11,6 @@ import {
   removeSessionMember,
   reopenSession,
   toggleBadgeSelection,
-  toggleSessionBadgeCompletion,
   updateSessionDate,
 } from "@/app/actions/sessions";
 import { BackButton } from "@/components/back-button";
@@ -44,7 +43,7 @@ function buildGroupBadgeColumns(members: { id: string; displayName: string }[], 
     return 0;
   });
   return [
-    { label: "Done", width: "1.5rem", align: "center", vertical: true, sticky: true, tooltip: "Your completion — click to toggle", labelShift: "-4px" },
+    { label: "Done", width: "1.5rem", align: "center", vertical: true, sticky: true, tooltip: "Your completion (synced from PlayActivate)", labelShift: "-4px" },
     nameColumn({ sortField: undefined }),
     descriptionColumn(),
     { label: "Difficulty", width: "4rem", align: "right" },
@@ -345,7 +344,6 @@ export function SessionDetailClient({
   const personallyDone =
     session.status === "closed" || (inReviewMode && myReviewDone);
   const effectivelyActive = (session.status === "active" && !inReviewMode) || isEditing;
-  const canEdit = !personallyDone || isEditing;
 
   // Auto-dismiss session_review notification when user is already viewing the session
   // in review mode — no need for a bell icon nudge when they're already here.
@@ -378,8 +376,6 @@ export function SessionDetailClient({
   const canDeleteSession = isAdminMode || currentUserRole === "superuser" || session.createdBy.id === currentUserId;
   const canEditDate = isAdminMode;
 
-  const [pendingUncompleteBadgeId, setPendingUncompleteBadgeId] = useState<string | null>(null);
-
   // Badge info modal
   const [badgeInfoId, setBadgeInfoId] = useState<string | null>(null);
 
@@ -395,49 +391,13 @@ export function SessionDetailClient({
     [{ field: "votes", ascending: false }, { field: "completion", ascending: false }],
   );
 
-  // Optimistic completion: tracks which badges have been toggled by the current
-  // user before the server confirms. Resets when allBadges (server data) changes.
-  const serverCompletedBadgeIds = useMemo(() => new Set(
+  // Completion is synced from PlayActivate; sessions only display it.
+  const currentUserCompletedBadgeIds = useMemo(() => new Set(
     allBadges.filter((badge) => badge.memberCompletions.includes(currentUserId)).map((badge) => badge.id)
   ), [allBadges, currentUserId]);
 
-  const [optimisticCompletedBadgeIds, applyOptimisticCompletionToggle] = useOptimistic(
-    serverCompletedBadgeIds,
-    (currentIds: Set<string>, toggledBadgeId: string) => {
-      const nextIds = new Set(currentIds);
-      if (nextIds.has(toggledBadgeId)) nextIds.delete(toggledBadgeId);
-      else nextIds.add(toggledBadgeId);
-      return nextIds;
-    }
-  );
-
   function isCurrentUserCompleted(badgeId: string): boolean {
-    return optimisticCompletedBadgeIds.has(badgeId);
-  }
-
-  function handleToggleBadgeCompletion(badgeId: string) {
-    if (!canEdit) return;
-    if (isCurrentUserCompleted(badgeId)) {
-      setPendingUncompleteBadgeId(badgeId);
-      return;
-    }
-
-    startTransition(async () => {
-      applyOptimisticCompletionToggle(badgeId);
-      await toggleSessionBadgeCompletion(session.id, badgeId);
-      router.refresh();
-    });
-  }
-
-  function confirmUncomplete(alsoGlobal: boolean) {
-    const badgeId = pendingUncompleteBadgeId;
-    setPendingUncompleteBadgeId(null);
-    if (!badgeId) return;
-    startTransition(async () => {
-      applyOptimisticCompletionToggle(badgeId);
-      await toggleSessionBadgeCompletion(session.id, badgeId, alsoGlobal);
-      router.refresh();
-    });
+    return currentUserCompletedBadgeIds.has(badgeId);
   }
 
   // Brief hover suppression after badge selection causes list reorder
@@ -780,19 +740,6 @@ export function SessionDetailClient({
           ]}
         />
       )}
-      {/* Uncomplete badge confirmation dialog */}
-      {pendingUncompleteBadgeId && (
-        <ConfirmDialog
-          title="Uncomplete this badge?"
-          description="This will remove it from your session completions. Also mark it uncompleted globally?"
-          onClose={() => setPendingUncompleteBadgeId(null)}
-          actions={[
-            { label: "Yes, uncomplete globally too", onClick: () => confirmUncomplete(true), variant: "danger" },
-            { label: "No, just this session", onClick: () => confirmUncomplete(false) },
-            { label: "Cancel", onClick: () => setPendingUncompleteBadgeId(null), variant: "muted" },
-          ]}
-        />
-      )}
       {/* Join prompt for non-members */}
       {showJoinPrompt && (
         <div className="rounded-xl border border-accent/30 bg-accent/5 p-6 text-center">
@@ -1114,10 +1061,10 @@ export function SessionDetailClient({
           <div className="mt-4 rounded-lg border border-warning/30 bg-warning/5 p-3">
             <p className="text-sm text-warning">
               {session.status === "completed_pending_ack" && session.completedBy
-                ? `${session.completedBy.displayName} completed their session. Check off your badge completions and complete yours.`
+                ? `${session.completedBy.displayName} completed their session. Badge completions sync from PlayActivate — complete yours when you're done.`
                 : isReviewing
-                  ? "Review your badge completions below, then click Complete Session when ready."
-                  : "The session date has passed. Review your badge completions and complete your session."}
+                  ? "Badge completions sync from PlayActivate hourly. Click Complete Session when you're done."
+                  : "The session date has passed. Badge completions sync from PlayActivate — complete your session when you're done."}
             </p>
           </div>
         )}
@@ -1260,13 +1207,13 @@ export function SessionDetailClient({
               columns={groupBadgeColumns}
               sections={[
                 ...(sortedGroupPerVisit.length > 0
-                  ? [{ label: "Visit-Specific Badges", rows: buildGroupBadgeRows(sortedGroupPerVisit, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds, setBadgeInfoId) } satisfies BadgeTableSection]
+                  ? [{ label: "Visit-Specific Badges", rows: buildGroupBadgeRows(sortedGroupPerVisit, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, sortedMembers, currentUserCompletedBadgeIds, setBadgeInfoId) } satisfies BadgeTableSection]
                   : []),
                 ...(sortedGroupNormal.length > 0
-                  ? [{ label: "Standard Badges", rows: buildGroupBadgeRows(sortedGroupNormal, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds, setBadgeInfoId) } satisfies BadgeTableSection]
+                  ? [{ label: "Standard Badges", rows: buildGroupBadgeRows(sortedGroupNormal, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, sortedMembers, currentUserCompletedBadgeIds, setBadgeInfoId) } satisfies BadgeTableSection]
                   : []),
                 ...(sortedGroupCompletedByMe.length > 0
-                  ? [{ label: "Completed By Me", rows: buildGroupBadgeRows(sortedGroupCompletedByMe, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, canEdit, handleToggleBadgeCompletion, sortedMembers, optimisticCompletedBadgeIds, setBadgeInfoId) } satisfies BadgeTableSection]
+                  ? [{ label: "Completed By Me", rows: buildGroupBadgeRows(sortedGroupCompletedByMe, badgeLookup, currentUserId, metaRuleBlurbs, userSelectedBadgeIds, sortedMembers, currentUserCompletedBadgeIds, setBadgeInfoId) } satisfies BadgeTableSection]
                   : []),
               ]}
             />
@@ -1285,10 +1232,8 @@ function buildGroupBadgeRows(
   currentUserId: string,
   metaRuleBlurbs: Record<string, string>,
   userSelectedBadgeIds: Set<string>,
-  canEdit: boolean,
-  onToggleCompletion: (badgeId: string) => void,
   members: { id: string; displayName: string }[],
-  optimisticCompletedBadgeIds: Set<string>,
+  currentUserCompletedBadgeIds: Set<string>,
   onBadgeInfoClick: (badgeId: string) => void,
 ): BadgeTableRow[] {
   return entries.map((entry) => {
@@ -1297,7 +1242,7 @@ function buildGroupBadgeRows(
     const diffInfo = DIFFICULTY_LABELS[diffKey] ?? DIFFICULTY_LABELS.unknown;
     const playerCountResolved = fullBadge ? resolvePlayerCount(fullBadge) : { bucket: "none", label: "Any", color: "text-muted" };
     const persistentCompletions = new Set(fullBadge?.memberCompletions ?? []);
-    const currentUserCompleted = optimisticCompletedBadgeIds.has(entry.selection.badgeId);
+    const currentUserCompleted = currentUserCompletedBadgeIds.has(entry.selection.badgeId);
 
     const isUserSelected = userSelectedBadgeIds.has(entry.selection.badgeId);
     const rowClassName = currentUserCompleted
@@ -1322,18 +1267,13 @@ function buildGroupBadgeRows(
       </span>
     );
 
-    // Left "Done" column — the only clickable completion toggle (for the
-    // current user). onMouseDown stopPropagation keeps the row-click from
-    // opening the badge-info popup while toggling.
+    // Left "Done" column — the current user's completion, synced from PlayActivate.
     const doneCell = (
-      <div onMouseDown={(event) => event.stopPropagation()}>
-        <BadgeCheckbox
-          checked={currentUserCompleted}
-          disabled={!canEdit}
-          title={!canEdit ? "Session is closed" : currentUserCompleted ? "Click to un-complete" : "Mark as completed"}
-          onClick={() => onToggleCompletion(entry.selection.badgeId)}
-        />
-      </div>
+      <BadgeCheckbox
+        checked={currentUserCompleted}
+        readOnly
+        title={currentUserCompleted ? "Completed (synced from PlayActivate)" : "Not completed yet (synced from PlayActivate)"}
+      />
     );
 
     // Per-member completion cells at the far right. All are non-clickable

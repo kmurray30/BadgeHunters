@@ -661,8 +661,10 @@ function RowWrapper({
 interface BadgeCheckboxProps {
   checked: boolean;
   disabled?: boolean;
+  /** Display-only (e.g. completion synced from PlayActivate): not clickable, but not dimmed */
+  readOnly?: boolean;
   title?: string;
-  onClick: () => void;
+  onClick?: () => void;
   /** Wraps in a div that calls e.preventDefault() — prevents Link row navigation when clicking the checkbox */
   preventLinkNavigation?: boolean;
   /** Override Tailwind classes for the checked state (e.g. amber for "To Do") */
@@ -676,6 +678,7 @@ interface BadgeCheckboxProps {
 export function BadgeCheckbox({
   checked,
   disabled,
+  readOnly = false,
   title,
   onClick,
   preventLinkNavigation,
@@ -725,14 +728,18 @@ export function BadgeCheckbox({
   const button = (
     <button
       type="button"
-      onClick={onClick}
-      disabled={disabled}
+      onClick={readOnly ? undefined : onClick}
+      disabled={disabled || readOnly}
       title={title}
       className={`flex h-6 w-6 items-center justify-center rounded border transition-colors ${
-        checked
-          ? checkedClassName
-          : "border-border bg-background text-transparent hover:border-muted hover:text-muted"
-      } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
+        readOnly
+          ? checked
+            ? "border-success bg-success/20 text-success"
+            : "border-border bg-background text-transparent"
+          : checked
+            ? checkedClassName
+            : "border-border bg-background text-transparent hover:border-muted hover:text-muted"
+      } ${readOnly ? "cursor-default" : disabled ? "cursor-not-allowed opacity-40" : ""}`}
     >
       {renderIcon()}
     </button>
