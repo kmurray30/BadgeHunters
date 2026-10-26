@@ -58,6 +58,14 @@ export interface ActivatePlayerProfile {
   coins?: number;
 }
 
+/** One badge from /player/{name}/badges/{locationId}. */
+export interface ActivatePlayerBadge {
+  id: number;
+  name: string;
+  description?: string;
+  status: unknown;
+}
+
 export interface ActivateLocationCatalog {
   rooms: ActivateRoomInfo[];
   games: ActivateRoomGame[];
@@ -69,6 +77,13 @@ export function buildApiUrl(path: string): string {
 
 export function playerLocationPath(playerName: string): string {
   return `/player/${encodeURIComponent(playerName)}/location/${ACTIVATE_LOCATION.id}`;
+}
+
+export function playerBadgesPath(
+  playerName: string,
+  locationId: number | string = ACTIVATE_LOCATION.id,
+): string {
+  return `/player/${encodeURIComponent(playerName)}/badges/${locationId}`;
 }
 
 export function roomHighscoresPath(roomId: number): string {
@@ -156,6 +171,31 @@ export class ActivateApiClient {
       playerName,
       locationId: Number(ACTIVATE_LOCATION.id),
     };
+  }
+
+  /** Every badge at a location with the player's status, or null if the player isn't found. */
+  async getPlayerBadges(
+    playerName: string,
+    locationId: number | string = ACTIVATE_LOCATION.id,
+  ): Promise<ActivatePlayerBadge[] | null> {
+    const path = playerBadgesPath(playerName, locationId);
+    const badges = await this.get<ActivatePlayerBadge[]>(path);
+    if (badges != null && !Array.isArray(badges)) {
+      throw new ActivateApiError(
+        `Activate badges response is not a list: ${JSON.stringify(badges).slice(0, 200)}`,
+        200,
+        buildApiUrl(path),
+      );
+    }
+    return badges;
+  }
+
+  /** Location ids where the player has played, or null if the player isn't found. */
+  async getPlayerLocationIds(playerName: string): Promise<number[] | null> {
+    const locations = await this.get<number[]>(
+      `/player/${encodeURIComponent(playerName)}/locations`,
+    );
+    return Array.isArray(locations) ? locations.map(Number).filter(Number.isFinite) : null;
   }
 
   async getPlayerProfile(playerName: string): Promise<ActivatePlayerProfile | null> {
@@ -266,4 +306,54 @@ export function findRoomForSlug(
     rooms.find((room) => room.name.toLowerCase().replace(/\s+/g, "") === wanted.replace(/\s+/g, "")) ??
     null
   );
+}
+
+const EARNED_BADGE_STATUSES = new Set([
+  "earned",
+  "complete",
+  "completed",
+  "achieved",
+  "unlocked",
+  "awarded",
+  "done",
+  "true",
+  "yes",
+]);
+const UNEARNED_BADGE_STATUSES = new Set([
+  "",
+  "unearned",
+  "not_earned",
+  "notearned",
+  "not earned",
+  "incomplete",
+  "not_completed",
+  "locked",
+  "available",
+  "in_progress",
+  "inprogress",
+  "pending",
+  "none",
+  "false",
+  "no",
+]);
+
+/**
+ * Whether an API badge status means "earned". Returns null for values we don't
+ * recognise, so callers can refuse to write completion data they can't trust.
+ */
+export function parseBadgeEarned(status: unknown): boolean | null {
+  if (typeof status === "boolean") return status;
+  if (typeof status === "number") return status > 0;
+  if (status == null) return false;
+  if (typeof status === "string") {
+    const normalized = status.trim().toLowerCase();
+    if (EARNED_BADGE_STATUSES.has(normalized)) return true;
+    if (UNEARNED_BADGE_STATUSES.has(normalized)) return false;
+  }
+  return null;
+}
+
+/** Match key for badge names across our catalog and the API ("2 FAST 2 SEE" ≈ "2 Fast 2 See!"). */
+export function normalizeBadgeName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }

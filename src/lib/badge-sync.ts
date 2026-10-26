@@ -1,0 +1,173 @@
+/**
+ * Badge completion from the Activate API. The API is the source of truth for
+ * BadgeUserStatus.isCompleted / completedAt; every other field on the row
+ * (todo, difficulty, player count, notes) belongs to the player and is never
+ * written here.
+ */
+
+import { prisma } from "@/lib/db";
+import { ACTIVATE_LOCATION } from "@/lib/activate-config";
+import {
+  normalizeBadgeName,
+  parseBadgeEarned,
+  type ActivateApiClient,
+  type ActivatePlayerBadge,
+} from "@/lib/activate-api";
+
+/** Below this share of API badges matching our catalog, assume a format change and write nothing. */
+const MIN_CATALOG_MATCH_RATIO = 0.5;
+
+/** normalized badge name → our Badge.id */
+export type BadgeCatalogIndex = Map<string, string>;
+
+export interface PlayerBadgeSyncOutcome {
+  matched: number;
+  unmatchedApiNames: string[];
+  newlyCompleted: string[];
+  uncompleted: string[];
+}
+
+export async function loadBadgeCatalogIndex(): Promise<BadgeCatalogIndex> {
+  const badges = await prisma.badge.findMany({ select: { id: true, name: true } });
+  const index: BadgeCatalogIndex = new Map();
+  const collisions = new Set<string>();
+
+  for (const badge of badges) {
+    const key = normalizeBadgeName(badge.name);
+    if (index.has(key)) collisions.add(key);
+    index.set(key, badge.id);
+  }
+  // Ambiguous names can't be matched safely; leave those badges to their current state.
+  for (const key of collisions) index.delete(key);
+
+  return index;
+}
+
+/**
+ * Decide earned/not-earned per API badge name across every location the player
+ * has visited: a badge earned anywhere counts as earned.
+ */
+export function mergeBadgeStatuses(badgeLists: ActivatePlayerBadge[][]): Map<string, {
+  name: string;
+  earned: boolean;
+}> {
+  const merged = new Map<string, { name: string; earned: boolean }>();
+  const unknownStatuses = new Set<string>();
+
+  for (const badges of badgeLists) {
+    for (const badge of badges) {
+      if (typeof badge?.name !== "string" || !badge.name.trim()) continue;
+      const earned = parseBadgeEarned(badge.status);
+      if (earned === null) {
+        unknownStatuses.add(JSON.stringify(badge.status));
+        continue;
+      }
+      const key = normalizeBadgeName(badge.name);
+      const previous = merged.get(key);
+      merged.set(key, { name: badge.name, earned: earned || (previous?.earned ?? false) });
+    }
+  }
+
+  if (unknownStatuses.size > 0) {
+    throw new Error(
+      `Unrecognised badge status value(s) from the Activate API: ${[...unknownStatuses].join(", ")}. Badge completion left unchanged.`,
+    );
+  }
+
+  return merged;
+}
+
+/**
+ * Pull the player's badges from the API and set completion to match. Writes
+ * nothing if the response looks wrong (empty, unknown statuses, or mostly
+ * names we don't recognise).
+ */
+export async function syncPlayerBadges(
+  apiClient: ActivateApiClient,
+  userId: string,
+  playerName: string,
+  catalog: BadgeCatalogIndex,
+): Promise<PlayerBadgeSyncOutcome | null> {
+  const locationIds = new Set<number>([Number(ACTIVATE_LOCATION.id)]);
+  for (const locationId of (await apiClient.getPlayerLocationIds(playerName)) ?? []) {
+    locationIds.add(locationId);
+  }
+
+  const badgeLists: ActivatePlayerBadge[][] = [];
+  for (const locationId of locationIds) {
+    const badges = await apiClient.getPlayerBadges(playerName, locationId);
+    if (badges) badgeLists.push(badges);
+  }
+  if (badgeLists.length === 0) return null;
+
+  const apiStatuses = mergeBadgeStatuses(badgeLists);
+  if (apiStatuses.size === 0) {
+    throw new Error("Activate API returned no badges. Badge completion left unchanged.");
+  }
+
+  const earnedByBadgeId = new Map<string, boolean>();
+  const unmatchedApiNames: string[] = [];
+  for (const [key, status] of apiStatuses) {
+    const badgeId = catalog.get(key);
+    if (badgeId) {
+      earnedByBadgeId.set(badgeId, status.earned);
+    } else {
+      unmatchedApiNames.push(status.name);
+    }
+  }
+
+  if (earnedByBadgeId.size < apiStatuses.size * MIN_CATALOG_MATCH_RATIO) {
+    throw new Error(
+      `Only ${earnedByBadgeId.size} of ${apiStatuses.size} Activate badges matched our badge catalog by name. Badge completion left unchanged. Unmatched: ${unmatchedApiNames.slice(0, 10).join(", ")}`,
+    );
+  }
+
+  const existing = await prisma.badgeUserStatus.findMany({
+    where: { userId, badgeId: { in: [...earnedByBadgeId.keys()] } },
+    select: { badgeId: true, isCompleted: true },
+  });
+  const completedNow = new Set(
+    existing.filter((status) => status.isCompleted).map((status) => status.badgeId),
+  );
+
+  const toComplete = [...earnedByBadgeId]
+    .filter(([badgeId, earned]) => earned && !completedNow.has(badgeId))
+    .map(([badgeId]) => badgeId);
+  const toUncomplete = [...earnedByBadgeId]
+    .filter(([badgeId, earned]) => !earned && completedNow.has(badgeId))
+    .map(([badgeId]) => badgeId);
+
+  if (toComplete.length > 0 || toUncomplete.length > 0) {
+    const now = new Date();
+    await prisma.$transaction([
+      ...toComplete.map((badgeId) =>
+        prisma.badgeUserStatus.upsert({
+          where: { userId_badgeId: { userId, badgeId } },
+          create: { userId, badgeId, isCompleted: true, completedAt: now },
+          update: { isCompleted: true, completedAt: now },
+        }),
+      ),
+      prisma.badgeUserStatus.updateMany({
+        where: { userId, badgeId: { in: toUncomplete }, isCompleted: true },
+        data: { isCompleted: false, completedAt: null },
+      }),
+    ]);
+  }
+
+  const badgeNames = await badgeNamesById([...toComplete, ...toUncomplete]);
+  return {
+    matched: earnedByBadgeId.size,
+    unmatchedApiNames,
+    newlyCompleted: toComplete.map((badgeId) => badgeNames.get(badgeId) ?? badgeId),
+    uncompleted: toUncomplete.map((badgeId) => badgeNames.get(badgeId) ?? badgeId),
+  };
+}
+
+async function badgeNamesById(badgeIds: string[]): Promise<Map<string, string>> {
+  if (badgeIds.length === 0) return new Map();
+  const badges = await prisma.badge.findMany({
+    where: { id: { in: badgeIds } },
+    select: { id: true, name: true },
+  });
+  return new Map(badges.map((badge) => [badge.id, badge.name]));
+}

@@ -21,7 +21,7 @@ export const maxDuration = 300;
  * Auth: Vercel Cron secret header or admin cookie.
  */
 export async function POST(request: NextRequest) {
-  if (!isCronAuthorized(request)) {
+  if (!(await isCronAuthorized(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

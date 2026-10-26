@@ -7,11 +7,17 @@ import {
   ActivateApiClient,
   buildApiUrl,
   extractOverallStats,
+  playerBadgesPath,
   findRoomForSlug,
   playerLocationPath,
   type ActivateLocationCatalog,
 } from "@/lib/activate-api";
 import { ACTIVATE_LOCATION, ACTIVATE_ROOM_SLUGS, decodeRoomSlug } from "@/lib/activate-config";
+import {
+  loadBadgeCatalogIndex,
+  syncPlayerBadges,
+  type BadgeCatalogIndex,
+} from "@/lib/badge-sync";
 import {
   mapWithConcurrency,
   resolveSyncFetchConcurrency,
@@ -503,6 +509,11 @@ export async function runScoreSync(
       catalogPromise ??= apiClient.getLocationCatalog();
       return catalogPromise;
     };
+    let badgeCatalogPromise: Promise<BadgeCatalogIndex> | null = null;
+    const getBadgeCatalog = () => {
+      badgeCatalogPromise ??= loadBadgeCatalogIndex();
+      return badgeCatalogPromise;
+    };
 
     try {
       const pendingTasks = collectPendingSyncTasks(progressTracker.getSnapshot());
@@ -646,6 +657,43 @@ export async function runScoreSync(
                     playerLocation.scores,
                     knownGameIds,
                   );
+
+                  // Badge completion is independent of scores: a failure here is
+                  // recorded but doesn't fail the player's score sync.
+                  await progressTracker.setPlayerStatus(playerIndex, "running", "Badges…");
+                  try {
+                    const badgeOutcome = await syncPlayerBadges(
+                      apiClient,
+                      user.id,
+                      playerName,
+                      await getBadgeCatalog(),
+                    );
+                    if (badgeOutcome) {
+                      syncLog(
+                        runId,
+                        `Player ${playerName}: badges matched=${badgeOutcome.matched}` +
+                          (badgeOutcome.newlyCompleted.length
+                            ? `, completed: ${badgeOutcome.newlyCompleted.join(", ")}`
+                            : "") +
+                          (badgeOutcome.uncompleted.length
+                            ? `, un-completed: ${badgeOutcome.uncompleted.join(", ")}`
+                            : "") +
+                          (badgeOutcome.unmatchedApiNames.length
+                            ? `, not in our catalog: ${badgeOutcome.unmatchedApiNames.join(", ")}`
+                            : ""),
+                      );
+                    }
+                  } catch (badgeError) {
+                    console.error(
+                      `[score-sync]${runId ? ` run=${runId}` : ""} Player ${playerName}: badge sync failed:`,
+                      formatSyncError(badgeError),
+                      badgeError,
+                    );
+                    await recordSyncErrorLocked(`Badges: ${playerName}`, badgeError, {
+                      url: buildApiUrl(playerBadgesPath(playerName)),
+                    });
+                  }
+
                   await progressTracker.setPlayerStatus(playerIndex, "done", "Synced");
                   return { synced: 1, notFound: 0 };
                 })(),

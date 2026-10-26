@@ -13,7 +13,8 @@
     "postinstall": "prisma generate",
     "test": "vitest run",
     "test:watch": "vitest",
-    "activate:lookup": "tsx scripts/activate-lookup.ts"
+    "activate:lookup": "tsx scripts/activate-lookup.ts",
+    "sync:cron": "tsx scripts/run-sync.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

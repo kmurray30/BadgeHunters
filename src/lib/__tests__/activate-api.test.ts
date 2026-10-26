@@ -3,6 +3,8 @@ import {
   ActivateApiClient,
   ActivateApiError,
   findRoomForSlug,
+  normalizeBadgeName,
+  parseBadgeEarned,
 } from "../activate-api";
 
 function jsonResponse(body: unknown, status = 200) {
@@ -77,5 +79,29 @@ describe("ActivateApiClient", () => {
     await expect(new ActivateApiClient().getRoomHighscores(10)).rejects.toBeInstanceOf(
       ActivateApiError,
     );
+  });
+});
+
+describe("parseBadgeEarned", () => {
+  it("reads booleans, numbers and known status words", () => {
+    expect(parseBadgeEarned(true)).toBe(true);
+    expect(parseBadgeEarned(false)).toBe(false);
+    expect(parseBadgeEarned(1)).toBe(true);
+    expect(parseBadgeEarned(0)).toBe(false);
+    expect(parseBadgeEarned("Earned")).toBe(true);
+    expect(parseBadgeEarned("locked")).toBe(false);
+    expect(parseBadgeEarned(null)).toBe(false);
+  });
+
+  it("returns null for statuses it doesn't recognise", () => {
+    expect(parseBadgeEarned("halfway")).toBeNull();
+    expect(parseBadgeEarned({ earned: true })).toBeNull();
+  });
+});
+
+describe("normalizeBadgeName", () => {
+  it("ignores case, spacing and punctuation", () => {
+    expect(normalizeBadgeName("2 FAST 2 SEE")).toBe(normalizeBadgeName("2 Fast 2 See!"));
+    expect(normalizeBadgeName("15S IN 15S")).toBe("15sin15s");
   });
 });

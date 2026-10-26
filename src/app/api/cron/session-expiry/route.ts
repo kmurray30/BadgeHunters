@@ -12,7 +12,7 @@ export const maxDuration = 30;
  * `completed_pending_ack`. Auth: Vercel Cron secret header or admin cookie.
  */
 export async function POST(request: NextRequest) {
-  if (!isCronAuthorized(request)) {
+  if (!(await isCronAuthorized(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
