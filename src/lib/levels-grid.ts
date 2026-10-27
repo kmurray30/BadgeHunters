@@ -37,7 +37,7 @@ export async function loadLevelsData(playerIds: string[]): Promise<LevelsData> {
     }),
     prisma.globalLevelTopScore.findMany({ select: { gameId: true, level: true, topScore: true } }),
     prisma.userLevelScore.findMany({
-      where: { userId: { in: playerIds }, score: { gt: 0 } },
+      where: { userId: { in: playerIds }, score: { gt: 0 }, game: { roomSlug: { not: "unknown" } } },
       select: { userId: true, gameId: true, level: true, score: true },
     }),
   ]);

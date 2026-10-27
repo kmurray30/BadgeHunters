@@ -8,18 +8,20 @@ interface PlayerPickerProps {
   onToggle: (playerId: string) => void;
   onJustMe: () => void;
   onSelectAll: () => void;
+  /** Pin under the header while scrolling (Badges/Levels); off for inline use. */
+  sticky?: boolean;
 }
 
 /**
  * Sticky row of player chips under the header. Tapping toggles a player; each
  * chip shows the player's pie color, so the row doubles as the legend.
  */
-export function PlayerPicker({ roster, selectedIds, onToggle, onJustMe, onSelectAll }: PlayerPickerProps) {
+export function PlayerPicker({ roster, selectedIds, onToggle, onJustMe, onSelectAll, sticky = true }: PlayerPickerProps) {
   const onlyMe = selectedIds.length === 1 && roster.find((player) => player.isMe)?.id === selectedIds[0];
   const everyone = selectedIds.length === roster.length;
 
   return (
-    <div className="sticky top-14 z-40 -mx-4 border-b border-border bg-background/85 px-4 py-2.5 backdrop-blur-md">
+    <div className={sticky ? "sticky top-14 z-40 -mx-4 border-b border-border bg-background/85 px-4 py-2.5 backdrop-blur-md" : ""}>
       <div className="flex flex-wrap items-center gap-1.5">
         {roster.map((player) => {
           const selected = selectedIds.includes(player.id);

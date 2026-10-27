@@ -10,21 +10,8 @@ import { PlayerPicker } from "@/components/player-picker";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { usePlayerSelection } from "@/hooks/use-player-selection";
 import { DEFAULT_GROUP_FILTERS, matchesGroupFilters, type GroupFilterState } from "@/lib/group-progress";
+import type { BadgeCardData } from "@/lib/badge-cards";
 import type { RosterPlayer } from "@/lib/roster";
-
-export interface BadgeCardData {
-  id: string;
-  number: number;
-  name: string;
-  description: string;
-  games: string[];
-  isPerVisit: boolean;
-  /** User ids (across the roster) who have completed it */
-  doneBy: string[];
-  todoByMe: boolean;
-  difficulty: "easy" | "medium" | "hard" | "impossible" | "unknown";
-  playerCount: string;
-}
 
 const DIFFICULTY_STYLE: Record<BadgeCardData["difficulty"], { label: string; className: string; sortKey: number }> = {
   easy: { label: "Easy", className: "text-success border-success/30", sortKey: 1 },
