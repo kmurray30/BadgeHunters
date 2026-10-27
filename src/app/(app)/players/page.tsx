@@ -32,6 +32,7 @@ export default async function PlayersPage() {
             <li key={player.id}>
               <Link
                 href={`/players/${player.id}`}
+                prefetch={false}
                 className={`panel flex items-center gap-3 p-3 transition hover:border-accent/40 ${player.isMe ? "border-accent/40" : ""}`}
               >
                 <span className="font-display w-6 shrink-0 text-center text-lg font-bold text-muted">{index + 1}</span>

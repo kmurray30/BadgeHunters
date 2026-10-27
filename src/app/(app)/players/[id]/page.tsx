@@ -32,8 +32,8 @@ export default async function PlayerDetailPage({ params, searchParams }: Props) 
       orderBy: { badge: { name: "asc" } },
       select: { badge: { select: { id: true, name: true, description: true } } },
     }),
-    prisma.activateGame.count({ where: { roomSlug: { not: "unknown" } } }),
-    prisma.userLevelScore.count({ where: { userId: id, score: { gt: 0 }, game: { roomSlug: { not: "unknown" } } } }),
+    prisma.activateGame.count({ where: { isActive: true } }),
+    prisma.userLevelScore.count({ where: { userId: id, score: { gt: 0 }, game: { isActive: true } } }),
   ]);
 
   const rankHex = RANK_COLOR_HEX[player.rankColor];
@@ -90,7 +90,7 @@ export default async function PlayerDetailPage({ params, searchParams }: Props) 
       <ul className="grid gap-2 sm:grid-cols-2">
         {completedBadges.map(({ badge }) => (
           <li key={badge.id}>
-            <Link href={`/badges/${badge.id}`} className="panel block h-full p-3 transition hover:border-accent/40">
+            <Link href={`/badges/${badge.id}`} prefetch={false} className="panel block h-full p-3 transition hover:border-accent/40">
               <p className="font-display font-bold uppercase leading-tight">{badge.name}</p>
               <p className="mt-0.5 line-clamp-2 text-xs text-muted">{badge.description}</p>
             </Link>

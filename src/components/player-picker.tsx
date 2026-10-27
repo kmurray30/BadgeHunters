@@ -1,5 +1,6 @@
 "use client";
 
+import { PlayerSliceIcon } from "@/components/completion-pie";
 import type { RosterPlayer } from "@/lib/roster";
 
 interface PlayerPickerProps {
@@ -14,7 +15,7 @@ interface PlayerPickerProps {
 
 /**
  * Sticky row of player chips under the header. Tapping toggles a player; each
- * chip shows the player's pie color, so the row doubles as the legend.
+ * selected chip shows that player's wedge of the pie, so the row doubles as the legend.
  */
 export function PlayerPicker({ roster, selectedIds, onToggle, onJustMe, onSelectAll, sticky = true }: PlayerPickerProps) {
   const onlyMe = selectedIds.length === 1 && roster.find((player) => player.isMe)?.id === selectedIds[0];
@@ -43,10 +44,11 @@ export function PlayerPicker({ roster, selectedIds, onToggle, onJustMe, onSelect
                   : { borderColor: "var(--border)", color: "var(--muted)" }
               }
             >
-              <span
-                className="h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: selected ? player.color : "transparent", boxShadow: `inset 0 0 0 1.5px ${player.color}` }}
-              />
+              {selected ? (
+                <PlayerSliceIcon index={selectedIds.indexOf(player.id)} count={selectedIds.length} color={player.color} size={15} />
+              ) : (
+                <span className="h-3.5 w-3.5 rounded-full" style={{ boxShadow: `inset 0 0 0 1.5px ${player.color}` }} />
+              )}
               {player.name}
               {player.isMe && <span className="text-[10px] font-medium text-muted">you</span>}
             </button>

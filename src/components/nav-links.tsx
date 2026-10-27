@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+// The four tabs prefetch their full pages, so switching tabs doesn't wait on the network.
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: HomeIcon, isActive: (path: string) => path === "/" },
   { href: "/badges", label: "Badges", icon: BadgeIcon, isActive: (path: string) => path.startsWith("/badges") },
@@ -21,6 +22,7 @@ export function TopNavLinks() {
           <Link
             key={item.href}
             href={item.href}
+            prefetch
             className={`font-display rounded-lg px-3 py-1.5 text-sm font-semibold uppercase tracking-wider transition-colors ${
               active ? "bg-accent/15 text-accent" : "text-muted hover:text-foreground"
             }`}
@@ -49,6 +51,7 @@ export function BottomTabBar() {
             <Link
               key={item.href}
               href={item.href}
+              prefetch
               className={`relative flex flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-colors ${
                 active ? "text-accent" : "text-muted active:text-foreground"
               }`}

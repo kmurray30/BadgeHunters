@@ -7,7 +7,7 @@ import { GroupFilters } from "@/components/group-filters";
 import { PlayerPicker } from "@/components/player-picker";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { usePlayerSelection } from "@/hooks/use-player-selection";
-import { DEFAULT_GROUP_FILTERS, matchesGroupFilters, type GroupFilterState } from "@/lib/group-progress";
+import { DEFAULT_GROUP_FILTERS, describeGroupFilters, matchesGroupFilters, type GroupFilterState } from "@/lib/group-progress";
 import {
   compactScore,
   isTopScore,
@@ -44,6 +44,7 @@ export function LevelsClient({ data, roster, currentUserId }: LevelsClientProps)
   // "Some" and "Not done by me" have no meaning with only one player selected.
   const filters: GroupFilterState =
     groupSize > 1 ? storedFilters : { progress: storedFilters.progress === "some" ? "all" : storedFilters.progress, notDoneByMe: false };
+  const filterSummary = describeGroupFilters(filters, groupSize);
   const filtering = filters.progress !== "all" || filters.notDoneByMe;
 
   const scoreOf = (playerId: string, key: string) => data.scoresByPlayer[playerId]?.[key];
@@ -84,6 +85,7 @@ export function LevelsClient({ data, roster, currentUserId }: LevelsClientProps)
         {singlePlayer
           ? "Color shows how close each score is to the top score. Tap a level for details."
           : "Each slice is a player. Tap a level to see everyone's scores."}
+        {filterSummary && <span className="block text-foreground/80">{filterSummary}.</span>}
       </p>
 
       <div className="mt-3 space-y-3">

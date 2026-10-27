@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { PlayerSliceIcon } from "@/components/completion-pie";
 import type { RosterPlayer } from "@/lib/roster";
 
 interface DetailSheetProps {
@@ -64,12 +65,9 @@ export interface PlayerStatusRow {
 export function PlayerStatusList({ rows }: { rows: PlayerStatusRow[] }) {
   return (
     <ul className="space-y-1.5">
-      {rows.map(({ player, done, detail }) => (
+      {rows.map(({ player, done, detail }, index) => (
         <li key={player.id} className="flex items-center gap-3 rounded-xl bg-background/60 px-3 py-2.5">
-          <span
-            className="h-3 w-3 shrink-0 rounded-full"
-            style={{ backgroundColor: done ? player.color : "#000", boxShadow: `inset 0 0 0 1.5px ${player.color}` }}
-          />
+          <PlayerSliceIcon index={index} count={rows.length} color={player.color} size={18} />
           <span className="min-w-0 flex-1 truncate font-semibold">
             {player.name}
             {player.isMe && <span className="ml-1.5 text-xs font-medium text-muted">you</span>}

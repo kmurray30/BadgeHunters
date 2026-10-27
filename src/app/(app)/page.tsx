@@ -3,7 +3,6 @@ import { prisma } from "@/lib/db";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { RANK_COLOR_HEX } from "@/lib/rank";
-import { loadBadgeCards } from "@/lib/badge-cards";
 import { LEVEL_NUMBERS, loadLevelsData } from "@/lib/levels-grid";
 import { playerRankColor } from "@/lib/player-colors";
 import { loadRoster, playerDisplayName } from "@/lib/roster";
@@ -42,14 +41,20 @@ export default async function Home() {
 
   const roster = await loadRoster(user);
   const rosterIds = roster.map((player) => player.id);
-  const [badges, levels, lastRun] = await Promise.all([
-    loadBadgeCards(user.id, rosterIds),
+  const [totalBadges, badgeCounts, levels, lastRun] = await Promise.all([
+    prisma.badge.count({ where: { active: true } }),
+    prisma.badgeUserStatus.groupBy({
+      by: ["userId"],
+      where: { userId: { in: rosterIds }, isCompleted: true, badge: { active: true } },
+      _count: { _all: true },
+    }),
     loadLevelsData(rosterIds),
     getLatestFinishedScoreSyncRun(),
   ]);
 
   const totalLevels = levels.rooms.reduce((sum, room) => sum + room.games.length * LEVEL_NUMBERS.length, 0);
-  const badgesDoneBy = (playerId: string) => badges.filter((badge) => badge.doneBy.includes(playerId)).length;
+  const badgeCountByUser = new Map(badgeCounts.map((row) => [row.userId, row._count._all]));
+  const badgesDoneBy = (playerId: string) => badgeCountByUser.get(playerId) ?? 0;
   const levelsBeatenBy = (playerId: string) => Object.keys(levels.scoresByPlayer[playerId] ?? {}).length;
 
   const rankColor = playerRankColor(user);
@@ -87,7 +92,7 @@ export default async function Home() {
       </section>
 
       <div className="mt-3 grid grid-cols-2 gap-3">
-        <ProgressTile href="/badges" label="Badges" done={badgesDoneBy(user.id)} total={badges.length} color="var(--accent)" />
+        <ProgressTile href="/badges" label="Badges" done={badgesDoneBy(user.id)} total={totalBadges} color="var(--accent)" />
         <ProgressTile href="/levels" label="Levels" done={levelsBeatenBy(user.id)} total={totalLevels} color="var(--highlight)" />
       </div>
 
@@ -100,7 +105,7 @@ export default async function Home() {
         <SyncNowButton />
       </div>
 
-      <NextUp roster={roster} currentUserId={user.id} badges={badges} levels={levels} />
+      <NextUp roster={roster} currentUserId={user.id} levels={levels} />
 
       <section className="panel mt-6 p-4">
         <div className="mb-3 flex items-baseline justify-between">
@@ -114,6 +119,7 @@ export default async function Home() {
             <li key={player.id}>
               <Link
                 href={`/players/${player.id}`}
+                prefetch={false}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2 transition hover:bg-card-hover ${player.isMe ? "bg-accent/10" : "bg-background/60"}`}
               >
                 <span className="font-display w-5 text-center font-bold text-muted">{index + 1}</span>

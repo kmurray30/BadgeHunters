@@ -1,39 +1,44 @@
 import { describe, expect, it } from "vitest";
-import type { BadgeCardData } from "../badge-cards";
-import { badgesMostNeeded, levelsMostNeeded } from "../next-up";
+import { gamesMostNeeded } from "../next-up";
 import type { LevelsData } from "../levels-grid";
 
-function badge(name: string, doneBy: string[], difficulty: BadgeCardData["difficulty"] = "unknown"): BadgeCardData {
-  return { id: name, number: 0, name, description: "", games: [], isPerVisit: false, doneBy, todoByMe: false, difficulty, playerCount: "none" };
-}
+const beaten = (gameId: number, levels: number[]) => Object.fromEntries(levels.map((level) => [`${gameId}:${level}`, 1000 * level + 1]));
+const allLevels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-describe("badgesMostNeeded", () => {
-  it("ranks by how many selected players still need it, easiest first, and drops finished ones", () => {
-    const result = badgesMostNeeded(
-      [badge("DONE", ["a", "b"]), badge("HALF", ["a"]), badge("HARD NONE", [], "hard"), badge("EASY NONE", [], "easy")],
-      ["a", "b"],
-      5,
-    );
-    expect(result.map((entry) => entry.badge.name)).toEqual(["EASY NONE", "HARD NONE", "HALF"]);
-    expect(result[0].needCount).toBe(2);
-  });
-});
+describe("gamesMostNeeded", () => {
+  const data: LevelsData = {
+    rooms: [
+      { slug: "hoops", name: "Hoops", games: [{ id: 1, name: "Barrage" }, { id: 2, name: "Trivial" }] },
+      { slug: "grid", name: "Grid", games: [{ id: 3, name: "Zones" }, { id: 4, name: "Strategy" }] },
+    ],
+    topScores: {},
+    scoresByPlayer: {
+      a: { ...beaten(1, allLevels), ...beaten(2, [1, 2, 3, 4, 5, 6, 7, 8]), ...beaten(3, [1, 2, 3]), ...beaten(4, [1, 2, 3]) },
+      b: { ...beaten(1, allLevels), ...beaten(2, [1, 2]), ...beaten(3, [1, 2, 3, 4, 5, 6, 7]), ...beaten(4, [1, 2, 3]) },
+    },
+  };
 
-describe("levelsMostNeeded", () => {
-  it("prefers levels more players need, then lower levels", () => {
-    const data: LevelsData = {
-      rooms: [{ slug: "hoops", name: "Hoops", games: [{ id: 1, name: "Barrage" }] }],
-      topScores: {},
-      scoresByPlayer: {
-        a: Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8].map((level) => [`1:${level}`, 1000])),
-        b: { "1:1": 1000 },
-      },
-    };
-    const result = levelsMostNeeded(data, ["a", "b"], 3);
-    expect(result.map((target) => [target.level, target.needCount])).toEqual([
-      [9, 2],
-      [10, 2],
-      [2, 1],
+  it("ranks games by level beats the group still needs and lists their open levels", () => {
+    const result = gamesMostNeeded(data, ["a", "b"], 5);
+    // Strategy: 7+7 missing; Zones: 7+3; Trivial: 2+8. Barrage is finished.
+    expect(result.map((target) => [target.game.name, target.needTotal])).toEqual([
+      ["Strategy", 14],
+      ["Zones", 10],
+      ["Trivial", 10],
     ]);
+    expect(result[1].openLevels.map((open) => [open.level, open.needCount])).toEqual([
+      [4, 1], [5, 1], [6, 1], [7, 1], [8, 2], [9, 2], [10, 2],
+    ]);
+  });
+
+  it("breaks ties by levels nobody has beaten", () => {
+    // Zones and Trivial both need 10; Zones has 3 levels neither has beaten, Trivial 2.
+    const result = gamesMostNeeded(data, ["a", "b"], 5);
+    expect(result[1].neededByAll).toBe(3);
+    expect(result[2].neededByAll).toBe(2);
+  });
+
+  it("works for one player", () => {
+    expect(gamesMostNeeded(data, ["b"], 1).map((target) => target.game.name)).toEqual(["Trivial"]);
   });
 });

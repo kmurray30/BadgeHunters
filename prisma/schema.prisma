@@ -257,6 +257,9 @@ model ActivateGame {
   roomName  String   @map("room_name")
   roomId    Int      @map("room_id")
   sortIndex Int      @default(0) @map("sort_index")
+  /// Playable at our location: PlayActivate lists it and keeps a leaderboard
+  /// for it. Retired games and one-level special modes stay false.
+  isActive  Boolean  @default(false) @map("is_active")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   userLevelScores    UserLevelScore[]

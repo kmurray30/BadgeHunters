@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchesGroupFilters } from "../group-progress";
+import { describeGroupFilters, matchesGroupFilters } from "../group-progress";
 
 const selected = ["me", "pat", "jules"];
 const doneBy = (ids: string[]) => (playerId: string) => ids.includes(playerId);
@@ -25,5 +25,19 @@ describe("matchesGroupFilters", () => {
     const filters = { progress: "some" as const, notDoneByMe: true };
     expect(matchesGroupFilters(doneBy(["me"]), selected, "me", filters)).toBe(false);
     expect(matchesGroupFilters(doneBy(["pat"]), selected, "me", filters)).toBe(true);
+  });
+});
+
+describe("describeGroupFilters", () => {
+  it("is null when nothing is filtered", () => {
+    expect(describeGroupFilters({ progress: "all", notDoneByMe: false }, 3)).toBeNull();
+  });
+
+  it("spells out group and personal filters", () => {
+    expect(describeGroupFilters({ progress: "nobody", notDoneByMe: false }, 3)).toBe("Only ones none of the selected players have done");
+    expect(describeGroupFilters({ progress: "some", notDoneByMe: true }, 3)).toBe(
+      "Only ones some, but not all, of the selected players have done and you haven't done",
+    );
+    expect(describeGroupFilters({ progress: "everyone", notDoneByMe: false }, 1)).toBe("Only ones you've done");
   });
 });

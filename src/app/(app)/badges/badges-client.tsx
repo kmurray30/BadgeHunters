@@ -9,7 +9,7 @@ import { GroupFilters } from "@/components/group-filters";
 import { PlayerPicker } from "@/components/player-picker";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { usePlayerSelection } from "@/hooks/use-player-selection";
-import { DEFAULT_GROUP_FILTERS, matchesGroupFilters, type GroupFilterState } from "@/lib/group-progress";
+import { DEFAULT_GROUP_FILTERS, describeGroupFilters, matchesGroupFilters, type GroupFilterState } from "@/lib/group-progress";
 import type { BadgeCardData } from "@/lib/badge-cards";
 import type { RosterPlayer } from "@/lib/roster";
 
@@ -49,9 +49,13 @@ export function BadgesClient({ badges, roster, currentUserId }: BadgesClientProp
 
   const groupSize = selectedIds.length;
   // "Some" and "Not done by me" have no meaning with only one player selected.
-  const filters: GroupFilterState =
-    groupSize > 1 ? storedFilters : { progress: storedFilters.progress === "some" ? "all" : storedFilters.progress, notDoneByMe: false };
+  const filters: GroupFilterState = useMemo(
+    () =>
+      groupSize > 1 ? storedFilters : { progress: storedFilters.progress === "some" ? "all" : storedFilters.progress, notDoneByMe: false },
+    [groupSize, storedFilters],
+  );
 
+  const filterSummary = describeGroupFilters(filters, groupSize);
   const doneSets = useMemo(() => new Map(badges.map((badge) => [badge.id, new Set(badge.doneBy)])), [badges]);
   const myDoneCount = badges.filter((badge) => doneSets.get(badge.id)!.has(currentUserId)).length;
 
@@ -145,6 +149,7 @@ export function BadgesClient({ badges, roster, currentUserId }: BadgesClientProp
         </div>
         <p className="text-xs text-muted">
           {visibleBadges.length} of {badges.length} badges
+          {filterSummary && <> · {filterSummary}</>}
         </p>
       </div>
 
@@ -167,7 +172,7 @@ export function BadgesClient({ badges, roster, currentUserId }: BadgesClientProp
                   slices={selectedPlayers.map((player) => ({ color: player.color, filled: done.has(player.id) }))}
                 />
               </button>
-              <Link href={`/badges/${badge.id}`} className="min-w-0 flex-1">
+              <Link href={`/badges/${badge.id}`} prefetch={false} className="min-w-0 flex-1">
                 <h2 className="font-display font-bold uppercase leading-tight tracking-wide">{badge.name}</h2>
                 <p className="mt-0.5 line-clamp-2 text-sm leading-snug text-muted">{badge.description}</p>
                 <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-semibold">

@@ -5,85 +5,69 @@ import { useMemo } from "react";
 import { CompletionPie } from "@/components/completion-pie";
 import { PlayerPicker } from "@/components/player-picker";
 import { usePlayerSelection } from "@/hooks/use-player-selection";
-import type { BadgeCardData } from "@/lib/badge-cards";
 import type { LevelsData } from "@/lib/levels-grid";
-import { badgesMostNeeded, levelsMostNeeded } from "@/lib/next-up";
+import { gamesMostNeeded } from "@/lib/next-up";
 import type { RosterPlayer } from "@/lib/roster";
 
-const ITEMS_PER_LIST = 5;
+const GAMES_SHOWN = 5;
 
 interface NextUpProps {
   roster: RosterPlayer[];
   currentUserId: string;
-  badges: BadgeCardData[];
   levels: LevelsData;
 }
 
-/** Badges and levels the selected players most need: good targets for the next visit. */
-export function NextUp({ roster, currentUserId, badges, levels }: NextUpProps) {
+/** Games where the selected players have the most levels left: good targets for the next visit. */
+export function NextUp({ roster, currentUserId, levels }: NextUpProps) {
   const { selectedIds, selectedPlayers, toggle, justMe, selectAll } = usePlayerSelection(roster, currentUserId);
-  const badgeTargets = useMemo(() => badgesMostNeeded(badges, selectedIds, ITEMS_PER_LIST), [badges, selectedIds]);
-  const levelTargets = useMemo(() => levelsMostNeeded(levels, selectedIds, ITEMS_PER_LIST), [levels, selectedIds]);
+  const targets = useMemo(() => gamesMostNeeded(levels, selectedIds, GAMES_SHOWN), [levels, selectedIds]);
   const group = selectedIds.length > 1;
-
-  const needLabel = (needCount: number) =>
-    group ? (needCount === selectedIds.length ? "Everyone needs it" : `${needCount} of ${selectedIds.length} need it`) : null;
 
   return (
     <section className="panel mt-6 p-4">
       <h2 className="font-display text-lg font-bold uppercase tracking-wider">Next up</h2>
       <p className="mb-3 text-xs text-muted">
-        {group ? "What the selected players most need. Easiest badges and lowest levels first." : "Your easiest open badges and lowest unbeaten levels."}
+        {group
+          ? "Games where the selected players have the most levels left to beat, counting each player's."
+          : "Games where you have the most levels left to beat."}
       </p>
       <PlayerPicker roster={roster} selectedIds={selectedIds} onToggle={toggle} onJustMe={justMe} onSelectAll={selectAll} sticky={false} />
 
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-accent">Badges</h3>
-          <ul className="space-y-1.5">
-            {badgeTargets.map(({ badge, needCount }) => {
-              const done = new Set(badge.doneBy);
-              return (
-                <li key={badge.id}>
-                  <Link href={`/badges/${badge.id}`} className="flex items-center gap-3 rounded-xl bg-background/60 px-3 py-2 transition hover:bg-card-hover">
-                    <CompletionPie size={26} slices={selectedPlayers.map((player) => ({ color: player.color, filled: done.has(player.id) }))} />
-                    <span className="min-w-0 flex-1">
-                      <span className="font-display block truncate text-sm font-bold uppercase">{badge.name}</span>
-                      {needLabel(needCount) && <span className="block text-[11px] text-muted">{needLabel(needCount)}</span>}
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
-            {badgeTargets.length === 0 && <li className="text-sm text-muted">All done. Nice.</li>}
-          </ul>
-        </div>
-        <div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-highlight">Levels</h3>
-          <ul className="space-y-1.5">
-            {levelTargets.map((target) => (
-              <li key={target.key}>
-                <Link href="/levels" className="flex items-center gap-3 rounded-xl bg-background/60 px-3 py-2 transition hover:bg-card-hover">
-                  <CompletionPie
-                    size={26}
-                    slices={selectedPlayers.map((player) => ({ color: player.color, filled: !!levels.scoresByPlayer[player.id]?.[target.key] }))}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="font-display block truncate text-sm font-bold uppercase">
-                      {target.game.name} · L{target.level}
-                    </span>
-                    <span className="block text-[11px] text-muted">
-                      {target.room.name}
-                      {needLabel(target.needCount) && ` · ${needLabel(target.needCount)}`}
-                    </span>
+      <ol className="mt-4 space-y-2">
+        {targets.map((target, index) => (
+          <li key={target.game.id}>
+            <Link href="/levels" prefetch={false} className="block rounded-xl bg-background/60 px-3 py-2.5 transition hover:bg-card-hover">
+              <div className="flex items-baseline gap-2">
+                <span className="font-display w-4 shrink-0 text-sm font-bold text-muted">{index + 1}</span>
+                <span className="font-display min-w-0 flex-1 truncate font-bold uppercase">
+                  {target.game.name}
+                  <span className="ml-2 text-xs font-medium normal-case text-muted">{target.room.name}</span>
+                </span>
+                <span className="shrink-0 text-xs text-muted">
+                  {group ? `${target.needTotal} beats to go` : `${target.openLevels.length} left`}
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5 pl-6">
+                {target.openLevels.map((open) => (
+                  <span
+                    key={open.level}
+                    className="font-display flex items-center gap-1 rounded-md border border-border bg-card px-1.5 py-0.5 text-xs font-semibold"
+                  >
+                    {group && (
+                      <CompletionPie
+                        size={13}
+                        slices={selectedPlayers.map((player) => ({ color: player.color, filled: !!levels.scoresByPlayer[player.id]?.[open.key] }))}
+                      />
+                    )}
+                    L{open.level}
                   </span>
-                </Link>
-              </li>
-            ))}
-            {levelTargets.length === 0 && <li className="text-sm text-muted">Every level beaten. Legend.</li>}
-          </ul>
-        </div>
-      </div>
+                ))}
+              </div>
+            </Link>
+          </li>
+        ))}
+        {targets.length === 0 && <li className="text-sm text-muted">Every level beaten. Legend.</li>}
+      </ol>
     </section>
   );
 }

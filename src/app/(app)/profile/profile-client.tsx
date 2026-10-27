@@ -403,6 +403,7 @@ export function ProfileClient({ user, badgeStats, recentCompletions }: Props) {
               <Link
                 key={completion.badgeId}
                 href={`/badges/${completion.badgeId}`}
+                prefetch={false}
                 className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-card-hover transition-colors"
               >
                 <div className="flex items-center gap-2">

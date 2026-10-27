@@ -29,15 +29,15 @@ export function levelKey(gameId: number, level: number): string {
 
 export async function loadLevelsData(playerIds: string[]): Promise<LevelsData> {
   const [games, topScores, playerScores] = await Promise.all([
-    // Games the sync couldn't place in a room aren't on the floor; leave them out.
+    // Only games playable here; retired games and special modes stay out.
     prisma.activateGame.findMany({
-      where: { roomSlug: { not: "unknown" } },
+      where: { isActive: true },
       orderBy: [{ sortIndex: "asc" }, { name: "asc" }],
       select: { id: true, name: true, roomSlug: true, roomName: true },
     }),
-    prisma.globalLevelTopScore.findMany({ select: { gameId: true, level: true, topScore: true } }),
+    prisma.globalLevelTopScore.findMany({ where: { game: { isActive: true } }, select: { gameId: true, level: true, topScore: true } }),
     prisma.userLevelScore.findMany({
-      where: { userId: { in: playerIds }, score: { gt: 0 }, game: { roomSlug: { not: "unknown" } } },
+      where: { userId: { in: playerIds }, score: { gt: 0 }, game: { isActive: true } },
       select: { userId: true, gameId: true, level: true, score: true },
     }),
   ]);

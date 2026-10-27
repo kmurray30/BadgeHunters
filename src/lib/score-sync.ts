@@ -246,6 +246,34 @@ async function upsertRoomCatalog(
   }
 }
 
+/**
+ * Games in this room's catalog that also have a location leaderboard. The
+ * catalog alone also lists one-level special modes and games nobody here can
+ * play; neither ever gets high scores.
+ */
+export function activeRoomGameIds(
+  roomGames: { id: number }[],
+  roomScores: ActivateLevelScoreEntry[],
+): number[] {
+  const scoredIds = new Set(roomScores.filter((entry) => entry.highScore > 0).map((entry) => entry.gameId));
+  return roomGames.filter((game) => scoredIds.has(game.id)).map((game) => game.id);
+}
+
+async function updateRoomGameActivity(
+  roomSlug: string,
+  roomGames: { id: number }[],
+  roomScores: ActivateLevelScoreEntry[],
+) {
+  // An empty leaderboard is more likely an API hiccup than a room with no games.
+  if (roomScores.length === 0) return;
+  const activeIds = activeRoomGameIds(roomGames, roomScores);
+  await prisma.activateGame.updateMany({ where: { id: { in: activeIds } }, data: { isActive: true } });
+  await prisma.activateGame.updateMany({
+    where: { roomSlug, id: { notIn: activeIds } },
+    data: { isActive: false },
+  });
+}
+
 async function ensureActivateGameExists(
   gameId: number,
   roomSlug: string,
@@ -590,6 +618,7 @@ export async function runScoreSync(
                 const roomName = roomData.room.name;
                 await upsertRoomCatalog(roomSlug, roomName, roomData.roomGames);
                 await upsertGlobalTopScores(roomSlug, roomName, roomData.roomScores);
+                await updateRoomGameActivity(roomSlug, roomData.roomGames, roomData.roomScores);
 
                 await progressTracker.setRoomStatus(roomIndex, "done");
                 syncLog(

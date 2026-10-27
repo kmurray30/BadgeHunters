@@ -258,6 +258,7 @@ export function BadgeDetailClient({
               <div key={completedUser.id} className="flex items-center justify-between">
                 <Link
                   href={`/players/${completedUser.id}`}
+                  prefetch={false}
                   className={`text-sm hover:underline transition-colors ${completedUser.id === currentUserId ? "text-success font-medium" : "text-foreground hover:text-accent"}`}
                 >
                   {completedUser.displayName}

@@ -2,11 +2,12 @@
 
 import type { GroupFilterState, GroupProgressFilter } from "@/lib/group-progress";
 
-const PROGRESS_OPTIONS: { value: GroupProgressFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "nobody", label: "Nobody" },
-  { value: "some", label: "Some" },
-  { value: "everyone", label: "Everyone" },
+// Labels for a group, and for when only you are selected.
+const PROGRESS_OPTIONS: { value: GroupProgressFilter; label: string; soloLabel: string }[] = [
+  { value: "all", label: "Show all", soloLabel: "Show all" },
+  { value: "nobody", label: "Nobody's done", soloLabel: "To do" },
+  { value: "some", label: "Some done", soloLabel: "" },
+  { value: "everyone", label: "All done", soloLabel: "Done" },
 ];
 
 interface GroupFiltersProps {
@@ -18,14 +19,14 @@ interface GroupFiltersProps {
 
 export function GroupFilters({ value, onChange, groupSize }: GroupFiltersProps) {
   const options = groupSize > 1 ? PROGRESS_OPTIONS : PROGRESS_OPTIONS.filter((option) => option.value !== "some");
-  const progressLabel = groupSize > 1 ? "Done by" : "Status";
+  const progressLabel = groupSize > 1 ? "Done by the selected players" : "Status";
 
   return (
     <>
       <div role="radiogroup" aria-label={progressLabel} className="flex shrink-0 rounded-xl border border-border bg-card p-0.5">
         {options.map((option) => {
           const active = value.progress === option.value;
-          const label = groupSize > 1 ? option.label : { all: "All", nobody: "To do", some: "", everyone: "Done" }[option.value];
+          const label = groupSize > 1 ? option.label : option.soloLabel;
           return (
             <button
               key={option.value}

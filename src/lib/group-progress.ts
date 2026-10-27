@@ -32,3 +32,18 @@ export function matchesGroupFilters(
       return true;
   }
 }
+
+/** Plain-English summary of the active filters, or null when nothing is filtered. */
+export function describeGroupFilters(filters: GroupFilterState, groupSize: number): string | null {
+  const parts: string[] = [];
+  if (groupSize > 1) {
+    if (filters.progress === "nobody") parts.push("none of the selected players have done");
+    if (filters.progress === "some") parts.push("some, but not all, of the selected players have done");
+    if (filters.progress === "everyone") parts.push("every selected player has done");
+    if (filters.notDoneByMe) parts.push("you haven't done");
+  } else {
+    if (filters.progress === "nobody") parts.push("you haven't done");
+    if (filters.progress === "everyone") parts.push("you've done");
+  }
+  return parts.length > 0 ? `Only ones ${parts.join(" and ")}` : null;
+}
