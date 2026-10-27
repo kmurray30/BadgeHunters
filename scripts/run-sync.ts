@@ -1,18 +1,14 @@
 #!/usr/bin/env npx tsx
 /**
  * Hourly job, run by the Railway cron service (`npm run sync:cron`):
- * expires past sessions, then syncs scores and badges from the Activate API.
+ * syncs scores and badges from the Activate API.
  * Exits when done so Railway can schedule the next run.
  */
 
 import { prisma } from "../src/lib/db";
-import { runSessionExpiry } from "../src/lib/session-expiry";
 import { getActiveScoreSyncRun, runScoreSync } from "../src/lib/score-sync";
 
 async function main() {
-  const expiry = await runSessionExpiry();
-  console.log(`[cron] Expired ${expiry.expired} session(s)`);
-
   const activeRun = await getActiveScoreSyncRun();
   if (activeRun) {
     console.log(`[cron] Sync run ${activeRun.id} is already in progress; skipping this hour`);

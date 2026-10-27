@@ -1,49 +1,58 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
+
+const CHANGE_EVENT = "bh:persisted-state-change";
+
+function subscribe(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  window.addEventListener(CHANGE_EVENT, onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(CHANGE_EVENT, onChange);
+  };
+}
 
 /**
- * Behaves exactly like useState, but reads the initial value from localStorage
- * on first client mount and writes back on every subsequent change.
- *
- * SSR-safe: the server (and the initial client render) always use `defaultValue`
- * to avoid hydration mismatches. The stored value is applied in a useEffect,
- * so there may be a single silent re-render on mount.
- *
- * A single effect handles both the initial load (first run, per key) and all
- * subsequent persists. This avoids the race condition where the second of two
- * separate effects could write the stale default value before the first effect's
- * setState triggers a re-render.
+ * Like useState, but remembered in localStorage per device. The server and the
+ * hydration render use `defaultValue`; the stored value applies right after
+ * hydration. Components using the same key stay in sync.
  */
-export function usePersistedState<T>(
-  storageKey: string,
-  defaultValue: T,
-): [T, React.Dispatch<React.SetStateAction<T>>] {
-  const [state, setState] = useState<T>(defaultValue);
-  const phase = useRef<{ key: string; ready: boolean }>({ key: "", ready: false });
-
-  useEffect(() => {
-    if (!phase.current.ready || phase.current.key !== storageKey) {
-      // First run (or key changed): load from localStorage, don't persist yet.
-      phase.current = { key: storageKey, ready: true };
+export function usePersistedState<T>(storageKey: string, defaultValue: T): [T, (value: T) => void] {
+  const raw = useSyncExternalStore(
+    subscribe,
+    () => {
       try {
-        const stored = localStorage.getItem(storageKey);
-        if (stored !== null) {
-          setState(JSON.parse(stored) as T);
-        }
+        return localStorage.getItem(storageKey);
       } catch {
-        // Corrupted JSON or storage unavailable — use default.
+        return null;
       }
-      return;
-    }
+    },
+    () => null,
+  );
 
-    // Subsequent runs: persist the current state.
+  const value = useMemo(() => {
+    if (raw === null) return defaultValue;
     try {
-      localStorage.setItem(storageKey, JSON.stringify(state));
+      return JSON.parse(raw) as T;
     } catch {
-      // Private browsing / quota exceeded — silently ignore.
+      return defaultValue;
     }
-  }, [storageKey, state]);
+    // defaultValue is a fallback only; a new object each render shouldn't re-parse.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [raw]);
 
-  return [state, setState];
+  const setValue = useCallback(
+    (next: T) => {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(next));
+      } catch {
+        // Private browsing / quota exceeded: the change just isn't remembered.
+      }
+      window.dispatchEvent(new Event(CHANGE_EVENT));
+    },
+    [storageKey],
+  );
+
+  return [value, setValue];
 }

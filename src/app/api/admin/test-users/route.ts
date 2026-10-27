@@ -214,15 +214,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Cannot delete non-test users" }, { status: 403 });
   }
 
-  // Session.createdBy and Session.completedBy don't cascade on delete,
-  // so we need to nuke sessions this user created and clear completedBy references.
-  await prisma.session.deleteMany({ where: { createdByUserId: userId } });
-  await prisma.session.updateMany({
-    where: { completedByUserId: userId },
-    data: { completedByUserId: null },
-  });
-
-  // Now the user.delete cascade handles everything else (badge statuses, comments, etc.)
+  // Every relation cascades (badge statuses, comments, etc.)
   await prisma.user.delete({ where: { id: userId } });
 
   return NextResponse.json({ success: true });

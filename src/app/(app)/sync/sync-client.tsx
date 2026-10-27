@@ -611,7 +611,7 @@ export function SyncClient({
 
             {latestFinished.status === "completed" ? (
               <Link
-                href="/levels/scores"
+                href="/levels"
                 className="mt-4 inline-block text-sm text-accent hover:underline"
               >
                 View level scores →

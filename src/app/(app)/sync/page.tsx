@@ -16,7 +16,7 @@ export default async function SyncPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <h1 className="mb-2 text-2xl font-bold text-foreground">Sync Scores</h1>
+      <h1 className="font-display mb-2 text-3xl font-bold uppercase tracking-wide">Sync Scores</h1>
       <p className="mb-6 text-sm text-muted">
         Pull the latest scores from playactivate.com for everyone in the group.
       </p>

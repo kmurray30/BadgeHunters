@@ -187,7 +187,7 @@ export function ProfileClient({ user, badgeStats, recentCompletions }: Props) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Profile</h1>
+        <h1 className="font-display text-3xl font-bold uppercase tracking-wide">Profile</h1>
         {!isEditing ? (
           <button
             onClick={() => setIsEditing(true)}

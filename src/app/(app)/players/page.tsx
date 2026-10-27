@@ -1,131 +1,73 @@
+import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session-helpers";
-import { isolationFilter } from "@/lib/isolation";
-import { getRankColor, RANK_COLOR_HEX } from "@/lib/rank";
-import Link from "next/link";
+import { RANK_COLOR_HEX } from "@/lib/rank";
+import { loadRoster } from "@/lib/roster";
 
 export default async function PlayersPage() {
   const currentUser = await requireUser();
-  const isolation = isolationFilter(currentUser);
+  const roster = await loadRoster(currentUser);
+  const rosterIds = roster.map((player) => player.id);
 
-  const totalBadgeCount = await prisma.badge.count({ where: { active: true } });
-
-  const players = await prisma.user.findMany({
-    where: { ...isolation, isActive: true },
-    orderBy: { currentScore: "desc" },
-    include: {
-      _count: {
-        select: {
-          badgeStatuses: {
-            where: { isCompleted: true },
-          },
-        },
-      },
-    },
-  });
+  const [totalBadges, badgeCounts] = await Promise.all([
+    prisma.badge.count({ where: { active: true } }),
+    prisma.badgeUserStatus.groupBy({
+      by: ["userId"],
+      where: { userId: { in: rosterIds }, isCompleted: true, badge: { active: true } },
+      _count: { _all: true },
+    }),
+  ]);
+  const badgesByUser = new Map(badgeCounts.map((row) => [row.userId, row._count._all]));
+  const leaderboard = [...roster].sort((playerA, playerB) => playerB.currentScore - playerA.currentScore);
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-6">
-      <h1 className="mb-6 text-2xl font-bold text-foreground">Players</h1>
+    <div className="mx-auto max-w-3xl px-4 pt-5">
+      <h1 className="font-display mb-4 text-3xl font-bold uppercase tracking-wide">Players</h1>
 
-      <div className="rounded-lg border border-border">
-        {/* Table header */}
-        <div className="grid grid-cols-[2fr_5rem_5rem_5rem] items-center gap-4 border-b border-border bg-card px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
-          <span>Player</span>
-          <span className="text-center">Score</span>
-          <span className="text-center">Rank</span>
-          <span className="text-center">Badges</span>
-        </div>
-
-        {/* Player rows */}
-        <div className="divide-y divide-border">
-          {players.map((player) => {
-            const rankColor = getRankColor(player.currentScore);
-            const rankHex = RANK_COLOR_HEX[rankColor];
-            const displayName =
-              player.displayNameMode === "real_name"
-                ? player.realName ?? player.activatePlayerName ?? "Unknown"
-                : player.activatePlayerName ?? player.realName ?? "Unknown";
-            const completedCount = player._count.badgeStatuses;
-            const progressPercent = totalBadgeCount > 0 ? Math.round((completedCount / totalBadgeCount) * 100) : 0;
-
-            return (
+      <ol className="space-y-2">
+        {leaderboard.map((player, index) => {
+          const badges = badgesByUser.get(player.id) ?? 0;
+          const percent = totalBadges > 0 ? Math.round((badges / totalBadges) * 100) : 0;
+          return (
+            <li key={player.id}>
               <Link
-                key={player.id}
                 href={`/players/${player.id}`}
-                className={`grid grid-cols-[2fr_5rem_5rem_5rem] items-center gap-4 px-4 py-3 transition-colors hover:bg-card-hover ${
-                  player.id === currentUser.id ? "bg-accent/[0.03]" : ""
-                }`}
+                className={`panel flex items-center gap-3 p-3 transition hover:border-accent/40 ${player.isMe ? "border-accent/40" : ""}`}
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
-                    style={{ backgroundColor: rankHex }}
-                  >
-                    {displayName.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-sm font-medium text-foreground">
-                        {displayName}
-                      </span>
-                      {player.id === currentUser.id && (
-                        <span className="shrink-0 text-[10px] text-accent">(you)</span>
-                      )}
-                      {player.isTestUser && (
-                        <span className="shrink-0 rounded bg-warning/20 px-1 py-px text-[9px] font-bold text-warning">
-                          TEST
-                        </span>
-                      )}
-                      {player.role === "superuser" && (
-                        <span className="shrink-0 rounded bg-accent/20 px-1 py-px text-[9px] font-bold text-accent">
-                          SU
-                        </span>
-                      )}
+                <span className="font-display w-6 shrink-0 text-center text-lg font-bold text-muted">{index + 1}</span>
+                <span
+                  className="font-display flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg font-bold text-black"
+                  style={{ backgroundColor: player.color, boxShadow: `0 0 14px color-mix(in srgb, ${player.color} 45%, transparent)` }}
+                >
+                  {player.name.charAt(0).toUpperCase()}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold">
+                    {player.name}
+                    {player.isMe && <span className="ml-1.5 text-xs font-medium text-muted">you</span>}
+                  </p>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slot-empty">
+                      <div className="h-full rounded-full bg-accent" style={{ width: `${percent}%` }} />
                     </div>
-                    {player.activatePlayerName && player.realName && (
-                      <span className="text-[10px] text-muted">
-                        {player.displayNameMode === "real_name"
-                          ? player.activatePlayerName
-                          : player.realName}
-                      </span>
-                    )}
+                    <span className="shrink-0 text-xs tabular-nums text-muted">
+                      {badges}/{totalBadges} badges
+                    </span>
                   </div>
                 </div>
-
-                <span className="text-center text-sm tabular-nums text-foreground">
-                  {player.currentScore.toLocaleString()}
-                </span>
-
-                <span className="text-center text-sm font-medium" style={{ color: rankHex }}>
-                  {rankColor}
-                </span>
-
-                <div className="text-center">
-                  <span className="text-sm tabular-nums text-foreground">
-                    {completedCount}
-                  </span>
-                  <span className="text-[10px] text-muted">
-                    /{totalBadgeCount}
-                  </span>
-                  <div className="mt-1 h-1 overflow-hidden rounded-full bg-border">
-                    <div
-                      className="h-full rounded-full bg-accent"
-                      style={{ width: `${progressPercent}%` }}
-                    />
-                  </div>
+                <div className="shrink-0 text-right">
+                  <p className="font-display font-bold tabular-nums">{player.currentScore.toLocaleString()}</p>
+                  <p className="text-xs font-semibold" style={{ color: RANK_COLOR_HEX[player.rankColor] }}>
+                    {player.rankColor}
+                  </p>
                 </div>
               </Link>
-            );
-          })}
-        </div>
-      </div>
+            </li>
+          );
+        })}
+      </ol>
 
-      {players.length === 0 && (
-        <div className="mt-8 text-center text-muted">
-          <p>No players yet.</p>
-        </div>
-      )}
+      {leaderboard.length === 0 && <div className="panel p-8 text-center text-muted">No players yet.</div>}
     </div>
   );
 }

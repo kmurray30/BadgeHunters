@@ -1,395 +1,173 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { LevelScoreGrid } from "@/components/level-score-grid";
-import type {
-  GroupCompletionPlayerOption,
-  LevelRoomGroup,
+import { useMemo, useState } from "react";
+import { CompletionPie } from "@/components/completion-pie";
+import { DetailSheet, PlayerStatusList } from "@/components/detail-sheet";
+import { GroupFilters } from "@/components/group-filters";
+import { PlayerPicker } from "@/components/player-picker";
+import { usePersistedState } from "@/hooks/use-persisted-state";
+import { usePlayerSelection } from "@/hooks/use-player-selection";
+import { DEFAULT_GROUP_FILTERS, matchesGroupFilters, type GroupFilterState } from "@/lib/group-progress";
+import {
+  compactScore,
+  isTopScore,
+  LEVEL_NUMBERS,
+  levelKey,
+  scoreHeatColor,
+  type LevelsData,
+  type LevelsGame,
+  type LevelsRoom,
 } from "@/lib/levels-grid";
+import type { RosterPlayer } from "@/lib/roster";
 
-export function LevelsSubNav() {
-  const pathname = usePathname();
+const GRID_COLUMNS = "grid grid-cols-[6.25rem_repeat(10,minmax(0,1fr))] md:grid-cols-[11rem_repeat(10,minmax(0,1fr))]";
 
-  const tabs = [
-    { href: "/levels/scores", label: "Scores" },
-    { href: "/levels/group-completion", label: "Group Completion" },
-  ];
-
-  return (
-    <div className="mb-6 flex gap-1 rounded-lg border border-border p-0.5 w-fit">
-      {tabs.map((tab) => {
-        const isActive = pathname === tab.href;
-        return (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
-              isActive
-                ? "bg-accent text-white"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            {tab.label}
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
-
-export function EmptyLevelsState({ message }: { message?: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-8 text-center">
-      <p className="text-sm text-muted">
-        {message ??
-          "No level score data yet. Run a sync to pull scores from PlayActivate."}
-      </p>
-      <Link
-        href="/sync"
-        className="mt-4 inline-block text-sm font-medium text-accent hover:underline"
-      >
-        Go to Sync →
-      </Link>
-    </div>
-  );
-}
-
-export function ScoresClient({
-  currentUserId,
-  initialPlayerId,
-  initialPlayers,
-}: {
+interface LevelsClientProps {
+  data: LevelsData;
+  roster: RosterPlayer[];
   currentUserId: string;
-  initialPlayerId: string;
-  initialPlayers: GroupCompletionPlayerOption[];
-}) {
-  const router = useRouter();
-  const [players] = useState(initialPlayers);
-  const [selectedPlayerId, setSelectedPlayerId] = useState(initialPlayerId);
-  const [rooms, setRooms] = useState<LevelRoomGroup[]>([]);
-  const [hasData, setHasData] = useState(false);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const hasLoadedOnce = useRef(false);
-
-  useEffect(() => {
-    setSelectedPlayerId(initialPlayerId);
-  }, [initialPlayerId]);
-
-  useEffect(() => {
-    async function loadScores() {
-      if (hasLoadedOnce.current) {
-        setIsRefreshing(true);
-      }
-      try {
-        const response = await fetch(
-          `/api/levels/scores?playerId=${encodeURIComponent(selectedPlayerId)}`,
-        );
-        if (response.ok) {
-          const data = await response.json();
-          setRooms(data.rooms ?? []);
-          setHasData(data.hasData ?? false);
-        }
-      } finally {
-        hasLoadedOnce.current = true;
-        setIsInitialLoad(false);
-        setIsRefreshing(false);
-      }
-    }
-    loadScores();
-  }, [selectedPlayerId]);
-
-  function selectPlayer(playerId: string) {
-    setSelectedPlayerId(playerId);
-    const query =
-      playerId === currentUserId
-        ? ""
-        : `?playerId=${encodeURIComponent(playerId)}`;
-    router.replace(`/levels/scores${query}`, { scroll: false });
-  }
-
-  const picker = (
-    <ScoresPlayerPicker
-      currentUserId={currentUserId}
-      players={players}
-      selectedPlayerId={selectedPlayerId}
-      isRefreshing={isRefreshing}
-      onSelect={selectPlayer}
-    />
-  );
-
-  if (isInitialLoad) {
-    return (
-      <>
-        {picker}
-        <p className="text-sm text-muted">Loading scores…</p>
-      </>
-    );
-  }
-
-  if (!hasData && rooms.length === 0) {
-    return (
-      <>
-        {picker}
-        <EmptyLevelsState />
-      </>
-    );
-  }
-
-  return (
-    <>
-      {picker}
-      <div
-        className={isRefreshing ? "pointer-events-none opacity-60" : undefined}
-      >
-        <LevelScoreGrid mode="my-scores" rooms={rooms} />
-      </div>
-    </>
-  );
 }
 
-export function GroupCompletionClient({
-  initialPlayers,
-}: {
-  initialPlayers: GroupCompletionPlayerOption[];
-}) {
-  const [players, setPlayers] = useState(initialPlayers);
-  const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<string>>(
-    () => new Set(initialPlayers.map((player) => player.id)),
-  );
-  const [rooms, setRooms] = useState<LevelRoomGroup[]>([]);
-  const [hasData, setHasData] = useState(false);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const hasLoadedOnce = useRef(false);
-
-  useEffect(() => {
-    async function loadCompletion() {
-      if (hasLoadedOnce.current) {
-        setIsRefreshing(true);
-      }
-      try {
-        const playerIds = [...selectedPlayerIds].join(",");
-        const response = await fetch(
-          `/api/levels/group-completion?playerIds=${encodeURIComponent(playerIds)}`,
-        );
-        if (response.ok) {
-          const data = await response.json();
-          setRooms(data.rooms ?? []);
-          setHasData(data.hasData ?? false);
-          if (Array.isArray(data.players)) {
-            setPlayers(data.players);
-          }
-        }
-      } finally {
-        hasLoadedOnce.current = true;
-        setIsInitialLoad(false);
-        setIsRefreshing(false);
-      }
-    }
-    loadCompletion();
-  }, [selectedPlayerIds]);
-
-  function togglePlayer(playerId: string) {
-    setSelectedPlayerIds((previous) => {
-      const next = new Set(previous);
-      if (next.has(playerId)) {
-        if (next.size > 1) {
-          next.delete(playerId);
-        }
-      } else {
-        next.add(playerId);
-      }
-      return next;
-    });
-  }
-
-  function selectAll() {
-    setSelectedPlayerIds(new Set(players.map((player) => player.id)));
-  }
-
-  function deselectAll() {
-    setSelectedPlayerIds(new Set());
-  }
-
-  const picker = (
-    <PlayerPicker
-      players={players}
-      selectedPlayerIds={selectedPlayerIds}
-      isRefreshing={isRefreshing}
-      onToggle={togglePlayer}
-      onSelectAll={selectAll}
-      onDeselectAll={deselectAll}
-    />
-  );
-
-  if (isInitialLoad) {
-    return (
-      <>
-        {picker}
-        <p className="text-sm text-muted">Loading completion data…</p>
-      </>
-    );
-  }
-
-  if (!hasData && rooms.length === 0) {
-    return (
-      <>
-        {picker}
-        <EmptyLevelsState />
-      </>
-    );
-  }
-
-  return (
-    <>
-      {picker}
-      <div
-        className={isRefreshing ? "pointer-events-none opacity-60" : undefined}
-      >
-        <LevelScoreGrid mode="group-completion" rooms={rooms} />
-      </div>
-    </>
-  );
+interface OpenCell {
+  room: LevelsRoom;
+  game: LevelsGame;
+  level: number;
 }
 
-function ScoresPlayerPicker({
-  players,
-  selectedPlayerId,
-  currentUserId,
-  isRefreshing,
-  onSelect,
-}: {
-  players: GroupCompletionPlayerOption[];
-  selectedPlayerId: string;
-  currentUserId: string;
-  isRefreshing?: boolean;
-  onSelect: (playerId: string) => void;
-}) {
-  return (
-    <div className="sticky top-14 z-40 -mx-4 mb-4 border-b border-border bg-card/95 px-4 py-4 backdrop-blur-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-foreground">Player</h2>
-        {isRefreshing ? (
-          <span className="text-xs text-muted">Updating…</span>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {players.map((player) => {
-          const isSelected = selectedPlayerId === player.id;
-          const isCurrentUser = player.id === currentUserId;
-          const label = player.isSynced
-            ? isCurrentUser
-              ? `${player.displayName} (you)`
-              : player.displayName
-            : `${player.displayName} (not synced)`;
+export function LevelsClient({ data, roster, currentUserId }: LevelsClientProps) {
+  const { selectedIds, selectedPlayers, toggle, justMe, selectAll } = usePlayerSelection(roster, currentUserId);
+  const [storedFilters, setFilters] = usePersistedState<GroupFilterState>("bh:levels:group-filters", DEFAULT_GROUP_FILTERS);
+  const [openCell, setOpenCell] = useState<OpenCell | null>(null);
 
-          return (
-            <button
-              key={player.id}
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => onSelect(player.id)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                player.isSynced
-                  ? isSelected
-                    ? "bg-accent text-white"
-                    : "border border-border text-muted hover:text-foreground"
-                  : isSelected
-                    ? "bg-accent/40 text-muted"
-                    : "border border-border text-muted/50 hover:text-muted"
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+  const groupSize = selectedIds.length;
+  const singlePlayer = groupSize === 1 ? selectedPlayers[0] : null;
+  // "Some" and "Not done by me" have no meaning with only one player selected.
+  const filters: GroupFilterState =
+    groupSize > 1 ? storedFilters : { progress: storedFilters.progress === "some" ? "all" : storedFilters.progress, notDoneByMe: false };
+  const filtering = filters.progress !== "all" || filters.notDoneByMe;
 
-function PlayerPicker({
-  players,
-  selectedPlayerIds,
-  isRefreshing,
-  onToggle,
-  onSelectAll,
-  onDeselectAll,
-}: {
-  players: GroupCompletionPlayerOption[];
-  selectedPlayerIds: Set<string>;
-  isRefreshing?: boolean;
-  onToggle: (playerId: string) => void;
-  onSelectAll: () => void;
-  onDeselectAll: () => void;
-}) {
-  const allSelected =
-    players.length > 0 && selectedPlayerIds.size === players.length;
-  const noneSelected = selectedPlayerIds.size === 0;
+  const scoreOf = (playerId: string, key: string) => data.scoresByPlayer[playerId]?.[key];
+  const cellMatches = (key: string) =>
+    matchesGroupFilters((playerId) => !!scoreOf(playerId, key), selectedIds, currentUserId, filters);
+
+  const totalLevels = data.rooms.reduce((sum, room) => sum + room.games.length * LEVEL_NUMBERS.length, 0);
+  const myBeaten = Object.keys(data.scoresByPlayer[currentUserId] ?? {}).length;
+
+  // Rooms and games with at least one level passing the filters.
+  const visibleRooms = useMemo(() => {
+    if (!filtering) return data.rooms;
+    return data.rooms
+      .map((room) => ({
+        ...room,
+        games: room.games.filter((game) => LEVEL_NUMBERS.some((level) => cellMatches(levelKey(game.id, level)))),
+      }))
+      .filter((room) => room.games.length > 0);
+    // cellMatches only depends on the values listed here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, filtering, selectedIds, currentUserId, filters.progress, filters.notDoneByMe]);
 
   return (
-    <div className="sticky top-14 z-40 -mx-4 mb-4 border-b border-border bg-card/95 px-4 py-4 backdrop-blur-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-foreground">Players</h2>
-        <div className="flex items-center gap-2">
-          {isRefreshing ? (
-            <span className="text-xs text-muted">Updating…</span>
-          ) : null}
-          <button
-            type="button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={onSelectAll}
-            disabled={allSelected}
-            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-card-hover disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Select all
-          </button>
-          <button
-            type="button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={onDeselectAll}
-            disabled={noneSelected}
-            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-card-hover disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Deselect all
-          </button>
-        </div>
+    <div>
+      <div className="mb-3 flex items-end justify-between gap-3">
+        <h1 className="font-display text-3xl font-bold uppercase tracking-wide">Levels</h1>
+        <p className="font-display pb-1 text-sm text-muted">
+          <span className="text-lg font-bold text-foreground">{myBeaten}</span> / {totalLevels} yours
+        </p>
       </div>
-      <div className="flex flex-wrap gap-2">
-        {players.map((player) => {
-          const isSelected = selectedPlayerIds.has(player.id);
-          const label = player.isSynced
-            ? player.displayName
-            : `${player.displayName} (not synced)`;
 
-          return (
-            <button
-              key={player.id}
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => onToggle(player.id)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                player.isSynced
-                  ? isSelected
-                    ? "bg-accent text-white"
-                    : "border border-border text-muted hover:text-foreground"
-                  : isSelected
-                    ? "bg-accent/40 text-muted"
-                    : "border border-border text-muted/50 hover:text-muted"
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
+      <PlayerPicker roster={roster} selectedIds={selectedIds} onToggle={toggle} onJustMe={justMe} onSelectAll={selectAll} />
+
+      <div className="no-scrollbar -mx-4 mt-4 flex items-center gap-2 overflow-x-auto px-4">
+        <GroupFilters value={filters} onChange={setFilters} groupSize={groupSize} />
       </div>
-      <p className="mt-2 text-[10px] text-muted">
-        {selectedPlayerIds.size} of {players.length} selected — cells show who
-        has completed each level (3-letter abbreviations)
+      <p className="mt-2 text-xs text-muted">
+        {singlePlayer
+          ? "Color shows how close each score is to the top score. Tap a level for details."
+          : "Each slice is a player. Tap a level to see everyone's scores."}
       </p>
+
+      <div className="mt-3 space-y-3">
+        {visibleRooms.map((room) => (
+          <section key={room.slug} className="panel overflow-hidden">
+            <div className={`${GRID_COLUMNS} items-center gap-[3px] border-b border-border bg-card-hover/40 px-2 py-1.5`}>
+              <h2 className="font-display truncate pl-1 text-sm font-bold uppercase tracking-wider text-highlight">{room.name}</h2>
+              {LEVEL_NUMBERS.map((level) => (
+                <span key={level} className="font-display text-center text-[11px] font-semibold text-muted">
+                  {level}
+                </span>
+              ))}
+            </div>
+            <div className="space-y-[3px] p-2">
+              {room.games.map((game) => (
+                <div key={game.id} className={`${GRID_COLUMNS} items-center gap-[3px]`}>
+                  <span className="truncate pl-1 pr-1 text-[13px] font-medium">{game.name}</span>
+                  {LEVEL_NUMBERS.map((level) => {
+                    const key = levelKey(game.id, level);
+                    const dimmed = filtering && !cellMatches(key);
+                    return (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => setOpenCell({ room, game, level })}
+                        aria-label={`${game.name} level ${level}`}
+                        className={`flex aspect-square items-center justify-center transition active:scale-90 md:aspect-auto md:h-10 ${dimmed ? "opacity-15" : ""}`}
+                      >
+                        {singlePlayer ? (
+                          <ScoreTile level={level} score={scoreOf(singlePlayer.id, key)} topScore={data.topScores[key]} />
+                        ) : (
+                          <span className="block aspect-square h-full max-w-9">
+                            <CompletionPie
+                              size="100%"
+                              slices={selectedPlayers.map((player) => ({ color: player.color, filled: !!scoreOf(player.id, key) }))}
+                            />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
+        {visibleRooms.length === 0 && <div className="panel p-8 text-center text-muted">No levels match these filters.</div>}
+      </div>
+
+      {openCell && (
+        <DetailSheet
+          title={`${openCell.game.name} · Level ${openCell.level}`}
+          subtitle={`${openCell.room.name}${
+            data.topScores[levelKey(openCell.game.id, openCell.level)]
+              ? ` · Top score ${data.topScores[levelKey(openCell.game.id, openCell.level)].toLocaleString()}`
+              : ""
+          }`}
+          onClose={() => setOpenCell(null)}
+        >
+          <PlayerStatusList
+            rows={selectedPlayers.map((player) => {
+              const score = scoreOf(player.id, levelKey(openCell.game.id, openCell.level));
+              return { player, done: !!score, detail: score ? score.toLocaleString() : undefined };
+            })}
+          />
+        </DetailSheet>
+      )}
     </div>
+  );
+}
+
+function ScoreTile({ level, score, topScore }: { level: number; score?: number; topScore?: number }) {
+  const color = scoreHeatColor(level, score, topScore);
+  const top = isTopScore(score, topScore);
+  return (
+    <span
+      className="font-display flex h-full w-full items-center justify-center rounded-md text-[11px] font-bold text-black/75"
+      style={
+        top
+          ? { background: "linear-gradient(135deg, var(--accent), var(--highlight))", boxShadow: "0 0 10px rgba(255,62,165,0.6)" }
+          : { backgroundColor: color ?? "var(--slot-empty)" }
+      }
+    >
+      {score ? <span className="hidden md:inline">{compactScore(score)}</span> : null}
+    </span>
   );
 }

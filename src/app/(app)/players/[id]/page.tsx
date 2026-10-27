@@ -1,13 +1,12 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session-helpers";
-import { isolationFilter } from "@/lib/isolation";
-import { getRankColor, RANK_COLOR_HEX } from "@/lib/rank";
-import { notFound } from "next/navigation";
-import Link from "next/link";
-import { RankPopup } from "@/components/rank-popup";
+import { RANK_COLOR_HEX } from "@/lib/rank";
+import { loadRoster } from "@/lib/roster";
 import { BackButton } from "@/components/back-button";
 import { parseBackFromQuery } from "@/lib/back-navigation";
-import { PlayerBadgesClient } from "./player-badges-client";
+import { CompareButton } from "./compare-button";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -16,182 +15,100 @@ interface Props {
 
 export default async function PlayerDetailPage({ params, searchParams }: Props) {
   const { id } = await params;
-  const query = await searchParams;
-  const fromContext = parseBackFromQuery(query.from);
-  const backFallback = fromContext?.path ?? "/players";
-  const backLabel = fromContext?.label ?? "Players";
+  const fromContext = parseBackFromQuery((await searchParams).from);
   const currentUser = await requireUser();
-  const isolation = isolationFilter(currentUser);
 
-  const player = await prisma.user.findUnique({
-    where: { id },
-  });
+  const player = (await loadRoster(currentUser)).find((rosterPlayer) => rosterPlayer.id === id);
+  if (!player) notFound();
 
-  if (!player || player.isTestUser !== currentUser.isTestUser) {
-    notFound();
-  }
+  const [details, totalBadges, completedBadges, gameCount, levelsBeaten] = await Promise.all([
+    prisma.user.findUniqueOrThrow({
+      where: { id },
+      select: { leaderboardPosition: true, coins: true, lastSyncedAt: true, activatePlayerName: true, realName: true },
+    }),
+    prisma.badge.count({ where: { active: true } }),
+    prisma.badgeUserStatus.findMany({
+      where: { userId: id, isCompleted: true, badge: { active: true } },
+      orderBy: { badge: { name: "asc" } },
+      select: { badge: { select: { id: true, name: true, description: true } } },
+    }),
+    prisma.activateGame.count({ where: { roomSlug: { not: "unknown" } } }),
+    prisma.userLevelScore.count({ where: { userId: id, score: { gt: 0 }, game: { roomSlug: { not: "unknown" } } } }),
+  ]);
 
-  const totalBadgeCount = await prisma.badge.count({ where: { active: true } });
-
-  const completedBadges = await prisma.badgeUserStatus.findMany({
-    where: { userId: player.id, isCompleted: true },
-    orderBy: { badgeId: "asc" },
-    include: {
-      badge: {
-        select: {
-          id: true,
-          badgeNumber: true,
-          name: true,
-          description: true,
-          isPerVisit: true,
-          isMetaBadge: true,
-          userStatuses: {
-            where: { user: isolation },
-            select: {
-              userId: true,
-              isCompleted: true,
-              isTodo: true,
-              personalDifficulty: true,
-              idealPlayerCountBucket: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  const rankColor = getRankColor(player.currentScore);
-  const rankHex = RANK_COLOR_HEX[rankColor];
-  const displayName =
-    player.displayNameMode === "real_name"
-      ? player.realName ?? player.activatePlayerName ?? "Unknown"
-      : player.activatePlayerName ?? player.realName ?? "Unknown";
-  const completedCount = completedBadges.length;
-  const progressPercent = totalBadgeCount > 0 ? Math.round((completedCount / totalBadgeCount) * 100) : 0;
+  const rankHex = RANK_COLOR_HEX[player.rankColor];
+  const otherName = details.realName && details.activatePlayerName
+    ? player.name === details.realName ? details.activatePlayerName : details.realName
+    : null;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6">
-      <BackButton fallback={backFallback} label={backLabel} />
+    <div className="mx-auto max-w-3xl px-4 pt-5">
+      <BackButton fallback={fromContext?.path ?? "/players"} label={fromContext?.label ?? "Players"} />
 
-      {/* Player header */}
-      <div className="mt-4 rounded-xl border border-border bg-card p-6">
+      <section className="panel mt-3 p-5" style={{ boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${player.color} 35%, transparent)` }}>
         <div className="flex items-center gap-4">
-          <div
-            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-2xl font-bold text-white"
-            style={{ backgroundColor: rankHex }}
+          <span
+            className="font-display flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-3xl font-bold text-black"
+            style={{ backgroundColor: player.color, boxShadow: `0 0 24px color-mix(in srgb, ${player.color} 50%, transparent)` }}
           >
-            {displayName.charAt(0).toUpperCase()}
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-foreground">{displayName}</h1>
-              {player.id === currentUser.id && (
-                <span className="text-xs text-accent">(you)</span>
-              )}
-              {player.isTestUser && (
-                <span className="rounded bg-warning/20 px-2 py-0.5 text-xs font-bold text-warning">TEST</span>
-              )}
-              {player.role === "superuser" && (
-                <span className="rounded bg-accent/20 px-2 py-0.5 text-xs font-bold text-accent">Superuser</span>
-              )}
-            </div>
-            {player.activatePlayerName && player.realName && (
-              <p className="text-xs text-muted">
-                {player.displayNameMode === "real_name"
-                  ? `Player: ${player.activatePlayerName}`
-                  : `Name: ${player.realName}`}
-              </p>
-            )}
+            {player.name.charAt(0).toUpperCase()}
+          </span>
+          <div className="min-w-0">
+            <h1 className="font-display truncate text-2xl font-bold uppercase tracking-wide">
+              {player.name}
+              {player.isMe && <span className="ml-2 align-middle text-xs font-medium normal-case text-muted">you</span>}
+            </h1>
+            {otherName && <p className="text-sm text-muted">{otherName}</p>}
           </div>
         </div>
-      </div>
 
-      {/* Stats */}
-      <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-4">
-        <div className="rounded-xl border border-border bg-card px-1.5 py-2.5 sm:p-4 text-center">
-          <p className="text-base sm:text-2xl font-bold text-foreground">{completedCount}</p>
-          <p className="text-[9px] sm:text-xs text-muted leading-tight">of {totalBadgeCount} badges ({progressPercent}%)</p>
-        </div>
-        <div className="rounded-xl border border-border bg-card px-1.5 py-2.5 sm:p-4 text-center">
-          <p className="text-base sm:text-2xl font-bold text-foreground">{player.currentScore.toLocaleString()}</p>
-          <p className="text-[9px] sm:text-xs text-muted">Score</p>
-        </div>
-        <div className="rounded-xl border border-border bg-card px-1.5 py-2.5 sm:p-4 text-center">
-          <RankPopup currentRank={rankColor} rankHex={rankHex} />
-          <p className="text-[9px] sm:text-xs text-muted">Rank</p>
-        </div>
-      </div>
+        <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Stat label="Score" value={player.currentScore.toLocaleString()} color={rankHex} />
+          <Stat label="Rank" value={player.rankColor} color={rankHex} />
+          <Stat label="Badges" value={`${completedBadges.length}/${totalBadges}`} />
+          <Stat label="Levels" value={`${levelsBeaten}/${gameCount * 10}`} />
+        </dl>
+        {(details.leaderboardPosition || details.coins != null) && (
+          <p className="mt-3 text-xs text-muted">
+            {details.leaderboardPosition && <>Leaderboard {details.leaderboardPosition}</>}
+            {details.leaderboardPosition && details.coins != null && " · "}
+            {details.coins != null && <>{details.coins} coins</>}
+          </p>
+        )}
+      </section>
 
-      <div className="mt-4">
-        <Link
-          href={`/levels/scores?playerId=${player.id}`}
-          className="inline-flex items-center rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-card-hover"
-        >
-          View Level Scores
-        </Link>
-      </div>
-
-      {/* Activate details */}
-      {(player.leaderboardPosition || player.levelsBeat || player.coins !== null) && (
-        <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 rounded-xl border border-border bg-card px-4 py-3 text-xs text-muted">
-          {player.leaderboardPosition && (
-            <span>Leaderboard: <span className="font-semibold text-foreground">{player.leaderboardPosition}</span></span>
-          )}
-          {player.levelsBeat && (
-            <span>Levels Beat: <span className="font-semibold text-foreground">{player.levelsBeat}</span></span>
-          )}
-          {player.coins !== null && (
-            <span>Coins: <span className="font-semibold text-foreground">{player.coins}</span></span>
-          )}
+      {!player.isMe && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <CompareButton playerId={player.id} currentUserId={currentUser.id} href="/badges" label="Compare badges" />
+          <CompareButton playerId={player.id} currentUserId={currentUser.id} href="/levels" label="Compare levels" />
         </div>
       )}
 
-      {/* Progress bar */}
-      <p className="mt-4 text-xs text-muted">Badge progress</p>
-      <div className="mt-1 h-2 overflow-hidden rounded-full bg-border">
-        <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${progressPercent}%` }} />
-      </div>
+      <h2 className="font-display mt-6 mb-2 text-sm font-bold uppercase tracking-wider text-muted">
+        Completed badges ({completedBadges.length})
+      </h2>
+      <ul className="grid gap-2 sm:grid-cols-2">
+        {completedBadges.map(({ badge }) => (
+          <li key={badge.id}>
+            <Link href={`/badges/${badge.id}`} className="panel block h-full p-3 transition hover:border-accent/40">
+              <p className="font-display font-bold uppercase leading-tight">{badge.name}</p>
+              <p className="mt-0.5 line-clamp-2 text-xs text-muted">{badge.description}</p>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {completedBadges.length === 0 && <div className="panel p-6 text-center text-sm text-muted">No badges yet.</div>}
+    </div>
+  );
+}
 
-      {/* Last synced */}
-      <p className="mt-3 text-xs text-muted">
-        Last synced: {player.lastSyncedAt ? player.lastSyncedAt.toLocaleString() : "Never"}
-      </p>
-
-      {/* Completed badges list */}
-      <div className="mt-6">
-        <h2 className="mb-3 text-sm font-semibold text-foreground">
-          Completed Badges ({completedCount})
-        </h2>
-        <PlayerBadgesClient
-          isOwnProfile={currentUser.id === player.id}
-          badges={completedBadges.map((status) => {
-            const currentUserStatus = status.badge.userStatuses.find((s) => s.userId === currentUser.id);
-            const playerStatus = status.badge.userStatuses.find((s) => s.userId === player.id);
-            return {
-              id: status.id,
-              badgeId: status.badge.id,
-              badgeName: status.badge.name,
-              badgeNumber: status.badge.badgeNumber,
-              description: status.badge.description,
-              isPerVisit: status.badge.isPerVisit,
-              isMetaBadge: status.badge.isMetaBadge,
-              completedAt: status.completedAt?.toISOString() ?? null,
-              playerDifficulty: playerStatus?.personalDifficulty ?? null,
-              playerPlayerCount: playerStatus?.idealPlayerCountBucket ?? null,
-              currentUserDifficulty: currentUserStatus?.personalDifficulty ?? null,
-              currentUserPlayerCount: currentUserStatus?.idealPlayerCountBucket ?? null,
-              communityDifficultyVotes: status.badge.userStatuses
-                .map((s) => s.personalDifficulty)
-                .filter(Boolean) as string[],
-              communityPlayerCountVotes: status.badge.userStatuses
-                .map((s) => s.idealPlayerCountBucket)
-                .filter(Boolean) as string[],
-              doneByCurrentUser: currentUserStatus?.isCompleted ?? false,
-              todoByCurrentUser: currentUserStatus?.isTodo ?? false,
-            };
-          })}
-        />
-      </div>
+function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="rounded-xl bg-background/60 px-3 py-2.5">
+      <dt className="text-[11px] font-semibold uppercase tracking-widest text-muted">{label}</dt>
+      <dd className="font-display mt-0.5 text-lg font-bold tabular-nums" style={color ? { color } : undefined}>
+        {value}
+      </dd>
     </div>
   );
 }

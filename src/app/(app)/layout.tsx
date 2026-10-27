@@ -8,7 +8,7 @@ export default function AppLayout({
   return (
     <>
       <NavBar />
-      <main className="flex-1">{children}</main>
+      <main className="pb-tab-bar flex-1">{children}</main>
     </>
   );
 }

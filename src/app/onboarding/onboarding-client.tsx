@@ -91,7 +91,9 @@ export function OnboardingClient({ googleName }: Props) {
       </div>
 
       <div className="text-center">
-        <h1 className="text-2xl font-bold text-foreground">Welcome to {SITE_NAME}!</h1>
+        <h1 className="font-display text-3xl font-bold uppercase tracking-wide">
+          Welcome to <span className="neon-text">{SITE_NAME}</span>
+        </h1>
         <p className="mt-2 text-sm text-muted">
           Let&apos;s get you set up.
         </p>

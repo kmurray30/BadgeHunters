@@ -30,9 +30,7 @@ export function inferBackLabelFromPath(path: string): string {
   const trimmed = path.split("?")[0] ?? path;
   if (trimmed === "/" || trimmed === "") return "Home";
   if (trimmed === "/badges") return "Badges";
-  if (trimmed === "/sessions") return "Sessions";
   if (trimmed === "/players") return "Players";
-  if (/^\/sessions\/[^/]+$/.test(trimmed)) return "Session";
   if (/^\/badges\/[^/]+$/.test(trimmed)) return "Badge";
   if (/^\/players\/[^/]+$/.test(trimmed)) return "Player";
   if (trimmed.startsWith("/feedback")) return "Feedback";

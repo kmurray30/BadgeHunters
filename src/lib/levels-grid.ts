@@ -1,177 +1,68 @@
 import { prisma } from "@/lib/db";
 import { roomSlugSortIndex } from "@/lib/activate-config";
 
-export interface LevelCellData {
-  level: number;
-  score?: number;
-  topScore?: number;
-  completedCount?: number;
-  totalSelected?: number;
-  completedPlayers?: string[];
-}
+export const LEVEL_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 
-export interface LevelGameRow {
+export interface LevelsGame {
   id: number;
   name: string;
-  levels: LevelCellData[];
 }
 
-export interface LevelRoomGroup {
+export interface LevelsRoom {
   slug: string;
   name: string;
-  games: LevelGameRow[];
+  games: LevelsGame[];
 }
 
-export interface LevelsGridPayload {
-  rooms: LevelRoomGroup[];
-  hasData: boolean;
+/** Everything the Levels page needs, loaded once so the page can filter and switch players instantly. */
+export interface LevelsData {
+  rooms: LevelsRoom[];
+  /** "gameId:level" -> global top score */
+  topScores: Record<string, number>;
+  /** userId -> "gameId:level" -> that player's best score (only levels they've beaten) */
+  scoresByPlayer: Record<string, Record<string, number>>;
 }
 
-const LEVEL_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
-
-export async function fetchActivateGamesCatalog() {
-  return prisma.activateGame.findMany({
-    orderBy: [{ roomSlug: "asc" }, { sortIndex: "asc" }, { name: "asc" }],
-  });
+export function levelKey(gameId: number, level: number): string {
+  return `${gameId}:${level}`;
 }
 
-export async function buildMyScoresGrid(userId: string): Promise<LevelsGridPayload> {
-  const games = await fetchActivateGamesCatalog();
-
-  if (games.length === 0) {
-    return { rooms: [], hasData: false };
-  }
-
-  const [userScores, globalTops] = await Promise.all([
-    prisma.userLevelScore.findMany({ where: { userId } }),
-    prisma.globalLevelTopScore.findMany(),
+export async function loadLevelsData(playerIds: string[]): Promise<LevelsData> {
+  const [games, topScores, playerScores] = await Promise.all([
+    // Games the sync couldn't place in a room aren't on the floor; leave them out.
+    prisma.activateGame.findMany({
+      where: { roomSlug: { not: "unknown" } },
+      orderBy: [{ sortIndex: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, roomSlug: true, roomName: true },
+    }),
+    prisma.globalLevelTopScore.findMany({ select: { gameId: true, level: true, topScore: true } }),
+    prisma.userLevelScore.findMany({
+      where: { userId: { in: playerIds }, score: { gt: 0 } },
+      select: { userId: true, gameId: true, level: true, score: true },
+    }),
   ]);
 
-  const userScoreMap = new Map(
-    userScores.map((row) => [`${row.gameId}-${row.level}`, row.score]),
-  );
-  const globalTopMap = new Map(
-    globalTops.map((row) => [`${row.gameId}-${row.level}`, row.topScore]),
-  );
-
-  return buildGridFromGames(games, (gameId) =>
-    LEVEL_NUMBERS.map((level) => ({
-      level,
-      score: userScoreMap.get(`${gameId}-${level}`) ?? 0,
-      topScore: globalTopMap.get(`${gameId}-${level}`) ?? undefined,
-    })),
-  );
-}
-
-export async function buildGroupCompletionGrid(
-  playerIds: string[],
-): Promise<LevelsGridPayload> {
-  const games = await fetchActivateGamesCatalog();
-
-  if (games.length === 0) {
-    return { rooms: [], hasData: false };
-  }
-
-  if (playerIds.length === 0) {
-    return buildGridFromGames(games, () =>
-      LEVEL_NUMBERS.map((level) => ({
-        level,
-        completedCount: 0,
-        totalSelected: 0,
-        completedPlayers: [],
-      })),
-    );
-  }
-
-  const selectedPlayers = await prisma.user.findMany({
-    where: { id: { in: playerIds } },
-    select: groupCompletionPlayerSelect,
-  });
-
-  const abbreviationByUserId = new Map(
-    selectedPlayers.map((player) => [
-      player.id,
-      playerUsernameAbbreviation(player),
-    ]),
-  );
-
-  const completionScores = await prisma.userLevelScore.findMany({
-    where: {
-      userId: { in: playerIds },
-      score: { gt: 0 },
-    },
-    select: { gameId: true, level: true, userId: true },
-  });
-
-  const completionUserMap = new Map<string, string[]>();
-  for (const row of completionScores) {
-    const key = `${row.gameId}-${row.level}`;
-    const userIds = completionUserMap.get(key) ?? [];
-    userIds.push(row.userId);
-    completionUserMap.set(key, userIds);
-  }
-
-  const totalSelected = playerIds.length;
-
-  return buildGridFromGames(games, (gameId) =>
-    LEVEL_NUMBERS.map((level) => {
-      const userIds = completionUserMap.get(`${gameId}-${level}`) ?? [];
-      const uniqueUserIds = [...new Set(userIds)];
-      const completedPlayers = uniqueUserIds
-        .map((userId) => abbreviationByUserId.get(userId))
-        .filter((abbreviation): abbreviation is string => Boolean(abbreviation))
-        .sort();
-      return {
-        level,
-        completedCount: uniqueUserIds.length,
-        totalSelected,
-        completedPlayers,
-      };
-    }),
-  );
-}
-
-function buildGridFromGames(
-  games: {
-    id: number;
-    name: string;
-    roomSlug: string;
-    roomName: string;
-    sortIndex: number;
-  }[],
-  buildLevelsForGame: (gameId: number) => LevelCellData[],
-): LevelsGridPayload {
-  const roomMap = new Map<string, LevelRoomGroup>();
-
+  const roomMap = new Map<string, LevelsRoom>();
   for (const game of games) {
-    if (!roomMap.has(game.roomSlug)) {
-      roomMap.set(game.roomSlug, {
-        slug: game.roomSlug,
-        name: game.roomName,
-        games: [],
-      });
-    }
-
-    roomMap.get(game.roomSlug)!.games.push({
-      id: game.id,
-      name: game.name,
-      levels: buildLevelsForGame(game.id),
-    });
+    const room = roomMap.get(game.roomSlug) ?? { slug: game.roomSlug, name: game.roomName, games: [] };
+    room.games.push({ id: game.id, name: game.name });
+    roomMap.set(game.roomSlug, room);
   }
 
-  const rooms = [...roomMap.values()].sort(
-    (roomA, roomB) => roomSlugSortIndex(roomA.slug) - roomSlugSortIndex(roomB.slug),
-  );
+  const scoresByPlayer: LevelsData["scoresByPlayer"] = Object.fromEntries(playerIds.map((id) => [id, {}]));
+  for (const row of playerScores) {
+    scoresByPlayer[row.userId][levelKey(row.gameId, row.level)] = row.score;
+  }
 
-  return { rooms, hasData: true };
+  return {
+    rooms: [...roomMap.values()].sort((roomA, roomB) => roomSlugSortIndex(roomA.slug) - roomSlugSortIndex(roomB.slug)),
+    topScores: Object.fromEntries(topScores.map((row) => [levelKey(row.gameId, row.level), row.topScore])),
+    scoresByPlayer,
+  };
 }
 
-/** Level baseline subtracted from raw scores to compute score potential. */
-export function computeScorePotential(
-  level: number,
-  score: number,
-  topScore: number,
-): number | null {
+/** How close a score is to the top score (0–1), ignoring the per-level baseline everyone gets. */
+export function computeScorePotential(level: number, score: number, topScore: number): number | null {
   const levelBaseline = level * 1000;
   const adjustedScore = score - levelBaseline;
   const adjustedTop = topScore - levelBaseline;
@@ -183,182 +74,41 @@ export function computeScorePotential(
   return Math.min(1, Math.max(0, adjustedScore / adjustedTop));
 }
 
-/** Matches Complete Session button (`from-highlight to-pink-500`). */
-export const GLOBAL_TOP_SCORE_CELL_BACKGROUND =
-  "linear-gradient(to right, var(--highlight), #ec4899)";
-
-/** Background color for My Scores cells (gradient driven by score potential %) */
-export function myScoreCellBackground(
-  level: number,
-  score: number,
-  topScore?: number,
-): string {
-  if (score <= 0) return "#ffffff";
-  if (topScore != null && topScore > 0 && score >= topScore) {
-    return GLOBAL_TOP_SCORE_CELL_BACKGROUND;
-  }
-
-  if (topScore == null || topScore <= 0) {
-    return "#86efac";
-  }
-
-  const potential =
-    computeScorePotential(level, score, topScore) ??
-    Math.min(1, Math.max(0, score / topScore));
-
-  return myScoreRatioBackground(potential);
-}
-
-export function myScoreIsGlobalTop(score: number, topScore?: number): boolean {
-  return score > 0 && topScore != null && topScore > 0 && score >= topScore;
-}
-
-type RgbTriplet = readonly [number, number, number];
-
-const MY_SCORE_COLOR_STOPS: { ratio: number; color: RgbTriplet }[] = [
-  { ratio: 0, color: [252, 165, 165] },
-  { ratio: 0.5, color: [253, 224, 71] },
-  { ratio: 0.75, color: [253, 186, 116] },
-  { ratio: 1, color: [134, 239, 172] },
+const HEAT_STOPS: { ratio: number; rgb: readonly [number, number, number] }[] = [
+  { ratio: 0, rgb: [255, 77, 94] },
+  { ratio: 0.5, rgb: [255, 210, 63] },
+  { ratio: 1, rgb: [61, 255, 160] },
 ];
 
-function lerpChannel(start: number, end: number, amount: number): number {
-  return Math.round(start + (end - start) * amount);
-}
+/**
+ * Tile color for one player's score: red far from the top score, through
+ * yellow, to green near it. Null when the level isn't beaten.
+ */
+export function scoreHeatColor(level: number, score: number | undefined, topScore: number | undefined): string | null {
+  if (!score || score <= 0) return null;
+  if (!topScore || topScore <= 0) return "rgb(61, 255, 160)";
 
-function lerpRgbColor(start: RgbTriplet, end: RgbTriplet, amount: number): string {
-  const red = lerpChannel(start[0], end[0], amount);
-  const green = lerpChannel(start[1], end[1], amount);
-  const blue = lerpChannel(start[2], end[2], amount);
-  return `rgb(${red}, ${green}, ${blue})`;
-}
-
-function myScoreRatioBackground(ratio: number): string {
-  for (let index = 0; index < MY_SCORE_COLOR_STOPS.length - 1; index++) {
-    const startStop = MY_SCORE_COLOR_STOPS[index];
-    const endStop = MY_SCORE_COLOR_STOPS[index + 1];
-
-    if (ratio >= startStop.ratio && ratio <= endStop.ratio) {
-      const span = endStop.ratio - startStop.ratio;
-      const amount = span === 0 ? 0 : (ratio - startStop.ratio) / span;
-      return lerpRgbColor(startStop.color, endStop.color, amount);
+  const ratio = computeScorePotential(level, score, topScore) ?? Math.min(1, score / topScore);
+  for (let index = 0; index < HEAT_STOPS.length - 1; index++) {
+    const start = HEAT_STOPS[index];
+    const end = HEAT_STOPS[index + 1];
+    if (ratio <= end.ratio) {
+      const amount = (ratio - start.ratio) / (end.ratio - start.ratio);
+      const channel = (channelIndex: number) =>
+        Math.round(start.rgb[channelIndex] + (end.rgb[channelIndex] - start.rgb[channelIndex]) * amount);
+      return `rgb(${channel(0)}, ${channel(1)}, ${channel(2)})`;
     }
   }
-
-  return "rgb(134, 239, 172)";
+  return "rgb(61, 255, 160)";
 }
 
-/** Background for Group Completion cells (white at 0% → black at 100%) */
-export function groupCompletionCellBackground(
-  completedCount: number,
-  totalSelected: number,
-): string {
-  if (totalSelected <= 0 || completedCount <= 0) return "#ffffff";
-  const ratio = Math.min(1, completedCount / totalSelected);
-  const gray = Math.round(255 - ratio * 255);
-  return `rgb(${gray}, ${gray}, ${gray})`;
+export function isTopScore(score: number | undefined, topScore: number | undefined): boolean {
+  return !!score && !!topScore && score >= topScore;
 }
 
-export function groupCompletionTextColor(
-  completedCount: number,
-  totalSelected: number,
-): string {
-  if (totalSelected <= 0) return "inherit";
-  const ratio = completedCount / totalSelected;
-  return ratio >= 0.5 ? "#ffffff" : "inherit";
-}
-
-export function playerUsernameAbbreviation(player: {
-  activatePlayerName: string | null;
-  realName: string | null;
-}): string {
-  const username = player.activatePlayerName ?? player.realName ?? "?";
-  return username.slice(0, 3);
-}
-
-export function formatGroupCompletionCellLabel(
-  completedPlayers: string[],
-  totalSelected: number,
-): string {
-  if (completedPlayers.length === 0) return "";
-  if (totalSelected > 0 && completedPlayers.length >= totalSelected) {
-    return "all";
-  }
-  return completedPlayers.join(",");
-}
-
-export interface GroupCompletionPlayerOption {
-  id: string;
-  displayName: string;
-  isSynced: boolean;
-}
-
-export function computePlayerIsSynced(player: {
-  activatePlayerName: string | null;
-  levelScoreCount: number;
-  lastSyncedAt: Date | null;
-  lastScoreSource: string | null;
-  currentScore: number;
-}): boolean {
-  if (!player.activatePlayerName) return false;
-  if (player.levelScoreCount > 0) return true;
-  if (player.currentScore > 0) return true;
-  if (player.lastSyncedAt != null) return true;
-  return false;
-}
-
-export function buildGroupCompletionPlayerOption(player: {
-  id: string;
-  displayNameMode: string;
-  realName: string | null;
-  activatePlayerName: string | null;
-  lastSyncedAt: Date | null;
-  lastScoreSource: string | null;
-  currentScore: number;
-  _count: { userLevelScores: number };
-}): GroupCompletionPlayerOption {
-  return {
-    id: player.id,
-    displayName:
-      player.displayNameMode === "real_name"
-        ? player.realName ?? player.activatePlayerName ?? "Unknown"
-        : player.activatePlayerName ?? player.realName ?? "Unknown",
-    isSynced: computePlayerIsSynced({
-      activatePlayerName: player.activatePlayerName,
-      levelScoreCount: player._count.userLevelScores,
-      lastSyncedAt: player.lastSyncedAt,
-      lastScoreSource: player.lastScoreSource,
-      currentScore: player.currentScore,
-    }),
-  };
-}
-
-export const groupCompletionPlayerSelect = {
-  id: true,
-  displayNameMode: true,
-  realName: true,
-  activatePlayerName: true,
-  lastSyncedAt: true,
-  lastScoreSource: true,
-  currentScore: true,
-  _count: {
-    select: { userLevelScores: true },
-  },
-} as const;
-
-export type GroupCompletionPlayerRow = {
-  id: string;
-  displayNameMode: string;
-  realName: string | null;
-  activatePlayerName: string | null;
-  lastSyncedAt: Date | null;
-  lastScoreSource: string | null;
-  currentScore: number;
-  _count: { userLevelScores: number };
-};
-
-export function mapGroupCompletionPlayers(
-  players: GroupCompletionPlayerRow[],
-): GroupCompletionPlayerOption[] {
-  return players.map(buildGroupCompletionPlayerOption);
+/** 12345 -> "12.3k" for tight grid cells */
+export function compactScore(score: number): string {
+  if (score >= 10_000) return `${Math.round(score / 1000)}k`;
+  if (score >= 1000) return `${(score / 1000).toFixed(1)}k`;
+  return String(score);
 }

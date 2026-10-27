@@ -129,9 +129,7 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Delete a real user — admin mode only.
- * Clears session references that don't cascade, then deletes the user
- * (all other relations cascade). The user can re-create their account
+ * Delete a real user — admin mode only. All relations cascade. The user can re-create their account
  * via Google OAuth and go through onboarding fresh.
  */
 export async function DELETE(request: NextRequest) {
@@ -159,14 +157,6 @@ export async function DELETE(request: NextRequest) {
   if (targetUser.isTestUser) {
     return NextResponse.json({ error: "Use the test-users endpoint for test users" }, { status: 400 });
   }
-
-  // Session.createdBy and Session.completedBy don't cascade,
-  // so clean those up before deleting the user.
-  await prisma.session.deleteMany({ where: { createdByUserId: userId } });
-  await prisma.session.updateMany({
-    where: { completedByUserId: userId },
-    data: { completedByUserId: null },
-  });
 
   await prisma.user.delete({ where: { id: userId } });
 

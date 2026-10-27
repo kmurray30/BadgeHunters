@@ -57,7 +57,7 @@ export function FeedbackClient({ posts, currentUserId, isSuperuser }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Feedback</h1>
+        <h1 className="font-display text-3xl font-bold uppercase tracking-wide">Feedback</h1>
         <p className="text-sm text-muted">
           {isSuperuser
             ? "View all feedback from the group."

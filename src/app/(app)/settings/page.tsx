@@ -8,7 +8,7 @@ export default async function SettingsPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
       <BackButton fallback="/" label="Home" />
-      <h1 className="mt-4 text-2xl font-bold text-foreground">Settings</h1>
+      <h1 className="font-display mt-4 text-3xl font-bold uppercase tracking-wide">Settings</h1>
 
       <SettingsClient
         displayNameMode={user.displayNameMode}

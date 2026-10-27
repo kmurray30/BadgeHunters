@@ -54,7 +54,7 @@ async function teardownBrowser() {
   }
 }
 
-export function useBrowserless(): boolean {
+export function isBrowserlessEnabled(): boolean {
   return !!process.env.BROWSERLESS_TOKEN;
 }
 
@@ -172,7 +172,7 @@ async function launchLocalBrowser(): Promise<Browser> {
 }
 
 export async function getOrLaunchBrowser(): Promise<Browser> {
-  if (useBrowserless()) {
+  if (isBrowserlessEnabled()) {
     return connectBrowserless();
   }
   return launchLocalBrowser();
@@ -427,7 +427,7 @@ export {
 };
 
 export async function releaseBrowser(browser: Browser): Promise<void> {
-  if (useBrowserless()) {
+  if (isBrowserlessEnabled()) {
     browser.disconnect();
   } else {
     resetIdleTimer();

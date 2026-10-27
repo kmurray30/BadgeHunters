@@ -40,21 +40,10 @@ enum PlayerCountBucket {
   gte_5
 }
 
-enum SessionStatus {
-  active
-  completed_pending_ack
-  closed
-}
-
 enum ScoreSource {
   scrape
   manual
   test_override
-}
-
-enum NotificationType {
-  session_added
-  session_review
 }
 
 enum ReactionType {
@@ -114,15 +103,8 @@ model User {
   badgeStatuses       BadgeUserStatus[]
   badgeComments       BadgeComment[]
   commentReactions    BadgeCommentReaction[]
-  createdSessions     Session[]              @relation("SessionCreator")
-  completedSessions   Session[]              @relation("SessionCompleter")
-  sessionMemberships  SessionMember[]
-  sessionSelections   SessionBadgeSelection[]
-  sessionCompletions  SessionBadgeCompletion[]
-  sessionAcks         SessionUserAcknowledgement[]
   feedbackPosts       FeedbackPost[]
   feedbackReactions   FeedbackReaction[]
-  notifications       Notification[]
   userLevelScores     UserLevelScore[]
   scoreSyncRunsStarted ScoreSyncRun[]
 
@@ -167,8 +149,6 @@ model Badge {
   userStatuses       BadgeUserStatus[]
   comments           BadgeComment[]
   metaRules          BadgeMetaRule[]
-  sessionSelections  SessionBadgeSelection[]
-  sessionCompletions SessionBadgeCompletion[]
 
   @@map("badges")
 }
@@ -237,124 +217,6 @@ model BadgeMetaRule {
   badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
 
   @@map("badge_meta_rules")
-}
-
-model Session {
-  id                String        @id @default(cuid())
-  createdByUserId   String        @map("created_by_user_id")
-  title             String?
-  status            SessionStatus @default(active)
-  sessionDateLocal  DateTime      @map("session_date_local") @db.Date
-  expiresAt         DateTime      @map("expires_at")
-  completedAt       DateTime?     @map("completed_at")
-  completedByUserId String?       @map("completed_by_user_id")
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
-
-  createdBy      User                         @relation("SessionCreator", fields: [createdByUserId], references: [id])
-  completedBy    User?                        @relation("SessionCompleter", fields: [completedByUserId], references: [id])
-  members        SessionMember[]
-  ghostMembers   SessionGhostMember[]
-  selections     SessionBadgeSelection[]
-  completions    SessionBadgeCompletion[]
-  acknowledgements SessionUserAcknowledgement[]
-  notifications    Notification[]
-
-  @@map("sessions")
-}
-
-model SessionMember {
-  id           String   @id @default(cuid())
-  sessionId    String   @map("session_id")
-  userId       String   @map("user_id")
-  addedByUserId String  @map("added_by_user_id")
-  joinedAt     DateTime @default(now()) @map("joined_at")
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([sessionId, userId])
-  @@map("session_members")
-}
-
-model SessionGhostMember {
-  id          String   @id @default(cuid())
-  sessionId   String   @map("session_id")
-  displayName String   @map("display_name")
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@map("session_ghost_members")
-}
-
-model SessionBadgeSelection {
-  id               String   @id @default(cuid())
-  sessionId        String   @map("session_id")
-  badgeId          String   @map("badge_id")
-  selectedByUserId String   @map("selected_by_user_id")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
-
-  session    Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  badge      Badge   @relation(fields: [badgeId], references: [id], onDelete: Cascade)
-  selectedBy User    @relation(fields: [selectedByUserId], references: [id], onDelete: Cascade)
-
-  @@unique([sessionId, badgeId, selectedByUserId])
-  @@map("session_badge_selections")
-}
-
-// Tracks which badges a user marked as completed within a specific session.
-// This is intentionally separate from BadgeUserStatus.isCompleted (global persistent state).
-// Checking a box here ALSO writes to BadgeUserStatus, but old sessions retain their own completion
-// snapshot so viewing a past session doesn't reflect later completions.
-model SessionBadgeCompletion {
-  id          String   @id @default(cuid())
-  sessionId   String   @map("session_id")
-  userId      String   @map("user_id")
-  badgeId     String   @map("badge_id")
-  completedAt DateTime @default(now()) @map("completed_at")
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  badge   Badge   @relation(fields: [badgeId], references: [id], onDelete: Cascade)
-
-  @@unique([sessionId, userId, badgeId])
-  @@map("session_badge_completions")
-}
-
-model SessionUserAcknowledgement {
-  id           String    @id @default(cuid())
-  sessionId    String    @map("session_id")
-  userId       String    @map("user_id")
-  acknowledgedAt DateTime? @map("acknowledged_at")
-  dismissedAt  DateTime? @map("dismissed_at")
-  needsReview  Boolean   @default(true) @map("needs_review")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([sessionId, userId])
-  @@map("session_user_acknowledgements")
-}
-
-model Notification {
-  id          String           @id @default(cuid())
-  userId      String           @map("user_id")
-  type        NotificationType
-  sessionId   String?          @map("session_id")
-  readAt      DateTime?        @map("read_at")
-  dismissedAt DateTime?        @map("dismissed_at")
-  createdAt   DateTime         @default(now()) @map("created_at")
-
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  session Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@map("notifications")
 }
 
 model FeedbackPost {

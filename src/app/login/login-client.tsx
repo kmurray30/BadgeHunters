@@ -16,21 +16,21 @@ function GoogleLogo() {
 
 export function LoginClient() {
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4">
+    <div className="flex min-h-dvh items-center justify-center px-4">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            {SITE_NAME}
+          <h1 className="font-display text-4xl font-bold uppercase tracking-wider">
+            <span className="neon-text">{SITE_NAME}</span>
           </h1>
-          <p className="mt-2 text-sm text-muted">
-            Plan your Activate badge runs with the crew
+          <p className="mt-3 text-sm text-muted">
+            Hunt down every Activate badge and level with the crew
           </p>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-6">
+        <div className="panel p-6">
           <button
             onClick={() => signIn("google", { callbackUrl: "/" })}
-            className="flex w-full items-center justify-center gap-3 rounded-lg bg-white px-4 py-3 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50 transition-colors"
+            className="btn-glow flex w-full items-center justify-center gap-3 rounded-xl bg-white px-4 py-3.5 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-100"
           >
             <GoogleLogo />
             Continue with Google

@@ -167,7 +167,7 @@ export function BadgeDetailClient({
       <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-bold text-foreground">{badge.name}</h1>
+            <h1 className="font-display text-2xl font-bold uppercase leading-tight tracking-wide">{badge.name}</h1>
             <p className="mt-3 text-sm text-muted leading-relaxed">{badge.description}</p>
           </div>
 

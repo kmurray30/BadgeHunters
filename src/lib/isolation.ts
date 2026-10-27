@@ -29,15 +29,3 @@ export function isolationFilter(currentUser: IsolationUser) {
 export function userIsolationFilter(currentUser: IsolationUser) {
   return { isTestUser: currentUser.isTestUser };
 }
-
-/**
- * Filter for sessions — a session belongs to the test world if its
- * creator is a test user.
- */
-export function sessionIsolationFilter(currentUser: IsolationUser) {
-  return {
-    createdBy: {
-      isTestUser: currentUser.isTestUser,
-    },
-  };
-}

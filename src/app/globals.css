@@ -1,23 +1,30 @@
 @import "tailwindcss";
 
+/*
+ * Arcade/neon identity: Activate's rooms after dark. Near-black floor, LED grid
+ * lines, hot-pink primary and cyan secondary neon.
+ */
 :root {
-  --background: #0f1117;
-  --foreground: #e5e7eb;
-  --card: #1a1d27;
-  --card-hover: #222633;
-  --border: #2a2e3d;
-  --accent: #6366f1;
-  --accent-hover: #818cf8;
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-  --muted: #6b7280;
-  --highlight: #d946ef;
-  --highlight-hover: #e879f9;
-  --selection: rgba(59,130,246,0.15);
-  --selection-hover: rgba(59,130,246,0.25);
-  --completed: rgba(34,197,94,0.07);
-  --completed-hover: rgba(34,197,94,0.14);
+  --background: #07070d;
+  --foreground: #eceaff;
+  --card: #11111c;
+  --card-hover: #191927;
+  --border: #26263d;
+  --accent: #ff3ea5;
+  --accent-hover: #ff6bbd;
+  --success: #3dffa0;
+  --warning: #ffd23f;
+  --danger: #ff4d5e;
+  --muted: #8d8bab;
+  --highlight: #2de2e6;
+  --highlight-hover: #74f0f2;
+  --selection: rgba(255, 62, 165, 0.12);
+  --selection-hover: rgba(255, 62, 165, 0.2);
+  --completed: rgba(61, 255, 160, 0.07);
+  --completed-hover: rgba(61, 255, 160, 0.14);
+  /* Unfilled pie slice / empty level tile */
+  --slot-empty: #1c1c2b;
+  --tab-bar-height: 64px;
 }
 
 @theme inline {
@@ -38,53 +45,106 @@
   --color-selection-hover: var(--selection-hover);
   --color-completed: var(--completed);
   --color-completed-hover: var(--completed-hover);
+  --color-slot-empty: var(--slot-empty);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-display-face);
+}
+
+html {
+  background: var(--background);
 }
 
 body {
-  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  /* LED floor: faint grid lines under two soft neon glows, fixed while scrolling. */
+  background:
+    radial-gradient(60rem 40rem at 0% -10%, rgba(255, 62, 165, 0.13), transparent 60%),
+    radial-gradient(50rem 40rem at 110% 110%, rgba(45, 226, 230, 0.1), transparent 60%),
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px) 0 0 / 40px 40px,
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px) 0 0 / 40px 40px,
+    var(--background);
+  background-attachment: fixed;
 }
 
 button, [role="button"], a, summary {
   cursor: pointer;
 }
 
+/* Display type for headings, numbers and badge names */
+.font-display {
+  font-family: var(--font-display), var(--font-sans), sans-serif;
+  letter-spacing: 0.02em;
+}
+
+/* Pink-to-cyan neon gradient text */
+.neon-text {
+  background: linear-gradient(90deg, var(--accent), #c56bff 50%, var(--highlight));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Raised panel with a faint neon edge */
+.panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0) 40%), var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+}
+
+.glow-accent {
+  box-shadow: 0 0 0 1px rgba(255, 62, 165, 0.5), 0 0 18px rgba(255, 62, 165, 0.35);
+}
+
 /* Animated glow for CTA buttons */
 @keyframes glow-rotate {
-  0%   { box-shadow: 0 0 20px 4px rgba(217,70,239,0.45), 8px 0 30px rgba(236,72,153,0.3); }
-  25%  { box-shadow: 0 8px 30px rgba(236,72,153,0.4), 0 0 20px 4px rgba(217,70,239,0.35); }
-  50%  { box-shadow: -8px 0 30px rgba(168,85,247,0.4), 0 0 20px 4px rgba(217,70,239,0.45); }
-  75%  { box-shadow: 0 -8px 30px rgba(236,72,153,0.4), 0 0 20px 4px rgba(217,70,239,0.35); }
-  100% { box-shadow: 0 0 20px 4px rgba(217,70,239,0.45), 8px 0 30px rgba(236,72,153,0.3); }
-}
-@keyframes pulse-glow {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.03); }
+  0%   { box-shadow: 0 0 20px 4px rgba(255,62,165,0.45), 8px 0 30px rgba(45,226,230,0.25); }
+  50%  { box-shadow: -8px 0 30px rgba(45,226,230,0.35), 0 0 20px 4px rgba(255,62,165,0.45); }
+  100% { box-shadow: 0 0 20px 4px rgba(255,62,165,0.45), 8px 0 30px rgba(45,226,230,0.25); }
 }
 .btn-glow {
-  animation: glow-rotate 3s ease-in-out infinite, pulse-glow 2s ease-in-out infinite;
-}
-.btn-glow:hover {
-  animation: glow-rotate 1.5s ease-in-out infinite;
-  transform: scale(1.05);
+  animation: glow-rotate 3s ease-in-out infinite;
 }
 .btn-glow:active {
-  animation: glow-rotate 1.5s ease-in-out infinite;
   transform: scale(0.97);
 }
 
+/* Bottom sheet / popover entrance */
+@keyframes sheet-up {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-sheet-up { animation: sheet-up 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.animate-fade-in { animation: fade-in 150ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-glow, .animate-sheet-up, .animate-fade-in { animation: none; }
+}
+
+/* Room for the phone tab bar under page content */
+.pb-tab-bar {
+  padding-bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom) + 1rem);
+}
+@media (min-width: 768px) {
+  .pb-tab-bar { padding-bottom: 2rem; }
+}
+
+/* Hide scrollbars on horizontally scrolling chip rows */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 /* ─── Scrollable table: opaque cell backgrounds that preserve row tints ─── */
-/* When columns are pinned, sticky cells need opaque backgrounds that match
-   the row's visual tint. Pre-mix row colors with the page background. */
 :root {
   --cell-bg: var(--background);
-  --completed-opaque:       color-mix(in srgb, #22c55e  7%, var(--background));
-  --completed-hover-opaque: color-mix(in srgb, #22c55e 14%, var(--background));
-  --selection-opaque:       color-mix(in srgb, #3b82f6 15%, var(--background));
-  --selection-hover-opaque: color-mix(in srgb, #3b82f6 25%, var(--background));
+  --completed-opaque:       color-mix(in srgb, #3dffa0  7%, var(--background));
+  --completed-hover-opaque: color-mix(in srgb, #3dffa0 14%, var(--background));
+  --selection-opaque:       color-mix(in srgb, #ff3ea5 12%, var(--background));
+  --selection-hover-opaque: color-mix(in srgb, #ff3ea5 20%, var(--background));
 }
 .bg-completed                        { --cell-bg: var(--completed-opaque); }
 .bg-selection                        { --cell-bg: var(--selection-opaque); }

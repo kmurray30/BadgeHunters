@@ -37,10 +37,10 @@ interface CronJobConfig {
 
 const CRON_JOBS: CronJobConfig[] = [
   {
-    id: "session-expiry",
-    label: "Trigger Session Expiry",
-    description: "Check for active sessions past their 6am cutoff and transition them to pending-review state. Also runs automatically each morning via the daily cron job.",
-    endpoint: "/api/cron/session-expiry",
+    id: "score-sync",
+    label: "Run Score Sync",
+    description: "Pull scores and badges for every linked player from PlayActivate now. Also runs automatically every hour.",
+    endpoint: "/api/cron/score-sync",
   },
 ];
 
@@ -275,7 +275,7 @@ export function AdminClient({ initialAdminMode }: { initialAdminMode: boolean })
       <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4">
         <div className="w-full max-w-md space-y-6">
           <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            <h1 className="font-display text-3xl font-bold uppercase tracking-wide">
               Admin Login
             </h1>
             <p className="mt-2 text-sm text-muted">
@@ -335,7 +335,7 @@ export function AdminClient({ initialAdminMode }: { initialAdminMode: boolean })
           ← Back
         </Link>
         <div className="mt-2 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-foreground">Admin Tools</h1>
+          <h1 className="font-display text-3xl font-bold uppercase tracking-wide">Admin Tools</h1>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-warning animate-pulse" />
@@ -604,12 +604,6 @@ export function AdminClient({ initialAdminMode }: { initialAdminMode: boolean })
             Switch User (Login)
           </Link>
           <Link
-            href="/sessions"
-            className="rounded-lg border border-border px-4 py-2 text-sm text-muted hover:text-foreground hover:bg-card-hover transition-colors"
-          >
-            Sessions
-          </Link>
-          <Link
             href="/players"
             className="rounded-lg border border-border px-4 py-2 text-sm text-muted hover:text-foreground hover:bg-card-hover transition-colors"
           >
@@ -625,7 +619,7 @@ export function AdminClient({ initialAdminMode }: { initialAdminMode: boolean })
           description={
             pendingDeleteUser.isTest
               ? "This will permanently remove this test user and all their data. This cannot be undone."
-              : "This will permanently remove this user, their sessions, badge data, and comments. They can re-create their account via Google OAuth. This cannot be undone."
+              : "This will permanently remove this user, their badge data, and comments. They can re-create their account via Google OAuth. This cannot be undone."
           }
           actions={[
             {

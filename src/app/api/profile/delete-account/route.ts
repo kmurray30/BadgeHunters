@@ -25,14 +25,6 @@ export async function DELETE() {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  // Sessions created by this user can't be orphaned — remove them.
-  // Sessions merely completed by them can have that field nulled out.
-  await prisma.session.deleteMany({ where: { createdByUserId: userId } });
-  await prisma.session.updateMany({
-    where: { completedByUserId: userId },
-    data: { completedByUserId: null },
-  });
-
   await prisma.user.delete({ where: { id: userId } });
 
   return NextResponse.json({ success: true });
