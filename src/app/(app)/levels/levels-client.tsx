@@ -36,23 +36,27 @@ interface OpenCell {
 export function LevelsClient({ data, roster, currentUserId }: LevelsClientProps) {
   const { selectedIds, selectedPlayers, toggle, justMe, selectAll } = usePlayerSelection(roster, currentUserId);
   const [notDoneByMe, setNotDoneByMe] = usePersistedState("bh:levels:not-done-by-me", false);
+  const [notDoneByAll, setNotDoneByAll] = usePersistedState("bh:levels:not-done-by-all", false);
   const [openCell, setOpenCell] = useState<OpenCell | null>(null);
 
   const singlePlayer = selectedIds.length === 1 ? selectedPlayers[0] : null;
   const scoreOf = (playerId: string, key: string) => data.scoresByPlayer[playerId]?.[key];
-  const cellMatches = (key: string) => !notDoneByMe || !scoreOf(currentUserId, key);
+  const filtering = notDoneByMe || notDoneByAll;
+  const cellMatches = (key: string) =>
+    (!notDoneByMe || !scoreOf(currentUserId, key)) && (!notDoneByAll || selectedIds.some((id) => !scoreOf(id, key)));
 
   const totalLevels = data.rooms.reduce((sum, room) => sum + room.games.length * LEVEL_NUMBERS.length, 0);
   const myBeaten = Object.keys(data.scoresByPlayer[currentUserId] ?? {}).length;
 
-  // Rooms and games with at least one level you still have to beat.
+  // Rooms and games with at least one level passing the filters.
   const visibleRooms = useMemo(() => {
-    if (!notDoneByMe) return data.rooms;
-    const mine = data.scoresByPlayer[currentUserId] ?? {};
+    if (!filtering) return data.rooms;
     return data.rooms
-      .map((room) => ({ ...room, games: room.games.filter((game) => LEVEL_NUMBERS.some((level) => !mine[levelKey(game.id, level)])) }))
+      .map((room) => ({ ...room, games: room.games.filter((game) => LEVEL_NUMBERS.some((level) => cellMatches(levelKey(game.id, level)))) }))
       .filter((room) => room.games.length > 0);
-  }, [data, notDoneByMe, currentUserId]);
+    // cellMatches only depends on the values listed here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, filtering, notDoneByMe, notDoneByAll, selectedIds, currentUserId]);
 
   return (
     <div>
@@ -68,6 +72,9 @@ export function LevelsClient({ data, roster, currentUserId }: LevelsClientProps)
       <div className="no-scrollbar -mx-4 mt-4 flex items-center gap-2 overflow-x-auto px-4">
         <ToggleChip pressed={notDoneByMe} onToggle={() => setNotDoneByMe(!notDoneByMe)}>
           Not done by me
+        </ToggleChip>
+        <ToggleChip pressed={notDoneByAll} onToggle={() => setNotDoneByAll(!notDoneByAll)}>
+          Not done by all
         </ToggleChip>
       </div>
       <p className="mt-2 text-xs text-muted">
