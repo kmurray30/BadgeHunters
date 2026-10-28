@@ -3,11 +3,10 @@
 import { useMemo, useState } from "react";
 import { CompletionPie } from "@/components/completion-pie";
 import { DetailSheet, PlayerStatusList } from "@/components/detail-sheet";
-import { GroupFilters } from "@/components/group-filters";
 import { PlayerPicker } from "@/components/player-picker";
+import { ToggleChip } from "@/components/toggle-chip";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { usePlayerSelection } from "@/hooks/use-player-selection";
-import { DEFAULT_GROUP_FILTERS, describeGroupFilters, matchesGroupFilters, type GroupFilterState } from "@/lib/group-progress";
 import {
   compactScore,
   isTopScore,
@@ -36,36 +35,24 @@ interface OpenCell {
 
 export function LevelsClient({ data, roster, currentUserId }: LevelsClientProps) {
   const { selectedIds, selectedPlayers, toggle, justMe, selectAll } = usePlayerSelection(roster, currentUserId);
-  const [storedFilters, setFilters] = usePersistedState<GroupFilterState>("bh:levels:group-filters", DEFAULT_GROUP_FILTERS);
+  const [notDoneByMe, setNotDoneByMe] = usePersistedState("bh:levels:not-done-by-me", false);
   const [openCell, setOpenCell] = useState<OpenCell | null>(null);
 
-  const groupSize = selectedIds.length;
-  const singlePlayer = groupSize === 1 ? selectedPlayers[0] : null;
-  // "Some" and "Not done by me" have no meaning with only one player selected.
-  const filters: GroupFilterState =
-    groupSize > 1 ? storedFilters : { progress: storedFilters.progress === "some" ? "all" : storedFilters.progress, notDoneByMe: false };
-  const filterSummary = describeGroupFilters(filters, groupSize);
-  const filtering = filters.progress !== "all" || filters.notDoneByMe;
-
+  const singlePlayer = selectedIds.length === 1 ? selectedPlayers[0] : null;
   const scoreOf = (playerId: string, key: string) => data.scoresByPlayer[playerId]?.[key];
-  const cellMatches = (key: string) =>
-    matchesGroupFilters((playerId) => !!scoreOf(playerId, key), selectedIds, currentUserId, filters);
+  const cellMatches = (key: string) => !notDoneByMe || !scoreOf(currentUserId, key);
 
   const totalLevels = data.rooms.reduce((sum, room) => sum + room.games.length * LEVEL_NUMBERS.length, 0);
   const myBeaten = Object.keys(data.scoresByPlayer[currentUserId] ?? {}).length;
 
-  // Rooms and games with at least one level passing the filters.
+  // Rooms and games with at least one level you still have to beat.
   const visibleRooms = useMemo(() => {
-    if (!filtering) return data.rooms;
+    if (!notDoneByMe) return data.rooms;
+    const mine = data.scoresByPlayer[currentUserId] ?? {};
     return data.rooms
-      .map((room) => ({
-        ...room,
-        games: room.games.filter((game) => LEVEL_NUMBERS.some((level) => cellMatches(levelKey(game.id, level)))),
-      }))
+      .map((room) => ({ ...room, games: room.games.filter((game) => LEVEL_NUMBERS.some((level) => !mine[levelKey(game.id, level)])) }))
       .filter((room) => room.games.length > 0);
-    // cellMatches only depends on the values listed here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, filtering, selectedIds, currentUserId, filters.progress, filters.notDoneByMe]);
+  }, [data, notDoneByMe, currentUserId]);
 
   return (
     <div>
@@ -79,13 +66,14 @@ export function LevelsClient({ data, roster, currentUserId }: LevelsClientProps)
       <PlayerPicker roster={roster} selectedIds={selectedIds} onToggle={toggle} onJustMe={justMe} onSelectAll={selectAll} />
 
       <div className="no-scrollbar -mx-4 mt-4 flex items-center gap-2 overflow-x-auto px-4">
-        <GroupFilters value={filters} onChange={setFilters} groupSize={groupSize} />
+        <ToggleChip pressed={notDoneByMe} onToggle={() => setNotDoneByMe(!notDoneByMe)}>
+          Not done by me
+        </ToggleChip>
       </div>
       <p className="mt-2 text-xs text-muted">
         {singlePlayer
           ? "Color shows how close each score is to the top score. Tap a level for details."
           : "Each slice is a player. Tap a level to see everyone's scores."}
-        {filterSummary && <span className="block text-foreground/80">{filterSummary}.</span>}
       </p>
 
       <div className="mt-3 space-y-3">
@@ -105,14 +93,14 @@ export function LevelsClient({ data, roster, currentUserId }: LevelsClientProps)
                   <span className="truncate pl-1 pr-1 text-[13px] font-medium">{game.name}</span>
                   {LEVEL_NUMBERS.map((level) => {
                     const key = levelKey(game.id, level);
-                    const dimmed = filtering && !cellMatches(key);
+                    const dimmed = !cellMatches(key);
                     return (
                       <button
                         key={level}
                         type="button"
                         onClick={() => setOpenCell({ room, game, level })}
                         aria-label={`${game.name} level ${level}`}
-                        className={`flex aspect-square items-center justify-center transition active:scale-90 md:aspect-auto md:h-10 ${dimmed ? "opacity-15" : ""}`}
+                        className={`flex aspect-square items-center justify-center transition active:scale-90 md:aspect-auto md:h-10 ${dimmed ? "opacity-25" : ""}`}
                       >
                         {singlePlayer ? (
                           <ScoreTile level={level} score={scoreOf(singlePlayer.id, key)} topScore={data.topScores[key]} />

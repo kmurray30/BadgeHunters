@@ -135,6 +135,8 @@ model Account {
 model Badge {
   id                 String            @id @default(cuid())
   badgeNumber        Int               @unique @map("badge_number")
+  /// PlayActivate's numeric badge id; sets the default badge order. Linked by name during sync.
+  activateBadgeId    Int?              @unique @map("activate_badge_id")
   name               String
   description        String            @db.Text
   rooms              String[]          @default([])

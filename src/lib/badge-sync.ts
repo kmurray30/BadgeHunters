@@ -72,33 +72,73 @@ export function findMissingCatalogBadges(
 }
 
 /**
- * Add badges the API lists for our location that our catalog lacks, with the
- * API's name (upper-cased to match the catalog) and description. Rooms, games
- * and tags start empty for the superuser to fill in. Returns the names added.
+ * Our Badge.id → Activate's numeric badge id, for location badges whose name
+ * matches our catalog. A name or id seen twice keeps its first match.
+ */
+export function matchActivateBadgeIds(
+  locationBadges: ActivateLocationBadge[],
+  catalog: BadgeCatalogIndex,
+): Map<string, number> {
+  const matches = new Map<string, number>();
+  const usedActivateIds = new Set<number>();
+  for (const badge of locationBadges) {
+    if (typeof badge?.name !== "string" || !Number.isInteger(badge.badgeId)) continue;
+    const ourId = catalog.get(normalizeBadgeName(badge.name));
+    const activateId = badge.badgeId as number;
+    if (!ourId || matches.has(ourId) || usedActivateIds.has(activateId)) continue;
+    matches.set(ourId, activateId);
+    usedActivateIds.add(activateId);
+  }
+  return matches;
+}
+
+async function linkActivateBadgeIds(matches: Map<string, number>) {
+  const current = await prisma.badge.findMany({ select: { id: true, activateBadgeId: true } });
+  const changed = current.filter((badge) => matches.has(badge.id) && matches.get(badge.id) !== badge.activateBadgeId);
+  for (const badge of changed) {
+    const activateBadgeId = matches.get(badge.id)!;
+    await prisma.$transaction([
+      // The id is unique; free it if a renamed badge still holds it.
+      prisma.badge.updateMany({ where: { activateBadgeId, id: { not: badge.id } }, data: { activateBadgeId: null } }),
+      prisma.badge.update({ where: { id: badge.id }, data: { activateBadgeId } }),
+    ]);
+  }
+}
+
+/**
+ * Bring our badge catalog in line with the API's list for our location: add
+ * badges we lack (API name upper-cased to match the catalog, API description;
+ * rooms, games and tags start empty for the superuser to fill in) and record
+ * each badge's Activate id, which sets the default badge order. Returns the
+ * names added.
  */
 export async function addMissingLocationBadges(
   apiClient: ActivateApiClient,
   catalog: BadgeCatalogIndex,
 ): Promise<string[]> {
-  const missing = findMissingCatalogBadges(await apiClient.getLocationBadges(), catalog);
-  if (missing.length === 0) return [];
-
-  const highest = await prisma.badge.aggregate({ _max: { badgeNumber: true } });
-  let nextBadgeNumber = (highest._max.badgeNumber ?? 0) + 1;
+  const locationBadges = await apiClient.getLocationBadges();
+  const missing = findMissingCatalogBadges(locationBadges, catalog);
   const added: string[] = [];
 
-  for (const badge of missing) {
-    const name = badge.name.trim().toUpperCase();
-    await prisma.badge.create({
-      data: {
-        badgeNumber: nextBadgeNumber,
-        name,
-        description: badge.description?.trim() ?? "",
-      },
-    });
-    nextBadgeNumber += 1;
-    added.push(name);
+  if (missing.length > 0) {
+    const highest = await prisma.badge.aggregate({ _max: { badgeNumber: true } });
+    let nextBadgeNumber = (highest._max.badgeNumber ?? 0) + 1;
+    for (const badge of missing) {
+      const name = badge.name.trim().toUpperCase();
+      await prisma.badge.create({
+        data: {
+          badgeNumber: nextBadgeNumber,
+          name,
+          description: badge.description?.trim() ?? "",
+        },
+      });
+      nextBadgeNumber += 1;
+      added.push(name);
+    }
   }
+
+  const fullCatalog = added.length > 0 ? await loadBadgeCatalogIndex() : catalog;
+  await linkActivateBadgeIds(matchActivateBadgeIds(locationBadges, fullCatalog));
   return added;
 }
 

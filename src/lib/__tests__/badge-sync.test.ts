@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/db", () => ({ prisma: {} }));
 
-const { findMissingCatalogBadges, mergeBadgeStatuses } = await import("../badge-sync");
+const { findMissingCatalogBadges, matchActivateBadgeIds, mergeBadgeStatuses } = await import("../badge-sync");
 
 describe("mergeBadgeStatuses", () => {
   it("counts a badge as earned if any location has it earned", () => {
@@ -30,27 +30,50 @@ describe("findMissingCatalogBadges", () => {
   it("returns API badges our catalog lacks, once each", () => {
     const missing = findMissingCatalogBadges(
       [
-        { id: 1, name: "Deja Vu 2.0" },
-        { id: 2, name: "Riddle 6.0" },
-        { id: 3, name: "Hoop Dreams" },
-        { id: 4, name: "Riddle 7.0", description: "Solve it" },
-        { id: 5, name: "RIDDLE 7.0" },
+        { id: "b1", name: "Deja Vu 2.0" },
+        { id: "b2", name: "Riddle 6.0" },
+        { id: "b3", name: "Hoop Dreams" },
+        { id: "b4", name: "Riddle 7.0", description: "Solve it" },
+        { id: "b5", name: "RIDDLE 7.0" },
       ],
       catalog,
     );
-    expect(missing).toEqual([{ id: 4, name: "Riddle 7.0", description: "Solve it" }]);
+    expect(missing).toEqual([{ id: "b4", name: "Riddle 7.0", description: "Solve it" }]);
   });
 
   it("adds nothing when most API badges are unrecognised", () => {
     expect(() =>
       findMissingCatalogBadges(
         [
-          { id: 1, name: "Totally New A" },
-          { id: 2, name: "Totally New B" },
-          { id: 3, name: "Hoop Dreams" },
+          { id: "b1", name: "Totally New A" },
+          { id: "b2", name: "Totally New B" },
+          { id: "b3", name: "Hoop Dreams" },
         ],
         catalog,
       ),
     ).toThrow(/not adding any/);
+  });
+});
+
+describe("matchActivateBadgeIds", () => {
+  it("pairs our badges with Activate ids by name, skipping unknowns and repeats", () => {
+    const catalog = new Map([
+      ["2fastto2see", "ours-a"],
+      ["dejavu", "ours-b"],
+    ]);
+    const matches = matchActivateBadgeIds(
+      [
+        { id: "2Fast2SeeNumbers", badgeId: 2, name: "2 Fast to 2 See" },
+        { id: "winSameLevel1TwiceInARow", badgeId: 114, name: "Déjà Vu" },
+        { id: "dup", badgeId: 999, name: "DEJA VU" },
+        { id: "new", badgeId: 7, name: "Brand New" },
+        { id: "noId", name: "2 Fast to 2 See" },
+      ],
+      catalog,
+    );
+    expect([...matches]).toEqual([
+      ["ours-a", 2],
+      ["ours-b", 114],
+    ]);
   });
 });

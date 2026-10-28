@@ -15,14 +15,6 @@ export interface BadgeCardData {
   playerCount: string;
 }
 
-export const DIFFICULTY_SORT_KEY: Record<BadgeCardData["difficulty"], number> = {
-  easy: 1,
-  medium: 2,
-  hard: 3,
-  impossible: 4,
-  unknown: 99,
-};
-
 function communityPlayerCount(votes: (string | null)[]): string {
   const counts = new Map<string, number>();
   for (const vote of votes) {
@@ -31,11 +23,15 @@ function communityPlayerCount(votes: (string | null)[]): string {
   return [...counts.entries()].sort((entryA, entryB) => entryB[1] - entryA[1])[0]?.[0] ?? "none";
 }
 
-/** Every active badge with who on the roster has done it, plus the current user's own flags and votes. */
+/**
+ * Every active badge with who on the roster has done it, plus the current
+ * user's own flags and votes, in PlayActivate's badge id order.
+ */
 export async function loadBadgeCards(currentUserId: string, rosterIds: string[]): Promise<BadgeCardData[]> {
   const badges = await prisma.badge.findMany({
     where: { active: true },
-    orderBy: { badgeNumber: "asc" },
+    // Badges the sync hasn't linked to an Activate id yet go last.
+    orderBy: [{ activateBadgeId: { sort: "asc", nulls: "last" } }, { badgeNumber: "asc" }],
     select: {
       id: true,
       badgeNumber: true,

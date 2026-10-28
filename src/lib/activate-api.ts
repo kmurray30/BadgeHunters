@@ -68,7 +68,9 @@ export interface ActivatePlayerBadge {
 
 /** One badge from /location/{id}/badges. */
 export interface ActivateLocationBadge {
-  id: number;
+  /** Slug, e.g. "play25CompetitiveGames" */
+  id: string;
+  /** Activate's numeric badge id */
   badgeId?: number;
   name: string;
   description?: string;
