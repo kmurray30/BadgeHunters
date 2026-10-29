@@ -14,4 +14,11 @@ describe("activeRoomGameIds", () => {
     ];
     expect(activeRoomGameIds(roomGames, roomScores)).toEqual([1003, 1002]);
   });
+
+  it("leaves out hidden games even with a leaderboard", () => {
+    expect(activeRoomGameIds([{ id: 1002 }, { id: 1008 }], [
+      { gameId: 1002, levelId: 0, highScore: 2132 },
+      { gameId: 1008, levelId: 0, highScore: 2069 },
+    ])).toEqual([1002]);
+  });
 });

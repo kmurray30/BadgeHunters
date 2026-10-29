@@ -12,7 +12,7 @@ import {
   playerLocationPath,
   type ActivateLocationCatalog,
 } from "@/lib/activate-api";
-import { ACTIVATE_LOCATION, ACTIVATE_ROOM_SLUGS, decodeRoomSlug } from "@/lib/activate-config";
+import { ACTIVATE_LOCATION, ACTIVATE_ROOM_SLUGS, decodeRoomSlug, HIDDEN_GAME_IDS } from "@/lib/activate-config";
 import {
   addMissingLocationBadges,
   loadBadgeCatalogIndex,
@@ -249,14 +249,14 @@ async function upsertRoomCatalog(
 /**
  * Games in this room's catalog that also have a location leaderboard. The
  * catalog alone also lists one-level special modes and games nobody here can
- * play; neither ever gets high scores.
+ * play; neither ever gets high scores. HIDDEN_GAME_IDS stay out regardless.
  */
 export function activeRoomGameIds(
   roomGames: { id: number }[],
   roomScores: ActivateLevelScoreEntry[],
 ): number[] {
   const scoredIds = new Set(roomScores.filter((entry) => entry.highScore > 0).map((entry) => entry.gameId));
-  return roomGames.filter((game) => scoredIds.has(game.id)).map((game) => game.id);
+  return roomGames.filter((game) => scoredIds.has(game.id) && !HIDDEN_GAME_IDS.includes(game.id)).map((game) => game.id);
 }
 
 async function updateRoomGameActivity(

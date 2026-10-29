@@ -3,6 +3,13 @@ export const ACTIVATE_LOCATION = {
   slug: "seattle (tukwila)",
 } as const;
 
+/**
+ * Games PlayActivate lists and scores at Tukwila that we leave off anyway.
+ * 1008 "Trivia": a near-copy of "Trivial" (1002) in Hoops that none of us has
+ * played; it showed up as an extra, never-done row.
+ */
+export const HIDDEN_GAME_IDS: readonly number[] = [1008];
+
 /** URL path segments for each Activate room at Tukwila */
 export const ACTIVATE_ROOM_SLUGS = [
   "hoops",
