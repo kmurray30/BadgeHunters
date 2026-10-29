@@ -27,6 +27,8 @@ interface LevelsClientProps {
   currentUserId: string;
 }
 
+type LevelFilter = "none" | "notDoneByMe" | "doneByNone";
+
 interface OpenCell {
   room: LevelsRoom;
   game: LevelsGame;
@@ -35,15 +37,16 @@ interface OpenCell {
 
 export function LevelsClient({ data, roster, currentUserId }: LevelsClientProps) {
   const { selectedIds, selectedPlayers, toggle, justMe, selectAll } = usePlayerSelection(roster, currentUserId);
-  const [notDoneByMe, setNotDoneByMe] = usePersistedState("bh:levels:not-done-by-me", false);
-  const [notDoneByAll, setNotDoneByAll] = usePersistedState("bh:levels:not-done-by-all", false);
+  // One filter at a time: picking the other switches to it; tapping the active one clears it.
+  const [filter, setFilter] = usePersistedState<LevelFilter>("bh:levels:filter", "none");
+  const pickFilter = (next: LevelFilter) => setFilter(filter === next ? "none" : next);
   const [openCell, setOpenCell] = useState<OpenCell | null>(null);
 
   const singlePlayer = selectedIds.length === 1 ? selectedPlayers[0] : null;
   const scoreOf = (playerId: string, key: string) => data.scoresByPlayer[playerId]?.[key];
-  const filtering = notDoneByMe || notDoneByAll;
+  const filtering = filter !== "none";
   const cellMatches = (key: string) =>
-    (!notDoneByMe || !scoreOf(currentUserId, key)) && (!notDoneByAll || selectedIds.some((id) => !scoreOf(id, key)));
+    filter === "notDoneByMe" ? !scoreOf(currentUserId, key) : filter === "doneByNone" ? selectedIds.every((id) => !scoreOf(id, key)) : true;
 
   const totalLevels = data.rooms.reduce((sum, room) => sum + room.games.length * LEVEL_NUMBERS.length, 0);
   const myBeaten = Object.keys(data.scoresByPlayer[currentUserId] ?? {}).length;
@@ -56,7 +59,7 @@ export function LevelsClient({ data, roster, currentUserId }: LevelsClientProps)
       .filter((room) => room.games.length > 0);
     // cellMatches only depends on the values listed here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, filtering, notDoneByMe, notDoneByAll, selectedIds, currentUserId]);
+  }, [data, filtering, filter, selectedIds, currentUserId]);
 
   return (
     <div>
@@ -70,11 +73,11 @@ export function LevelsClient({ data, roster, currentUserId }: LevelsClientProps)
       <PlayerPicker roster={roster} selectedIds={selectedIds} onToggle={toggle} onJustMe={justMe} onSelectAll={selectAll} />
 
       <div className="no-scrollbar -mx-4 mt-4 flex items-center gap-2 overflow-x-auto px-4">
-        <ToggleChip pressed={notDoneByMe} onToggle={() => setNotDoneByMe(!notDoneByMe)}>
+        <ToggleChip pressed={filter === "notDoneByMe"} onToggle={() => pickFilter("notDoneByMe")}>
           Not done by me
         </ToggleChip>
-        <ToggleChip pressed={notDoneByAll} onToggle={() => setNotDoneByAll(!notDoneByAll)}>
-          Not done by all
+        <ToggleChip pressed={filter === "doneByNone"} onToggle={() => pickFilter("doneByNone")}>
+          Done by none
         </ToggleChip>
       </div>
       <p className="mt-2 text-xs text-muted">
