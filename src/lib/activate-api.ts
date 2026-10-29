@@ -214,6 +214,14 @@ export class ActivateApiClient {
     return badges;
   }
 
+  /** Names on our location's leaderboard for the year (its top 100), best first. */
+  async getYearlyLeaderNames(): Promise<string[]> {
+    const leaders = await this.get<{ playerName?: unknown }[]>(`/location/${ACTIVATE_LOCATION.id}/yearly-leaders`);
+    return (leaders ?? [])
+      .map((leader) => (typeof leader?.playerName === "string" ? leader.playerName.trim() : ""))
+      .filter(Boolean);
+  }
+
   /** Location ids where the player has played, or null if the player isn't found. */
   async getPlayerLocationIds(playerName: string): Promise<number[] | null> {
     const locations = await this.get<number[]>(

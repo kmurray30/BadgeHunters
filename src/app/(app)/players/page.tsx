@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session-helpers";
 import { RANK_COLOR_HEX } from "@/lib/rank";
 import { loadRoster } from "@/lib/roster";
+import { AddPlayer } from "./add-player";
 
 export default async function PlayersPage() {
   const currentUser = await requireUser();
@@ -22,7 +23,10 @@ export default async function PlayersPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 pt-5">
-      <h1 className="font-display mb-4 text-3xl font-bold uppercase tracking-wide">Players</h1>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-display text-3xl font-bold uppercase tracking-wide">Players</h1>
+        <AddPlayer />
+      </div>
 
       <ol className="space-y-2">
         {leaderboard.map((player, index) => {

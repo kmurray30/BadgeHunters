@@ -62,9 +62,24 @@ export async function POST(request: NextRequest) {
       ...scrapedFields,
     };
 
-    const newUser = await prisma.user.create({
-      data: userData as Parameters<typeof prisma.user.create>[0]["data"],
-    });
+    // Someone may have already added this player from the Players page; take
+    // over that record (keeping their scores and everyone's history) instead
+    // of creating a duplicate.
+    const addedRecord = resolvedActivateName
+      ? await prisma.user.findFirst({
+          where: { activatePlayerName: { equals: resolvedActivateName, mode: "insensitive" }, email: null, isTestUser: false },
+          select: { id: true },
+        })
+      : null;
+
+    const newUser = addedRecord
+      ? await prisma.user.update({
+          where: { id: addedRecord.id },
+          data: { ...userData, isActive: true } as Parameters<typeof prisma.user.update>[0]["data"],
+        })
+      : await prisma.user.create({
+          data: userData as Parameters<typeof prisma.user.create>[0]["data"],
+        });
 
     if (pendingAccount) {
       await prisma.account.create({
