@@ -124,7 +124,7 @@ export default async function Home() {
               >
                 <span className="font-display w-5 text-center font-bold text-muted">{index + 1}</span>
                 <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: player.color, boxShadow: `0 0 8px ${player.color}` }} />
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                <span className={`min-w-0 flex-1 truncate text-sm font-semibold ${player.hasAccount ? "" : "text-muted"}`}>
                   {player.name}
                   {player.isMe && <span className="ml-1.5 text-[11px] font-medium text-muted">you</span>}
                 </span>

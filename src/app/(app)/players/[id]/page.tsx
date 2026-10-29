@@ -59,6 +59,7 @@ export default async function PlayerDetailPage({ params, searchParams }: Props) 
               {player.isMe && <span className="ml-2 align-middle text-xs font-medium normal-case text-muted">you</span>}
             </h1>
             {otherName && <p className="text-sm text-muted">{otherName}</p>}
+            {!player.hasAccount && <p className="text-xs text-muted">Added by a friend · hasn’t signed up yet</p>}
           </div>
         </div>
 

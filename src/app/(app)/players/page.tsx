@@ -47,9 +47,10 @@ export default async function PlayersPage() {
                   {player.name.charAt(0).toUpperCase()}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">
+                  <p className={`truncate font-semibold ${player.hasAccount ? "" : "text-muted"}`}>
                     {player.name}
                     {player.isMe && <span className="ml-1.5 text-xs font-medium text-muted">you</span>}
+                    {!player.hasAccount && <span className="ml-1.5 text-[11px] font-medium">· added</span>}
                   </p>
                   <div className="mt-1.5 flex items-center gap-2">
                     <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slot-empty">

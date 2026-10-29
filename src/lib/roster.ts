@@ -11,6 +11,8 @@ export interface RosterPlayer {
   rankColor: RankColor;
   currentScore: number;
   isMe: boolean;
+  /** False for players someone added who haven't signed up themselves yet */
+  hasAccount: boolean;
 }
 
 export function playerDisplayName(user: {
@@ -35,6 +37,8 @@ export async function loadRoster(currentUser: IsolationUser & { id: string }): P
       currentScore: true,
       rankColor: true,
       createdAt: true,
+      email: true,
+      isTestUser: true,
     },
   });
 
@@ -47,6 +51,7 @@ export async function loadRoster(currentUser: IsolationUser & { id: string }): P
       rankColor: playerRankColor(user),
       currentScore: user.currentScore,
       isMe: user.id === currentUser.id,
+      hasAccount: user.email !== null || user.isTestUser,
     }))
     .sort((playerA, playerB) => Number(playerB.isMe) - Number(playerA.isMe) || playerB.currentScore - playerA.currentScore);
 }

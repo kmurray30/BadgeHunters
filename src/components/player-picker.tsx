@@ -49,7 +49,7 @@ export function PlayerPicker({ roster, selectedIds, onToggle, onJustMe, onSelect
               ) : (
                 <span className="h-3.5 w-3.5 rounded-full" style={{ boxShadow: `inset 0 0 0 1.5px ${player.color}` }} />
               )}
-              {player.name}
+              <span className={player.hasAccount ? "" : "italic opacity-70"}>{player.name}</span>
               {player.isMe && <span className="text-[10px] font-medium text-muted">you</span>}
             </button>
           );
