@@ -66,7 +66,9 @@ export function NextUp({ roster, currentUserId, levels }: NextUpProps) {
             </Link>
           </li>
         ))}
-        {targets.length === 0 && <li className="text-sm text-muted">Every level beaten. Legend.</li>}
+        {targets.length === 0 && (
+          <li className="text-sm text-muted">{selectedIds.length === 0 ? "Pick players above to see what they need." : "Every level beaten. Legend."}</li>
+        )}
       </ol>
     </section>
   );

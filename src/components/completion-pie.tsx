@@ -16,8 +16,8 @@ const RIM = "0 0 0 1px #33334d";
 function Wedges({ fills, size, glow }: { fills: string[]; size: number | string; glow?: boolean }) {
   const sliceDegrees = 360 / Math.max(fills.length, 1);
   const background =
-    fills.length === 1
-      ? fills[0]
+    fills.length <= 1
+      ? (fills[0] ?? "#000")
       : `conic-gradient(${fills
           .map((fill, index) => {
             const start = index * sliceDegrees;

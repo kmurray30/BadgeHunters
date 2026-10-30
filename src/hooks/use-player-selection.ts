@@ -34,8 +34,8 @@ function writeIds(ids: string[]) {
 
 /**
  * Which players the Badges and Levels pages compare. Shared by both pages and
- * remembered on this device; defaults to just the current user. Always keeps
- * at least one player selected, in roster order.
+ * remembered on this device; defaults to just the current user. Can be
+ * empty (tap the last selected chip to clear it). In roster order.
  */
 export function usePlayerSelection(roster: RosterPlayer[], currentUserId: string) {
   const raw = useSyncExternalStore(subscribe, readRaw, () => "");
@@ -48,8 +48,7 @@ export function usePlayerSelection(roster: RosterPlayer[], currentUserId: string
       stored = null;
     }
     const wanted = new Set(Array.isArray(stored) ? stored : [currentUserId]);
-    const ids = roster.filter((player) => wanted.has(player.id)).map((player) => player.id);
-    return ids.length > 0 ? ids : [currentUserId];
+    return roster.filter((player) => wanted.has(player.id)).map((player) => player.id);
   }, [raw, roster, currentUserId]);
 
   const selectedPlayers = useMemo(
@@ -60,7 +59,7 @@ export function usePlayerSelection(roster: RosterPlayer[], currentUserId: string
   const toggle = useCallback(
     (playerId: string) => {
       if (selectedIds.includes(playerId)) {
-        if (selectedIds.length > 1) writeIds(selectedIds.filter((id) => id !== playerId));
+        writeIds(selectedIds.filter((id) => id !== playerId));
       } else {
         writeIds([...selectedIds, playerId]);
       }

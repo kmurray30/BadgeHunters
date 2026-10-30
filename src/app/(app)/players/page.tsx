@@ -34,11 +34,11 @@ export default async function PlayersPage() {
           const badges = badgesByUser.get(player.id) ?? 0;
           const percent = totalBadges > 0 ? Math.round((badges / totalBadges) * 100) : 0;
           return (
-            <li key={player.id} className="flex items-center gap-2">
+            <li key={player.id}>
               <Link
                 href={`/players/${player.id}`}
                 prefetch={false}
-                className={`panel flex min-w-0 flex-1 items-center gap-3 p-3 transition hover:border-accent/40 ${player.isMe ? "border-accent/40" : ""}`}
+                className={`panel flex items-center gap-3 p-3 transition hover:border-accent/40 ${player.isMe ? "border-accent/40" : ""}`}
               >
                 <span className="font-display w-6 shrink-0 text-center text-lg font-bold text-muted">{index + 1}</span>
                 <span
@@ -52,6 +52,7 @@ export default async function PlayersPage() {
                     {player.name}
                     {player.isMe && <span className="ml-1.5 text-xs font-medium text-muted">you</span>}
                     {!player.hasAccount && <span className="ml-1.5 text-[11px] font-medium">· added</span>}
+                    {!player.hasAccount && <RemovePlayerButton playerId={player.id} name={player.name} variant="icon" />}
                   </p>
                   <div className="mt-1.5 flex items-center gap-2">
                     <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slot-empty">
@@ -69,7 +70,6 @@ export default async function PlayersPage() {
                   </p>
                 </div>
               </Link>
-              {!player.hasAccount && <RemovePlayerButton playerId={player.id} name={player.name} />}
             </li>
           );
         })}
