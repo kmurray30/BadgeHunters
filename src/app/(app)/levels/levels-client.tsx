@@ -49,7 +49,11 @@ export function LevelsClient({ data, roster, currentUserId }: LevelsClientProps)
     filter === "notDoneByMe" ? !scoreOf(currentUserId, key) : filter === "doneByNone" ? selectedIds.every((id) => !scoreOf(id, key)) : true;
 
   const totalLevels = data.rooms.reduce((sum, room) => sum + room.games.length * LEVEL_NUMBERS.length, 0);
-  const myBeaten = Object.keys(data.scoresByPlayer[currentUserId] ?? {}).length;
+  const beatenCounts = useMemo(
+    () => Object.fromEntries(Object.entries(data.scoresByPlayer).map(([playerId, scores]) => [playerId, Object.keys(scores).length])),
+    [data],
+  );
+  const myBeaten = beatenCounts[currentUserId] ?? 0;
 
   // Rooms and games with at least one level passing the filters.
   const visibleRooms = useMemo(() => {
@@ -66,11 +70,19 @@ export function LevelsClient({ data, roster, currentUserId }: LevelsClientProps)
       <div className="mb-3 flex items-end justify-between gap-3">
         <h1 className="font-display text-3xl font-bold uppercase tracking-wide">Levels</h1>
         <p className="font-display pb-1 text-sm text-muted">
-          <span className="text-lg font-bold text-foreground">{myBeaten}</span> / {totalLevels} yours
+          <span className="text-lg font-bold text-foreground">{myBeaten}</span> / {totalLevels} beaten by you
         </p>
       </div>
 
-      <PlayerPicker roster={roster} selectedIds={selectedIds} onToggle={toggle} onJustMe={justMe} onSelectAll={selectAll} />
+      <PlayerPicker
+        roster={roster}
+        selectedIds={selectedIds}
+        onToggle={toggle}
+        onJustMe={justMe}
+        onSelectAll={selectAll}
+        counts={beatenCounts}
+        countTotal={totalLevels}
+      />
 
       <div className="no-scrollbar -mx-4 mt-4 flex items-center gap-2 overflow-x-auto px-4">
         <ToggleChip pressed={filter === "notDoneByMe"} onToggle={() => pickFilter("notDoneByMe")}>

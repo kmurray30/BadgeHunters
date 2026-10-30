@@ -48,7 +48,12 @@ export function BadgesClient({ badges, roster, currentUserId }: BadgesClientProp
   const [, startTransition] = useTransition();
 
   const doneSets = useMemo(() => new Map(badges.map((badge) => [badge.id, new Set(badge.doneBy)])), [badges]);
-  const myDoneCount = badges.filter((badge) => doneSets.get(badge.id)!.has(currentUserId)).length;
+  const doneCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const badge of badges) for (const playerId of badge.doneBy) counts[playerId] = (counts[playerId] ?? 0) + 1;
+    return counts;
+  }, [badges]);
+  const myDoneCount = doneCounts[currentUserId] ?? 0;
 
   // Badges arrive in PlayActivate's badge id order; that stays the final tiebreak.
   const visibleBadges = useMemo(() => {
@@ -80,11 +85,19 @@ export function BadgesClient({ badges, roster, currentUserId }: BadgesClientProp
       <div className="mb-3 flex items-end justify-between gap-3">
         <h1 className="font-display text-3xl font-bold uppercase tracking-wide">Badges</h1>
         <p className="font-display pb-1 text-sm text-muted">
-          <span className="text-lg font-bold text-foreground">{myDoneCount}</span> / {badges.length} yours
+          <span className="text-lg font-bold text-foreground">{myDoneCount}</span> / {badges.length} done by you
         </p>
       </div>
 
-      <PlayerPicker roster={roster} selectedIds={selectedIds} onToggle={toggle} onJustMe={justMe} onSelectAll={selectAll} />
+      <PlayerPicker
+        roster={roster}
+        selectedIds={selectedIds}
+        onToggle={toggle}
+        onJustMe={justMe}
+        onSelectAll={selectAll}
+        counts={doneCounts}
+        countTotal={badges.length}
+      />
 
       <div className="mt-4 space-y-3">
         <div className="relative">

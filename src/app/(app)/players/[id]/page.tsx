@@ -7,6 +7,7 @@ import { loadRoster } from "@/lib/roster";
 import { BackButton } from "@/components/back-button";
 import { parseBackFromQuery } from "@/lib/back-navigation";
 import { CompareButton } from "./compare-button";
+import { RemovePlayerButton } from "../remove-player-button";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -59,7 +60,12 @@ export default async function PlayerDetailPage({ params, searchParams }: Props) 
               {player.isMe && <span className="ml-2 align-middle text-xs font-medium normal-case text-muted">you</span>}
             </h1>
             {otherName && <p className="text-sm text-muted">{otherName}</p>}
-            {!player.hasAccount && <p className="text-xs text-muted">Added by a friend · hasn’t signed up yet</p>}
+            {!player.hasAccount && (
+              <div className="mt-1 flex items-center gap-2">
+                <p className="text-xs text-muted">Added by a friend · hasn’t signed up yet</p>
+                <RemovePlayerButton playerId={player.id} name={player.name} redirectTo="/players" />
+              </div>
+            )}
           </div>
         </div>
 

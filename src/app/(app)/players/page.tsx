@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/session-helpers";
 import { RANK_COLOR_HEX } from "@/lib/rank";
 import { loadRoster } from "@/lib/roster";
 import { AddPlayer } from "./add-player";
+import { RemovePlayerButton } from "./remove-player-button";
 
 export default async function PlayersPage() {
   const currentUser = await requireUser();
@@ -33,11 +34,11 @@ export default async function PlayersPage() {
           const badges = badgesByUser.get(player.id) ?? 0;
           const percent = totalBadges > 0 ? Math.round((badges / totalBadges) * 100) : 0;
           return (
-            <li key={player.id}>
+            <li key={player.id} className="flex items-center gap-2">
               <Link
                 href={`/players/${player.id}`}
                 prefetch={false}
-                className={`panel flex items-center gap-3 p-3 transition hover:border-accent/40 ${player.isMe ? "border-accent/40" : ""}`}
+                className={`panel flex min-w-0 flex-1 items-center gap-3 p-3 transition hover:border-accent/40 ${player.isMe ? "border-accent/40" : ""}`}
               >
                 <span className="font-display w-6 shrink-0 text-center text-lg font-bold text-muted">{index + 1}</span>
                 <span
@@ -68,6 +69,7 @@ export default async function PlayersPage() {
                   </p>
                 </div>
               </Link>
+              {!player.hasAccount && <RemovePlayerButton playerId={player.id} name={player.name} />}
             </li>
           );
         })}

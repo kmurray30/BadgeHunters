@@ -11,13 +11,16 @@ interface PlayerPickerProps {
   onSelectAll: () => void;
   /** Pin under the header while scrolling (Badges/Levels); off for inline use. */
   sticky?: boolean;
+  /** Per-player done counts shown on each chip, out of `countTotal` */
+  counts?: Record<string, number>;
+  countTotal?: number;
 }
 
 /**
  * Sticky row of player chips under the header. Tapping toggles a player; each
  * selected chip shows that player's wedge of the pie, so the row doubles as the legend.
  */
-export function PlayerPicker({ roster, selectedIds, onToggle, onJustMe, onSelectAll, sticky = true }: PlayerPickerProps) {
+export function PlayerPicker({ roster, selectedIds, onToggle, onJustMe, onSelectAll, sticky = true, counts, countTotal }: PlayerPickerProps) {
   const onlyMe = selectedIds.length === 1 && roster.find((player) => player.isMe)?.id === selectedIds[0];
   const everyone = selectedIds.length === roster.length;
 
@@ -51,6 +54,11 @@ export function PlayerPicker({ roster, selectedIds, onToggle, onJustMe, onSelect
               )}
               <span className={player.hasAccount ? "" : "italic opacity-70"}>{player.name}</span>
               {player.isMe && <span className="text-[10px] font-medium text-muted">you</span>}
+              {counts && (
+                <span className="font-display text-[11px] font-bold tabular-nums text-muted" title={`${counts[player.id] ?? 0} of ${countTotal} done`}>
+                  {counts[player.id] ?? 0}
+                </span>
+              )}
             </button>
           );
         })}

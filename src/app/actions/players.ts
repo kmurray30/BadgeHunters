@@ -73,3 +73,19 @@ export async function addPlayer(rawName: string): Promise<AddPlayerResult> {
   for (const path of ["/", "/players", "/badges", "/levels"]) revalidatePath(path);
   return { ok: true, name: canonicalName };
 }
+
+/**
+ * Take an added player (one who never signed up) off the site: out of the
+ * picker and the sync. Their scores stay in the database, so adding them
+ * again brings everything back. Players with their own account can't be removed.
+ */
+export async function removeAddedPlayer(playerId: string): Promise<{ ok: boolean; error?: string }> {
+  const remover = await requireUser();
+  const target = await prisma.user.findUnique({ where: { id: playerId }, select: { email: true, isTestUser: true } });
+  if (!target || target.isTestUser !== remover.isTestUser) return { ok: false, error: "Player not found." };
+  if (target.email !== null) return { ok: false, error: "They have their own account, so they can't be removed here." };
+
+  await prisma.user.update({ where: { id: playerId }, data: { isActive: false } });
+  for (const path of ["/", "/players", "/badges", "/levels"]) revalidatePath(path);
+  return { ok: true };
+}
